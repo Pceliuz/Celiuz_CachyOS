@@ -171,6 +171,37 @@ Si algo se quedara congelado, desde cualquier terminal:
 > la pantalla *"you locked your screen but the lockscreen app died"*, de la que
 > solo se sale por otro tty. Para probar, un Hyprland anidado.
 
+### Auto-bloqueo por inactividad
+
+`hypr/hypridle.conf`, arrancado por su unidad de systemd desde `autostart.conf`:
+
+| Inactividad | Qué pasa |
+|---|---|
+| 10 min | Bloquea, llamando al mismo `lock.sh` que `SUPER+L` |
+| 12 min | Apaga el monitor (`dpms off`) |
+| — | **No** suspende la máquina: es un escritorio que se queda con descargas y escaneos corriendo solos |
+
+Va por systemd y no con `exec-once = hypridle` a pelo por el `Restart=on-failure`:
+si el demonio se cayera, el auto-bloqueo dejaría de funcionar en silencio. Y como
+es un `.service` y no un `.scope`, el congelado del bloqueo no puede congelar a
+quien lo gobierna.
+
+El fondo de pantalla en vídeo **no** lo estorba, aunque mpv lleve
+`stop-screensaver=yes`: mpvpaper pinta con la API de render de libmpv, sin
+ventana propia, así que nunca llega a crear un inhibidor. Lo que sí para el
+contador son las apps que inhiben por D-Bus (un vídeo a pantalla completa en el
+navegador), y eso es justo lo que se quiere.
+
+> **`SUPER+SHIFT+D` enciende la pantalla.** Es un salvavidas, no un adorno:
+> `hyprctl dispatch dpms` **sin argumento apaga el monitor**, Hyprland contesta
+> `ok` tan tranquilo, y la pantalla no vuelve sola — se vive como si la PC se
+> hubiera apagado sin apagarse. Con el DPMS apagado Hyprland sigue leyendo el
+> teclado, así que el atajo funciona justo cuando no ves nada.
+>
+> Y solo el input **real** de hardware reinicia el contador de inactividad:
+> `movecursor`, `sendshortcut`, `cyclenext` y `workspace` no cuentan, así que no
+> sirven para probar el despertar desde un script.
+
 ---
 
 ## Archivos generados
@@ -191,8 +222,8 @@ sin tener que ejecutar el generador.
 ## Estado
 
 Hecho: monitores, teclado, barra, dock, lanzador, fondo en vídeo, capturas,
-calendario, monitores del sistema, pantalla de bloqueo.
+calendario, monitores del sistema, pantalla de bloqueo y auto-bloqueo por
+inactividad.
 
-Pendiente: auto-bloqueo por inactividad (`hypridle` ya instalado, sin configurar),
-`decoration.conf` y `animations.conf` (redondeos, blur, sombras), historial del
-portapapeles y notificaciones.
+Pendiente: `decoration.conf` y `animations.conf` (redondeos, blur, sombras),
+historial del portapapeles y notificaciones.
