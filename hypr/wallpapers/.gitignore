@@ -1,0 +1,4 @@
+# Los videos NO se suben al repo: pesan mucho y no son tuyos para redistribuir.
+# Lo unico que se versiona es esta carpeta y el enlace "current".
+*
+!.gitignore

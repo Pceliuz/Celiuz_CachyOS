@@ -1,0 +1,148 @@
+// ~/dotfiles/waybar/config.jsonc
+// Barra de estado. El estilo (colores, tamanos, espaciado) va en style.css.
+// Doc de modulos: https://github.com/Alexays/Waybar/wiki/Configuration
+
+{
+    // "name" define tambien el namespace Wayland de la capa, que es como
+    // conf/windowrules.conf la distingue del tirador para animarla al ocultarse.
+    "name": "waybar-main",
+
+    "layer": "top",
+    "position": "top",
+    // Sube junto con los iconos: si la barra queda mas baja que el contenido,
+    // GTK recorta las pastillas de hover por arriba y por abajo.
+    "height": 38,
+    "spacing": 0,
+
+    // Clave para el auto-ocultado: sin zona exclusiva la barra nunca le quita
+    // espacio a las ventanas. Cuando baja, lo hace ENCIMA de la app: la ventana
+    // no se achica ni se recoloca.
+    "exclusive": false,
+
+    // SIGUSR1 se deja en su valor por defecto ("toggle") A PROPOSITO.
+    // La accion "hide" de waybar no destruye la superficie: solo la baja a la
+    // capa inferior, y entonces Hyprland no tiene ningun evento que animar.
+    // "toggle" si la desmapea, que es lo que dispara el deslizado del layerrule.
+    // El demonio lleva la cuenta del estado, asi que alternar no lo desincroniza.
+    "on-sigusr2": "noop",
+
+    // Los sensores van todos juntos a la izquierda, agrupados por componente:
+    // primero la CPU (temperatura y uso), luego la memoria (RAM y swap) y al
+    // final la GPU (temperatura y uso).
+    "modules-left": ["temperature", "cpu", "memory", "hyprland/submap"],
+    // El reloj va pegado a la izquierda de los workspaces, y el conjunto de los
+    // dos es lo que queda centrado en la pantalla.
+    "modules-center": ["clock", "hyprland/workspaces"],
+    "modules-right": ["pulseaudio", "network", "tray"],
+
+    // --- CENTRO --- (el bloque "clock" esta al final del archivo)
+
+    "hyprland/workspaces": {
+        // Muestra siempre 1-7 aunque esten vacios (coinciden con tus binds SUPER+1..7).
+        "persistent-workspaces": { "*": 7 },
+        "on-click": "activate",
+        // Rueda del mouse sobre la barra para saltar de workspace.
+        "on-scroll-up": "hyprctl dispatch workspace e+1",
+        "on-scroll-down": "hyprctl dispatch workspace e-1"
+    },
+
+    // --- IZQUIERDA ---
+
+    "hyprland/submap": {
+        // Aparece solo cuando entres a un submap (ej. modo resize). Vacio por ahora.
+        "format": " {}",
+        "tooltip": false
+    },
+
+    // --- IZQUIERDA: sensores ---
+
+    "temperature": {
+        // Ruta absoluta del sensor: el numero de /sys/class/hwmon/hwmonN cambia
+        // entre reinicios, esta ruta por PCI no. Tctl del k10temp (Ryzen 5 5500).
+        "hwmon-path-abs": "/sys/devices/pci0000:00/0000:00:18.3/hwmon",
+        "input-filename": "temp1_input",
+        "critical-threshold": 85,
+        // Los <span size='130%'> agrandan solo el glifo, no las cifras. Waybar
+        // interpreta markup de Pango en los "format" de los modulos.
+        "format": "<span size='130%'>{icon}</span> {temperatureC}°C",
+        "format-critical": "<span size='130%'>{icon}</span> {temperatureC}°C",
+        "format-icons": ["󱃂", "󰔏", "󰸁"],
+        "interval": 2,
+        "tooltip-format": "CPU (Tctl): {temperatureC}°C",
+        "on-click": "kitty --class monitor-tui -e btop"
+    },
+
+    "cpu": {
+        // {usage} ES el uso total del procesador: la media de los 12 hilos del
+        // Ryzen 5 5500, el mismo numero que da el "CPU" de btop. No es el de un
+        // proceso suelto. El desglose por hilo esta en el tooltip.
+        "format": "<span size='130%'>󰻠</span> {usage}%",
+        "interval": 2,
+        "tooltip-format": "Uso total: {usage}%\nCarga (1/5/15 min): {load}\nFrecuencia media: {avg_frequency} GHz",
+        "on-click": "kitty --class monitor-tui -e btop"
+    },
+
+    "memory": {
+        "format": "<span size='130%'>󰍛</span> {percentage}%",
+        "interval": 2,
+        "tooltip-format": "RAM: {used:0.1f}G / {total:0.1f}G",
+        "on-click": "kitty --class monitor-tui -e btop"
+    },
+
+
+
+    // --- DERECHA ---
+
+    "pulseaudio": {
+        // Funciona con PipeWire via pipewire-pulse (lo que tienes instalado).
+        "format": "<span size='130%'>{icon}</span> {volume}%",
+        "format-muted": "<span size='130%'>󰝟</span> muteado",
+        "format-icons": {
+            "headphone": "󰋋",
+            "headset": "󰋎",
+            "default": ["󰕿", "󰖀", "󰕾"]
+        },
+        "scroll-step": 5,
+        "on-click": "pavucontrol",
+        "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "tooltip-format": "{desc} — {volume}%"
+    },
+
+    "network": {
+        "format-ethernet": "<span size='130%'>󰈀</span> {ipaddr}",
+        "format-wifi": "<span size='130%'>󰤨</span> {essid} {signalStrength}%",
+        "format-linked": "<span size='130%'>󰈀</span> sin IP",
+        "format-disconnected": "<span size='130%'>󰤭</span> desconectado",
+        "tooltip-format-ethernet": "{ifname}\nIP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} — IP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
+        "interval": 5,
+        // nmtui viene con networkmanager, no hace falta instalar nada extra.
+        "on-click": "kitty --class monitor-tui -e nmtui"
+    },
+
+    "tray": {
+        // Los iconos del tray son imagenes, no glifos: no les llega el <span>.
+        "icon-size": 20,
+        "spacing": 8
+    },
+
+    "clock": {
+        // Se ve "󰥔 26 jul  20:15". Ni clic derecho ni tooltip: el izquierdo
+        // abre el panel de calendario y con eso basta.
+        //
+        // Para que el mes salga en espanol hacen falta LAS DOS COSAS de abajo:
+        //  - el nombre EXACTO del locale que aparece en `locale -a` (es_PE.utf8).
+        //    Con "es_PE.UTF-8" waybar no falla ni avisa: se queda en ingles.
+        //  - la "L" del formato. Waybar formatea con la libreria fmt, y fmt solo
+        //    consulta el locale cuando el formato lleva ese especificador.
+        // Sin cualquiera de las dos, el mes sale como "Jul" en vez de "jul".
+        "locale": "es_PE.utf8",
+        "format": "<span size='130%'>󰥔</span> {:L%d %b  %H:%M}",
+        // El calendario ya no vive aqui. El tooltip de waybar solo sabe dibujar
+        // una rejilla de numeros: no puede mostrar feriados ni tus eventos de
+        // Google, y aparece con solo rozar el reloj. Lo reemplaza el panel de
+        // scripts/calendar-panel.py, que se abre con click y se cierra con otro.
+        "tooltip": false,
+        "on-click": "$HOME/dotfiles/hypr/scripts/calendar-panel.py"
+    }
+}

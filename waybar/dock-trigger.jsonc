@@ -1,0 +1,34 @@
+// ~/dotfiles/waybar/dock-trigger.jsonc
+// La linea-tirador del dock: gemela de trigger.jsonc pero anclada abajo.
+// Aparece centrada en el borde inferior cuando el dock se oculta; al clickarla,
+// el dock sube.
+
+{
+    // "name" define tambien el namespace Wayland de la capa.
+    "name": "waybar-dock-trigger",
+
+    "layer": "top",
+    "position": "bottom",
+
+    // Mismas medidas que el tirador de arriba, para que sean claramente la
+    // misma pieza en los dos bordes de la pantalla.
+    "height": 10,
+    "width": 180,
+
+    "exclusive": false,
+
+    // Arranca oculto; el demonio lo muestra en cuanto detecta una app abierta.
+    "start_hidden": true,
+
+    "on-sigusr2": "noop",
+
+    "modules-center": ["custom/handle"],
+
+    "custom/handle": {
+        // La linea se dibuja con CSS (#custom-handle en style.css).
+        "format": " ",
+        "tooltip": false,
+        // El prefijo "dock:" es lo que distingue este tirador del de arriba.
+        "on-click": "echo dock:show > $XDG_RUNTIME_DIR/waybar-autohide.fifo"
+    }
+}

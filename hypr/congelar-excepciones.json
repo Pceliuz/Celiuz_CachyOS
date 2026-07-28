@@ -1,0 +1,19 @@
+{
+  "_comentario": [
+    "Excepciones a mano para el congelado al bloquear la pantalla.",
+    "Las cuatro capas automaticas (Steam, ananicy, flatpak de juego, pantalla",
+    "completa) estan en hypr/scripts/lib/juegos.py y no hace falta tocarlas.",
+    "Esto es solo para lo que se les escape.",
+    "",
+    "nunca_congelar   subcadenas; si aparecen en el nombre del scope o en la",
+    "                 linea de comandos, esa app sigue corriendo bloqueada.",
+    "                 Ejemplos utiles: una descarga larga, una compilacion,",
+    "                 un juego que ninguna capa reconozca.",
+    "siempre_congelar manda sobre todo lo demas: congela aunque las capas",
+    "                 digan que es un juego. Para falsos positivos.",
+    "",
+    "Se comparan en minusculas. Ver con:  hypr/scripts/lib/juegos.py"
+  ],
+  "nunca_congelar": [],
+  "siempre_congelar": []
+}

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=CeliuzPaper
+Name[es]=CeliuzPaper
+Comment=Cambia el fondo de pantalla viendolo a pantalla completa
+Comment[en]=Pick your video wallpaper, previewed full screen
+Exec=/home/celiuz/dotfiles/celiuzpaper/celiuzpaper.py
+Icon=celiuzpaper
+Terminal=false
+Categories=Settings;DesktopSettings;Utility;
+Keywords=wallpaper;fondo;pantalla;video;mpvpaper;celiuz;
+StartupNotify=false

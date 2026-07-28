@@ -1,0 +1,40 @@
+// ~/dotfiles/waybar/trigger.jsonc
+// La linea-tirador: una barra diminuta centrada en el borde superior que aparece
+// cuando la barra principal se oculta. Al hacerle click, la barra baja.
+//
+// Es una segunda instancia de waybar, no un modulo de la primera: tiene que
+// seguir visible justo cuando la principal esta oculta.
+
+{
+    // "name" define tambien el namespace Wayland de la capa, que es como
+    // conf/windowrules.conf la distingue de la barra principal para animarla.
+    "name": "waybar-trigger",
+
+    "layer": "top",
+    "position": "top",
+
+    // Solo 180x10 px centrados: waybar centra solo cuando fijas "width".
+    // Asi el resto del borde superior sigue libre para clickar en las apps.
+    "height": 10,
+    "width": 180,
+
+    // Nunca reserva espacio: no encoge las ventanas.
+    "exclusive": false,
+
+    // Arranca oculta; el demonio la muestra en cuanto detecta una app abierta.
+    "start_hidden": true,
+
+    // Igual que la barra principal: SIGUSR1 se queda en "toggle" para que la
+    // superficie se desmapee de verdad y Hyprland pueda animarla.
+    "on-sigusr2": "noop",
+
+    "modules-center": ["custom/handle"],
+
+    "custom/handle": {
+        // La linea se dibuja con CSS (ver #custom-handle en style.css), no con
+        // un caracter: asi el grosor no depende del tamano de fuente.
+        "format": " ",
+        "tooltip": false,
+        "on-click": "echo show > $XDG_RUNTIME_DIR/waybar-autohide.fifo"
+    }
+}

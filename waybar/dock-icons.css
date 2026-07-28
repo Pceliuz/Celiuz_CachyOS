@@ -1,0 +1,25 @@
+/* ~/dotfiles/waybar/dock-icons.css
+ *
+ * GENERADO por ~/dotfiles/hypr/scripts/gen-dock.py — NO EDITAR A MANO.
+ * Lo carga style.css con @import.
+ *
+ * Los iconos propios de las apps van como background-image y no con el
+ * modulo `image` de waybar porque en la 0.15 una barra con DOS modulos
+ * image se queda invisible entera (alpha 0, sin ningun aviso en el log).
+ * Con un solo modulo image funciona; con dos, no. Comprobado.
+ */
+
+/* Terminal — kitty */
+#custom-app1 { background-image: url("/usr/share/icons/hicolor/scalable/apps/kitty.svg"); }
+/* Archivos — Dolphin */
+#custom-app2 { background-image: url("/usr/share/icons/hicolor/scalable/apps/org.kde.dolphin.svg"); }
+/* Editor de texto */
+#custom-app3 { background-image: url("/usr/share/icons/hicolor/scalable/apps/org.gnome.TextEditor.svg"); }
+/* Steam */
+#custom-app4 { background-image: url("/usr/share/icons/hicolor/256x256/apps/steam.png"); }
+/* AI Limit */
+#custom-app5 { background-image: url("/home/celiuz/.local/share/icons/hicolor/128x128/apps/steam_icon_2407270.png"); }
+/* Brave */
+#custom-app6 { background-image: url("/usr/share/icons/hicolor/128x128/apps/brave-desktop.png"); }
+/* ELDEN RING */
+#custom-app7 { background-image: url("/home/celiuz/.local/share/icons/hicolor/128x128/apps/steam_icon_1245620.png"); }

@@ -1,0 +1,305 @@
+/* Los iconos propios de las apps del dock (una regla background-image por
+ * boton). Lo genera hypr/scripts/gen-dock.py cada vez que cambian las apps, por
+ * eso va aparte. En CSS los @import tienen que ir antes que cualquier regla. */
+@import url("dock-icons.css");
+
+/* ~/dotfiles/waybar/style.css
+ * Estilo compartido por las dos barras: la principal (config.jsonc) y la
+ * linea-tirador (trigger.jsonc). Cada una lleva su clase por el campo "name".
+ * Es CSS de GTK3: soporta un subconjunto de CSS normal, no todo.
+ *
+ * Concepto: la barra en si es invisible. Solo flotan los iconos y el texto.
+ * Cada modulo es un boton sin fondo; su pastilla violeta con borde amatista
+ * aparece con una animacion suave solo al posar el puntero encima.
+ */
+
+@define-color text       #e0def4;
+@define-color muted      #6e6a86;
+@define-color love       #eb6f92;  /* rojo   — critico */
+@define-color gold       #f6c177;  /* ambar  — cpu */
+@define-color rose       #ebbcba;  /* rosa   — temperatura */
+@define-color pine       #7fb3c8;  /* azul   — red */
+@define-color foam       #9ccfd8;  /* cyan   — memoria */
+
+/* Violeta profundo del fondo de los botones. Translucido para que no rompa el
+ * efecto flotante: deja entrever lo que hay detras. */
+@define-color violet     rgba(26, 8, 48, 0.92);
+/* Amatista del borde y del tirador iluminado. */
+@define-color amethyst   #b16cff;
+@define-color amethyst_d rgba(177, 108, 255, 0.35);
+
+* {
+    font-family: "MesloLGS Nerd Font";
+    /* Tamano del TEXTO. Los iconos van aparte: cada modulo envuelve su glifo en
+     * <span size='130%'> dentro de su "format" en config.jsonc, asi se agrandan
+     * sin arrastrar consigo los numeros y el reloj. */
+    font-size: 14px;
+    /* GTK dibuja un borde minimo por defecto en cada widget; lo quitamos. */
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+    /* Sombra bajo el texto: sin fondo, sobre un wallpaper claro los iconos se
+     * perderian. Esto los mantiene legibles encima de cualquier imagen. */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* --- Las dos barras: completamente invisibles --- */
+
+window#waybar {
+    background-color: transparent;
+    color: @text;
+}
+
+/* --- La transicion al aparecer y desaparecer --- */
+/* Waybar no desmapea la superficie al ocultarse: le pone la clase .hidden y la
+ * baja a la capa inferior. De ahi salen dos limites comprobados:
+ *
+ *  - No hay deslizado. Un `margin-top` negativo sobre window#waybar no mueve
+ *    nada: GTK ignora los margenes del toplevel en layer-shell. Y el
+ *    `layerrule = animation slide` de Hyprland tampoco sirve, porque solo actua
+ *    al crear o destruir la capa, y aqui la capa nunca se destruye.
+ *  - Al ocultarse, el cambio de capa es inmediato, asi que la ventana de la app
+ *    tapa la barra al instante y no da tiempo a ver nada. El fundido solo se
+ *    aprecia al aparecer, que es cuando la barra sube a la capa superior.
+ *
+ * Asi que lo que queda es el fundido, y ese si funciona. */
+
+window#waybar {
+    transition: opacity 350ms ease-in-out;
+    opacity: 1;
+}
+
+window#waybar.hidden {
+    opacity: 0;
+}
+
+/* --- Comportamiento comun de los modulos-boton --- */
+
+#workspaces button,
+#submap,
+#temperature,
+#cpu,
+#memory,
+#pulseaudio,
+#network,
+#tray,
+#clock {
+    background-color: transparent;
+    /* Borde transparente ya en reposo: si solo apareciera al pasar el puntero,
+     * el modulo cambiaria de tamano y el texto daria un salto. */
+    border: 1px solid transparent;
+    padding: 1px 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    /* La animacion: fondo, borde y color entran y salen en 200ms en vez de
+     * aparecer de golpe. Es lo que da la sensacion de boton vivo. */
+    transition: background-color 200ms ease-in-out,
+                border-color 200ms ease-in-out,
+                color 200ms ease-in-out;
+}
+
+#workspaces button:hover,
+#submap:hover,
+#temperature:hover,
+#cpu:hover,
+#memory:hover,
+#pulseaudio:hover,
+#network:hover,
+#tray:hover,
+#clock:hover {
+    background-color: @violet;
+    border-color: @amethyst;
+    color: @text;
+    /* GTK anade un box-shadow propio en hover que arruina el efecto. */
+    box-shadow: none;
+}
+
+/* --- Workspaces --- */
+
+/* Van centrados en la barra (modules-center), asi que ya no llevan el
+ * margen izquierdo que los separaba del filo de la pantalla. */
+#workspaces {
+    background-color: transparent;
+}
+
+/* Workspace vacio: apagado, pero visible. */
+#workspaces button {
+    color: @muted;
+    /* Los workspaces son numeros pelados, no pasan por ningun "format" donde
+     * meter el <span>. Se agrandan aqui, a la par de los iconos. */
+    font-size: 18px;
+    padding: 0 9px;
+}
+
+/* Workspace con ventanas abiertas. */
+#workspaces button.occupied {
+    color: @text;
+}
+
+/* Workspace activo: se distingue por el amatista del texto y un borde tenue,
+ * no por un fondo solido — asi la barra sigue viendose transparente. */
+#workspaces button.active {
+    color: @amethyst;
+    border-color: @amethyst_d;
+}
+
+#workspaces button.urgent {
+    color: @love;
+    border-color: @love;
+}
+
+#submap {
+    color: @gold;
+}
+
+/* --- Sensores (izquierda) y modulos de la derecha --- */
+
+#temperature      { color: @rose; }
+#cpu              { color: @gold; }
+#memory           { color: @foam; }
+#pulseaudio       { color: @amethyst; }
+#network          { color: @pine; }
+#clock            { color: @text; }
+
+/* Estados de alarma: aqui si conviene un fondo, es justo cuando quieres que
+ * te salte a la vista. */
+#temperature.critical {
+    color: @love;
+    background-color: rgba(235, 111, 146, 0.22);
+    border-color: @love;
+}
+
+#pulseaudio.muted {
+    color: @muted;
+}
+
+#network.disconnected {
+    color: @love;
+}
+
+#clock {
+    margin-right: 8px;
+}
+
+#tray {
+    margin-right: 4px;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}
+
+/* --- La linea-tirador (trigger.jsonc) --- */
+/* Aparece centrada arriba cuando la barra se oculta. Al pasar el puntero se
+ * enciende en amatista; solo se enciende, no baja la barra: eso es el click. */
+
+window#waybar.waybar-trigger {
+    background-color: transparent;
+}
+
+#custom-handle {
+    /* El modulo lleva un espacio como texto para existir. Sin anular la fuente,
+     * ese espacio mide 17px de alto y engorda la barra del tirador a 23px. */
+    font-size: 0;
+    min-width: 140px;
+    min-height: 3px;
+    margin: 3px 20px;
+    border-radius: 3px;
+    background-color: rgba(224, 222, 244, 0.22);
+    transition: background-color 250ms ease-in-out,
+                box-shadow 250ms ease-in-out;
+}
+
+#custom-handle:hover {
+    background-color: @amethyst;
+    /* Halo tenue para que se note el "encendido" y no solo el cambio de color. */
+    box-shadow: 0 0 8px 1px @amethyst_d;
+}
+
+/* --- El dock (dock.jsonc) --- */
+/* Barra inferior de acceso rapido. Mismo concepto que la de arriba: la barra no
+ * existe visualmente, solo los glifos flotando, y la pastilla violeta aparece
+ * al posar el puntero. Cambian dos cosas respecto a los modulos de arriba: los
+ * botones son mas anchos y redondeados (son iconos solos, sin texto al lado), y
+ * los glifos se encienden en amatista al pasar por encima.
+ *
+ * Los botones se llaman appN y no por el nombre de la app a proposito: dock.jsonc
+ * lo genera gen-dock.py desde dock-apps.json, y con nombres fijos este fichero
+ * (que se escribe a mano) no hay que regenerarlo cada vez que cambias una app.
+ * La lista llega hasta app20 = MAX_BOTONES de gen-dock.py. */
+
+window#waybar.waybar-dock {
+    background-color: transparent;
+}
+
+#custom-app1,  #custom-app2,  #custom-app3,  #custom-app4,  #custom-app5,
+#custom-app6,  #custom-app7,  #custom-app8,  #custom-app9,  #custom-app10,
+#custom-app11, #custom-app12, #custom-app13, #custom-app14, #custom-app15,
+#custom-app16, #custom-app17, #custom-app18, #custom-app19, #custom-app20 {
+    /* La variante *Propo* de la Nerd Font, y no la normal, es lo que centra los
+     * iconos dentro de su pastilla. En "MesloLGS Nerd Font" todo icono mide 24 px
+     * de ancho LOGICO aunque su dibujo llegue a 46: GTK centra la caja logica, y
+     * el dibujo se sale por la derecha una cantidad distinta segun el icono (de
+     * 0 a 8 px), que es lo que se veia descuadrado. En Propo el ancho logico es
+     * el del dibujo, asi que todos caen centrados solos. Medido con Pango. */
+    font-family: "MesloLGS Nerd Font Propo";
+    background-color: transparent;
+    /* Borde transparente ya en reposo, para que el icono no salte de sitio
+     * cuando aparece el borde de verdad al pasar el puntero. */
+    border: 1px solid transparent;
+    /* min-width iguala todas las pastillas: sin esto, en Propo cada icono trae
+     * su propio ancho (46 px la terminal, 27 la calculadora) y las pastillas
+     * saldrian de tamanos distintos. 46 es el ancho del icono mas ancho a 330%.
+     * Los numeros van comentados en GEOMETRIA de gen-dock.py: cuadran con el
+     * alto de la barra, y si la pastilla no cabe, GTK la recorta por abajo. */
+    min-width: 46px;
+    padding: 2px 12px;
+    margin: 8px 5px;
+    border-radius: 20px;
+    color: @text;
+    transition: background-color 200ms ease-in-out,
+                border-color 200ms ease-in-out,
+                color 200ms ease-in-out;
+
+    /* Como se dibuja el icono PROPIO de la app cuando lo tiene: la ruta de cada
+     * uno la pone dock-icons.css (generado), y estas tres propiedades, que son
+     * iguales para todos, se quedan aqui. 46 px para que case con el tamano de
+     * los glifos, asi mezclar iconos propios y glifos no descuadra la fila.
+     * Ojo: background-image se pinta ENCIMA de background-color, asi que la
+     * pastilla del hover no lo tapa. */
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 46px 46px;
+}
+
+#custom-app1:hover,  #custom-app2:hover,  #custom-app3:hover,  #custom-app4:hover,
+#custom-app5:hover,  #custom-app6:hover,  #custom-app7:hover,  #custom-app8:hover,
+#custom-app9:hover,  #custom-app10:hover, #custom-app11:hover, #custom-app12:hover,
+#custom-app13:hover, #custom-app14:hover, #custom-app15:hover, #custom-app16:hover,
+#custom-app17:hover, #custom-app18:hover, #custom-app19:hover, #custom-app20:hover {
+    background-color: @violet;
+    border-color: @amethyst;
+    /* El glifo tambien se enciende: en un dock de iconos sueltos, solo el fondo
+     * se nota poco. */
+    color: @amethyst;
+    box-shadow: none;
+}
+
+/* --- Tooltips --- */
+/* Estos si van opacos: son texto denso que tiene que leerse bien. */
+
+tooltip {
+    background-color: rgba(25, 23, 36, 0.96);
+    border: 1px solid @amethyst_d;
+    border-radius: 8px;
+}
+
+tooltip label {
+    color: @text;
+    padding: 4px;
+    text-shadow: none;
+}

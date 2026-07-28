@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""
+~/dotfiles/hypr/scripts/wallpaper-pause.py
+
+Se encarga de que el fondo de pantalla en video no gaste recursos cuando no se
+ve. Hace dos cosas distintas:
+
+  1. PAUSA el video cuando hay una ventana tapandolo, y lo reanuda al volver a
+     un workspace vacio. Corta el gasto de CPU y del decodificador de la GPU;
+     la RAM se queda reservada, que es lo que permite reanudar al instante.
+
+  2. MATA mpvpaper entero mientras corra alguno de los programas de
+     ~/.config/mpvpaper/stoplist (tus juegos), y lo vuelve a levantar al
+     cerrarlos. Ahi si se libera todo: los ~430 MB de RAM y la VRAM.
+
+POR QUE HAY QUE HACERLO A MANO
+------------------------------
+mpvpaper trae -p (auto-pause) y -s (auto-stop) justo para el punto 1, pero
+**bajo Hyprland no funcionan** — su propio manual avisa de que "the auto
+options might not work as intended". Se apoyan en el "surface frame callback"
+de Wayland, o sea en que el compositor deje de pedir fotogramas cuando la capa
+esta tapada, y Hyprland se los sigue pidiendo aunque haya una ventana encima a
+pantalla completa. Comprobado de dos maneras: con -p, la propiedad `pause` de
+mpv se queda en False con el fondo totalmente tapado; con -s, ni el PID ni la
+RSS se mueven. Su lista stoplist si funciona (va por nombre de proceso), pero
+solo con -s activo, y -s se pelea con la pausa de aqui. Asi que se replica.
+
+COMO
+----
+Se suscribe al socket de eventos de Hyprland (.socket2.sock) en vez de sondear:
+reacciona al instante y no cuesta nada. Cada 5 s como mucho, ademas, revisa la
+stoplist leyendo /proc (sin lanzar pidof, para no crear procesos a cada rato).
+
+Ordenes por el FIFO ($XDG_RUNTIME_DIR/wallpaper-pause.fifo): `hold` para que deje
+de tocar la pausa y `release` para que vuelva a mandar. Las usa CeliuzPaper: al
+elegir fondo hace falta ver el video en marcha, y este demonio lo pausaria por
+tener ventanas abiertas.
+
+La regla de la pausa es "ventanas > 0 -> pausa" porque tienes los gaps a 0: en
+cuanto hay una ventana en mosaico, tapa el fondo entero. Si algun dia pones
+gaps o usas mucho ventanas flotantes pequenas, es aqui donde hay que afinarlo.
+"""
+
+import json
+import os
+import select
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+# Lo abre mpvpaper con --input-ipc-server (ver wallpaper.sh).
+MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
+STOPLIST = os.path.expanduser("~/.config/mpvpaper/stoplist")
+LANZADOR = os.path.expanduser("~/dotfiles/hypr/scripts/wallpaper.sh")
+
+# Ordenes de fuera, por FIFO:
+#   hold     -> deja de tocar la pausa (lo pide CeliuzPaper mientras eliges
+#               fondo: con la pausa puesta veri­as un fotograma congelado y no
+#               se puede elegir asi).
+#   release  -> vuelve a mandar, y recalcula ya mismo.
+FIFO_PATH = os.path.join(RUNTIME, "wallpaper-pause.fifo")
+
+# Cada cuanto se revisa la stoplist, como maximo. Tambien es el timeout del
+# select, o sea el latido del bucle cuando no pasa nada en Hyprland.
+PERIODO = 5.0
+
+# Eventos de Hyprland tras los que merece la pena recontar ventanas. El resto
+# (cambios de foco, de titulo, de submap...) no altera lo que tapa el fondo.
+EVENTOS = (
+    "workspace>>", "focusedmon>>",
+    "openwindow>>", "closewindow>>",
+    "movewindowv2>>", "movewindow>>",
+    "fullscreen>>", "changefloatingmode>>",
+)
+
+
+def hypr_dir():
+    base = os.path.join(RUNTIME, "hypr")
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    if not sig:
+        candidatos = [d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))]
+        if not candidatos:
+            sys.exit("wallpaper-pause: no encuentro ninguna instancia de Hyprland")
+        sig = candidatos[0]
+    return os.path.join(base, sig)
+
+
+HYPR_DIR = hypr_dir()
+
+
+def ventanas_activas():
+    """Cuantas ventanas hay en el workspace que se esta viendo. None si falla."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect(os.path.join(HYPR_DIR, ".socket.sock"))
+            s.sendall(b"activeworkspace")
+            datos = b""
+            while True:
+                trozo = s.recv(8192)
+                if not trozo:
+                    break
+                datos += trozo
+    except OSError:
+        return None
+    for linea in datos.decode(errors="replace").splitlines():
+        if linea.strip().startswith("windows:"):
+            try:
+                return int(linea.split(":", 1)[1])
+            except ValueError:
+                return None
+    return None
+
+
+def mpv(orden):
+    """Manda una orden al socket IPC de mpv. Devuelve None si no esta.
+
+    Que no este es normal, no un error: puede que mpvpaper aun no haya
+    arrancado, o que lo hayamos matado nosotros por la stoplist.
+    """
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect(MPV_SOCKET)
+            s.sendall((json.dumps(orden) + "\n").encode())
+            return s.recv(4096)
+    except (OSError, ValueError):
+        return None
+
+
+def procesos_en_marcha():
+    """Nombres de todos los procesos vivos, leyendo /proc directamente."""
+    nombres = set()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/comm") as fh:
+                nombres.add(fh.read().strip())
+        except OSError:
+            continue   # el proceso murio mientras lo leiamos
+    return nombres
+
+
+def leer_stoplist():
+    """Nombres de la stoplist. Se relee cada vez: asi anadir un juego a la lista
+    tiene efecto sin reiniciar nada."""
+    try:
+        with open(STOPLIST) as fh:
+            return {n for n in fh.read().split() if n}
+    except OSError:
+        return set()
+
+
+def mpvpaper_vivo():
+    return subprocess.run(["pgrep", "-x", "mpvpaper"],
+                          stdout=subprocess.DEVNULL).returncode == 0
+
+
+def matar_mpvpaper():
+    subprocess.run(["pkill", "-x", "mpvpaper"], stdout=subprocess.DEVNULL)
+    time.sleep(0.5)
+    subprocess.run(["pkill", "-9", "-x", "mpvpaper"], stdout=subprocess.DEVNULL)
+
+
+def levantar_mpvpaper():
+    # --only-mpv para que el lanzador no nos mate a nosotros de rebote.
+    subprocess.run([LANZADOR, "--only-mpv"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def abrir_fifo():
+    """FIFO nuevo en cada arranque, por si quedo uno huerfano.
+
+    Se abre en O_RDWR y no en O_RDONLY: manteniendo nosotros mismos un extremo de
+    escritura abierto, el FIFO nunca da EOF y select() no se dispara en bucle.
+    """
+    try:
+        os.remove(FIFO_PATH)
+    except FileNotFoundError:
+        pass
+    try:
+        os.mkfifo(FIFO_PATH, 0o600)
+        return os.open(FIFO_PATH, os.O_RDWR | os.O_NONBLOCK)
+    except OSError:
+        return None
+
+
+def main():
+    # Un solo demonio a la vez: si quedo otro de una recarga anterior, que se
+    # vaya el viejo. (wallpaper.sh ya lo hace, pero por si se lanza a mano.)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
+    fifo = abrir_fifo()
+
+    pausado = None       # lo ultimo que le dijimos a mpv
+    parado_por_juego = False
+    retenido = False     # alguien pidio `hold`: no se toca la pausa
+
+    while True:
+        try:
+            eventos = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            eventos.connect(os.path.join(HYPR_DIR, ".socket2.sock"))
+        except OSError:
+            time.sleep(2)   # Hyprland todavia no esta listo (arranque en frio)
+            continue
+
+        pausado = None
+        buffer = b""
+        try:
+            while True:
+                vigilar = [eventos] + ([fifo] if fifo is not None else [])
+                listos, _, _ = select.select(vigilar, [], [], PERIODO)
+                listo = eventos in listos
+
+                # --- 0. Ordenes de fuera (CeliuzPaper) ---
+                if fifo is not None and fifo in listos:
+                    try:
+                        ordenes = os.read(fifo, 1024).decode(errors="replace").split()
+                    except BlockingIOError:
+                        ordenes = []
+                    for orden in ordenes:
+                        if orden == "hold":
+                            retenido = True
+                        elif orden == "release":
+                            retenido = False
+                            pausado = None   # obliga a recalcular abajo
+
+                # --- 1. La stoplist: juegos ---
+                hay_juego = bool(leer_stoplist() & procesos_en_marcha())
+                if hay_juego and not parado_por_juego:
+                    matar_mpvpaper()
+                    parado_por_juego = True
+                    pausado = None
+                elif not hay_juego and parado_por_juego:
+                    levantar_mpvpaper()
+                    parado_por_juego = False
+                    pausado = None
+                    time.sleep(1.5)   # deja que mpv abra su socket
+
+                # --- 2. Los eventos de Hyprland: pausa por ventanas encima ---
+                recontar = False
+                if listo:
+                    trozo = eventos.recv(8192)
+                    if not trozo:
+                        break          # Hyprland cerro el socket
+                    buffer += trozo
+                    *lineas, buffer = buffer.split(b"\n")
+                    for linea in lineas:
+                        if linea.decode(errors="replace").startswith(EVENTOS):
+                            recontar = True
+
+                # Tambien se recuenta en el primer paso tras (re)conectar o tras
+                # levantar mpvpaper, que es cuando `pausado` vale None.
+                if not recontar and pausado is not None:
+                    continue
+                if parado_por_juego:
+                    continue
+                if retenido:
+                    # Alguien esta eligiendo fondo: el video se queda como lo
+                    # ponga el, y al soltar (`release`) se recalcula.
+                    pausado = None
+                    continue
+
+                n = ventanas_activas()
+                if n is None:
+                    continue
+                quiere_pausa = n > 0
+                if quiere_pausa != pausado:
+                    mpv({"command": ["set_property", "pause", quiere_pausa]})
+                    pausado = quiere_pausa
+        except OSError:
+            pass
+        finally:
+            eventos.close()
+
+        time.sleep(2)   # se cayo el socket de eventos: reconectar
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,17 @@
+# Bytecode de Python. Se regenera solo y ademas lleva la version del interprete
+# en el nombre (cpython-314), asi que en otra maquina no sirve de nada.
+__pycache__/
+*.py[cod]
+
+# Diarios y temporales que dejan los scripts.
+*.log
+*.tmp
+
+# Credenciales: NO deben estar aqui, y si alguna vez alguien copia una por error,
+# que git se niegue a subirla. Las de verdad viven fuera del repo a proposito:
+#   ~/.config/gcal-panel/credentials.json    (client_id y secret de Google)
+#   ~/.local/share/gcal-panel/token.json     (el token OAuth)
+credentials.json
+token.json
+*.pem
+*.key
