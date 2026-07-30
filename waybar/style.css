@@ -3,6 +3,15 @@
  * eso va aparte. En CSS los @import tienen que ir antes que cualquier regla. */
 @import url("dock-icons.css");
 
+/* LA PALETA. Un @define-color por variable de hypr/conf/colores.conf, que es la
+ * fuente de verdad de todo el escritorio (Hyprland, hyprlock y esta barra).
+ * Lo genera hypr/scripts/gen-colores.py; si tocas un color alli, vuelve a
+ * lanzarlo o la barra se queda con el viejo.
+ *
+ * En este archivo NO se escribe ningun color literal. Para transparencias se
+ * usa alpha(@color, 0.35), que el CSS de GTK deriva solo. */
+@import url("colores.css");
+
 /* ~/dotfiles/waybar/style.css
  * Estilo compartido por las dos barras: la principal (config.jsonc) y la
  * linea-tirador (trigger.jsonc). Cada una lleva su clase por el campo "name".
@@ -12,21 +21,6 @@
  * Cada modulo es un boton sin fondo; su pastilla violeta con borde amatista
  * aparece con una animacion suave solo al posar el puntero encima.
  */
-
-@define-color text       #e0def4;
-@define-color muted      #6e6a86;
-@define-color love       #eb6f92;  /* rojo   — critico */
-@define-color gold       #f6c177;  /* ambar  — cpu */
-@define-color rose       #ebbcba;  /* rosa   — temperatura */
-@define-color pine       #7fb3c8;  /* azul   — red */
-@define-color foam       #9ccfd8;  /* cyan   — memoria */
-
-/* Violeta profundo del fondo de los botones. Translucido para que no rompa el
- * efecto flotante: deja entrever lo que hay detras. */
-@define-color violet     rgba(26, 8, 48, 0.92);
-/* Amatista del borde y del tirador iluminado. */
-@define-color amethyst   #b16cff;
-@define-color amethyst_d rgba(177, 108, 255, 0.35);
 
 * {
     font-family: "MesloLGS Nerd Font";
@@ -40,14 +34,14 @@
     min-height: 0;
     /* Sombra bajo el texto: sin fondo, sobre un wallpaper claro los iconos se
      * perderian. Esto los mantiene legibles encima de cualquier imagen. */
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 1px 3px alpha(@negro, 0.8);
 }
 
 /* --- Las dos barras: completamente invisibles --- */
 
 window#waybar {
     background-color: transparent;
-    color: @text;
+    color: @luz;
 }
 
 /* --- La transicion al aparecer y desaparecer --- */
@@ -107,9 +101,9 @@ window#waybar.hidden {
 #network:hover,
 #tray:hover,
 #clock:hover {
-    background-color: @violet;
-    border-color: @amethyst;
-    color: @text;
+    background-color: alpha(@superficie, 0.92);
+    border-color: @amatista;
+    color: @luz;
     /* GTK anade un box-shadow propio en hover que arruina el efecto. */
     box-shadow: none;
 }
@@ -124,7 +118,7 @@ window#waybar.hidden {
 
 /* Workspace vacio: apagado, pero visible. */
 #workspaces button {
-    color: @muted;
+    color: @tenue;
     /* Los workspaces son numeros pelados, no pasan por ningun "format" donde
      * meter el <span>. Se agrandan aqui, a la par de los iconos. */
     font-size: 18px;
@@ -133,48 +127,55 @@ window#waybar.hidden {
 
 /* Workspace con ventanas abiertas. */
 #workspaces button.occupied {
-    color: @text;
+    color: @luz;
 }
 
 /* Workspace activo: se distingue por el amatista del texto y un borde tenue,
  * no por un fondo solido — asi la barra sigue viendose transparente. */
 #workspaces button.active {
-    color: @amethyst;
-    border-color: @amethyst_d;
+    color: @amatista;
+    border-color: alpha(@amatista, 0.35);
 }
 
 #workspaces button.urgent {
-    color: @love;
-    border-color: @love;
+    color: @alerta;
+    border-color: @alerta;
 }
 
 #submap {
-    color: @gold;
+    color: @atencion;
 }
 
 /* --- Sensores (izquierda) y modulos de la derecha --- */
-
-#temperature      { color: @rose; }
-#cpu              { color: @gold; }
-#memory           { color: @foam; }
-#pulseaudio       { color: @amethyst; }
-#network          { color: @pine; }
-#clock            { color: @text; }
+/* Todos en la familia violeta. Antes cada sensor tenia su color (ambar la CPU,
+ * rosa la temperatura, dos azules la red y la memoria), y eso hacia que la
+ * barra pareciera un semaforo. Lo que distingue un sensor de otro es su icono,
+ * no su color; el color esta para otra cosa.
+ *
+ * La temperatura es la unica que se sale, y solo medio tono: $neon en vez de
+ * $amatista. Es el tono mas caliente de la familia, asi que el calor se lee
+ * como calor sin romper la paleta. */
+#temperature      { color: @neon; }
+#cpu              { color: @amatista; }
+#memory           { color: @amatista; }
+#pulseaudio       { color: @amatista; }
+#network          { color: @amatista; }
+#clock            { color: @luz; }
 
 /* Estados de alarma: aqui si conviene un fondo, es justo cuando quieres que
  * te salte a la vista. */
 #temperature.critical {
-    color: @love;
-    background-color: rgba(235, 111, 146, 0.22);
-    border-color: @love;
+    color: @alerta;
+    background-color: alpha(@alerta, 0.22);
+    border-color: @alerta;
 }
 
 #pulseaudio.muted {
-    color: @muted;
+    color: @tenue;
 }
 
 #network.disconnected {
-    color: @love;
+    color: @alerta;
 }
 
 #clock {
@@ -209,15 +210,15 @@ window#waybar.waybar-trigger {
     min-height: 3px;
     margin: 3px 20px;
     border-radius: 3px;
-    background-color: rgba(224, 222, 244, 0.22);
+    background-color: alpha(@luz, 0.22);
     transition: background-color 250ms ease-in-out,
                 box-shadow 250ms ease-in-out;
 }
 
 #custom-handle:hover {
-    background-color: @amethyst;
+    background-color: @amatista;
     /* Halo tenue para que se note el "encendido" y no solo el cambio de color. */
-    box-shadow: 0 0 8px 1px @amethyst_d;
+    box-shadow: 0 0 8px 1px alpha(@amatista, 0.35);
 }
 
 /* --- El dock (dock.jsonc) --- */
@@ -260,7 +261,7 @@ window#waybar.waybar-dock {
     padding: 2px 12px;
     margin: 8px 5px;
     border-radius: 20px;
-    color: @text;
+    color: @luz;
     transition: background-color 200ms ease-in-out,
                 border-color 200ms ease-in-out,
                 color 200ms ease-in-out;
@@ -281,11 +282,11 @@ window#waybar.waybar-dock {
 #custom-app9:hover,  #custom-app10:hover, #custom-app11:hover, #custom-app12:hover,
 #custom-app13:hover, #custom-app14:hover, #custom-app15:hover, #custom-app16:hover,
 #custom-app17:hover, #custom-app18:hover, #custom-app19:hover, #custom-app20:hover {
-    background-color: @violet;
-    border-color: @amethyst;
+    background-color: alpha(@superficie, 0.92);
+    border-color: @amatista;
     /* El glifo tambien se enciende: en un dock de iconos sueltos, solo el fondo
      * se nota poco. */
-    color: @amethyst;
+    color: @amatista;
     box-shadow: none;
 }
 
@@ -293,13 +294,13 @@ window#waybar.waybar-dock {
 /* Estos si van opacos: son texto denso que tiene que leerse bien. */
 
 tooltip {
-    background-color: rgba(25, 23, 36, 0.96);
-    border: 1px solid @amethyst_d;
+    background-color: alpha(@abismo, 0.96);
+    border: 1px solid alpha(@amatista, 0.35);
     border-radius: 8px;
 }
 
 tooltip label {
-    color: @text;
+    color: @luz;
     padding: 4px;
     text-shadow: none;
 }

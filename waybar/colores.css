@@ -1,0 +1,24 @@
+/* GENERADO POR hypr/scripts/gen-colores.py — NO EDITAR A MANO.
+ *
+ * La fuente de verdad es hypr/conf/colores.conf. Si cambias un color
+ * ahi y no vuelves a lanzar el generador, la barra se queda con el
+ * viejo. Lo mas comodo: gen-colores.py y luego recargar las barras.
+ *
+ * Para transparencias no hagas variables nuevas: el CSS de GTK las
+ * deriva solo, con alpha(@amatista, 0.35).
+ */
+
+@define-color negro       #000000;
+@define-color abismo      #0d0418;
+@define-color superficie  #1a0830;
+@define-color apagado     #2d1b4e;
+@define-color violeta     #6a00f4;
+@define-color amatista    #b16cff;
+@define-color neon        #c77dff;
+@define-color luz         #e4c7ff;
+@define-color tenue       #8a7aa8;
+@define-color alerta      #eb6f92;            /* rojo  — algo va mal, mirame ya */
+@define-color atencion    #f6c177;            /* ambar — en marcha, espera */
+@define-color glow_activo rgba(199, 125, 255, 0.8);
+@define-color halo        rgba(106, 0, 244, 0.667);
+@define-color sombra      rgba(0, 0, 0, 0.8);
