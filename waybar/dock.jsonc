@@ -16,11 +16,11 @@
     "position": "bottom",
 
     // Alto y ancho salen de la cuenta de GEOMETRIA en gen-dock.py:
-    // 7 apps x 82 px de celda. Fijar el ancho es lo que hace que
+    // 8 apps x 82 px de celda. Fijar el ancho es lo que hace que
     // waybar centre la barra; el resto del borde inferior queda libre para
     // clickar en tus ventanas.
     "height": 88,
-    "width": 574,
+    "width": 656,
     "spacing": 0,
 
     // Sin zona exclusiva: el dock nunca le quita sitio a las ventanas, sube
@@ -38,7 +38,8 @@
         "custom/app4",
         "custom/app5",
         "custom/app6",
-        "custom/app7"
+        "custom/app7",
+        "custom/app8"
     ],
 
     // Terminal — kitty
@@ -89,5 +90,12 @@
         "tooltip-format": "ELDEN RING",
         "on-click": "uwsm app -- steam steam://rungameid/1245620",
         "on-click-right": "$HOME/dotfiles/hypr/scripts/dock-manager.py app7"
+    },
+    // CeliuzPaper
+    "custom/app8": {
+        "format": " ",
+        "tooltip-format": "CeliuzPaper",
+        "on-click": "uwsm app -- /home/celiuz/dotfiles/celiuzpaper/celiuzpaper.py",
+        "on-click-right": "$HOME/dotfiles/hypr/scripts/dock-manager.py app8"
     }
 }

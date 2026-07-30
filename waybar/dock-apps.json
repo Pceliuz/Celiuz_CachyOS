@@ -57,6 +57,11 @@
             "label": "ELDEN RING",
             "cmd": "steam steam://rungameid/1245620",
             "icon_name": "steam_icon_1245620"
+        },
+        {
+            "label": "CeliuzPaper",
+            "cmd": "/home/celiuz/dotfiles/celiuzpaper/celiuzpaper.py",
+            "icon_name": "celiuzpaper"
         }
     ]
 }
