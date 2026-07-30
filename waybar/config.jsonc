@@ -33,7 +33,7 @@
     // El reloj va pegado a la izquierda de los workspaces, y el conjunto de los
     // dos es lo que queda centrado en la pantalla.
     "modules-center": ["clock", "hyprland/workspaces"],
-    "modules-right": ["pulseaudio", "network", "tray"],
+    "modules-right": ["pulseaudio", "network", "custom/notificaciones", "tray"],
 
     // --- CENTRO --- (el bloque "clock" esta al final del archivo)
 
@@ -118,6 +118,24 @@
         "interval": 5,
         // nmtui viene con networkmanager, no hace falta instalar nada extra.
         "on-click": "kitty --class monitor-tui -e nmtui"
+    },
+
+    // --- DERECHA: notificaciones (mako) ---
+
+    "custom/notificaciones": {
+        // El script devuelve texto, tooltip y CLASE. El color de cada estado se
+        // decide en style.css a partir de esa clase, no aqui: asi los colores
+        // siguen viniendo todos de la paleta y no hay ninguno escrito en bash.
+        "exec": "$HOME/dotfiles/waybar/scripts/notificaciones.sh",
+        "return-type": "json",
+        // Cada 2 s. Es un grep sobre la salida de makoctl, no cuesta nada, y
+        // mako no avisa por ninguna senal cuando cambia la cuenta.
+        "interval": 2,
+        "format": "<span size='130%'>{}</span>",
+        "on-click": "makoctl dismiss",
+        "on-click-right": "makoctl mode -t no-molestar",
+        "on-click-middle": "makoctl restore",
+        "escape": true
     },
 
     "tray": {

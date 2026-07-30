@@ -22,6 +22,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 | `waybar/` | Barra de arriba y dock de abajo. Cuatro instancias de waybar. |
 | `fuzzel/` | Lanzador de aplicaciones. |
 | `celiuzpaper/` | App propia para cambiar el fondo de pantalla. |
+| `mako/` | Notificaciones. `config` a mano, `colores` generado. |
 | `mpvpaper/` | Lista de programas que pausan el fondo en vídeo. |
 
 ### Las piezas a medida
@@ -41,6 +42,10 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   restaura. También sirve por CLI (`--list`, `--set`, `--random`, `--current`).
 - **`lock.sh` + `hyprlock.conf`** — la pantalla de bloqueo. Ver su sección abajo,
   porque hace bastante más que lanzar `hyprlock`.
+- **`gen-colores.py`** — pasa la paleta de `colores.conf` al CSS de waybar y a la
+  config de mako. Es lo que hace que el violeta esté escrito en un solo sitio.
+- **`recargar.sh`** — recarga la config avisando de verdad si falla, y comprueba
+  incoherencias que son config válida pero no hacen nada.
 - **`wallpaper-pause.py`** — pausa el vídeo del fondo cuando queda tapado, y lo
   mata entero mientras corra algo de la `stoplist` (juegos).
 
@@ -51,7 +56,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 Todo está en los repos oficiales de CachyOS/Arch. No hace falta nada del AUR.
 
 ```sh
-sudo pacman -S hyprland waybar fuzzel kitty hyprlock hypridle mpvpaper \
+sudo pacman -S hyprland waybar fuzzel kitty hyprlock hypridle mpvpaper mako \
                grim slurp wl-clipboard uwsm \
                python-gobject gtk-layer-shell ffmpeg librsvg \
                ttf-meslo-nerd noto-fonts-cjk \
@@ -80,6 +85,7 @@ git clone git@github.com:Pceliuz/Celiuz_CachyOS.git ~/dotfiles
 ln -sfn ~/dotfiles/hypr     ~/.config/hypr
 ln -sfn ~/dotfiles/waybar   ~/.config/waybar
 ln -sfn ~/dotfiles/fuzzel   ~/.config/fuzzel
+ln -sfn ~/dotfiles/mako     ~/.config/mako
 ln -sfn ~/dotfiles/mpvpaper ~/.config/mpvpaper
 
 mkdir -p ~/.local/bin ~/.local/share/applications \
@@ -114,6 +120,10 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + SHIFT + B` | Lanzador en modo "ejecutar binario" |
 | `SUPER + C` | Sacar la barra y el dock |
 | `SUPER + SHIFT + C` | Reiniciar el demonio de las barras |
+| `SUPER + N` | Descartar la notificación de arriba |
+| `SUPER + SHIFT + N` | Descartarlas todas |
+| `SUPER + ALT + N` | No molestar (encender / apagar) |
+| `SUPER + CTRL + N` | Recuperar la última descartada |
 | `SUPER + SHIFT + R` | Recargar la config (y avisar de verdad si falla) |
 | `SUPER + L` | Bloquear la pantalla |
 | `SUPER + S` | Captura de una zona |
@@ -295,6 +305,68 @@ alrededor de un vatio.
 
 ---
 
+## Notificaciones
+
+**mako**, del repo oficial. Es quien atiende `org.freedesktop.Notifications` por
+D-Bus: sin un demonio, todo lo que mande `notify-send` desaparece en silencio,
+que es como estuvo este escritorio hasta ahora.
+
+Se eligió frente a dunst, swaync y fnott. **dunst** quedó fuera por arrastrar
+librerías de X11 (`libxinerama`, `libxrandr`, `libxss`) en un escritorio Wayland
+puro. **swaync** es el más completo —trae panel de historial— pero pide `gtk4`,
+`libadwaita`, `granite7` y `gvfs`: los toolkits de GNOME y de elementary enteros
+para dibujar unos globos. mako usa cairo y pango, que ya estaban.
+
+La pega de mako era que su config no es CSS y no tiene variables, así que el
+violeta acabaría escrito por segunda vez. Se resolvió extendiendo
+`gen-colores.py`: ahora emite también `mako/colores`, y `mako/config` lo trae con
+`include=`.
+
+> **El `include` va AL FINAL de `mako/config`, y no es un capricho.** En mako las
+> opciones globales tienen que ir antes de la primera sección `[criterio]`. Como
+> el archivo generado trae secciones, cualquier opción global escrita después se
+> leería como parte de la última sección — sin dar ningún error. Si añades
+> secciones a mano, van después del `include`.
+
+**Se arranca por su unidad de systemd, no con `uwsm app --` como el resto.** Es
+deliberado: `uwsm` le daría un *scope* propio, y `lib/congelar.py` congela los
+scopes al bloquear la pantalla. Con mako congelado, cualquier app que mandara una
+notificación se quedaría esperando una respuesta de D-Bus que no llega. Como
+`.service` cae en `app.slice` y el bloqueo no lo toca.
+
+Las notificaciones son translúcidas (`#1a0830eb`) con **blur de Hyprland** encima,
+así que se leen sobre cualquier fondo:
+
+```
+layerrule = blur on,          match:namespace notifications
+layerrule = ignore_alpha 0.3, match:namespace notifications
+```
+
+> **Dos trampas ahí:** el namespace de la capa es **`notifications`**, no `mako` —
+> sale de layer-shell, no del nombre del programa. Y en esta versión los campos
+> son `ignore_alpha` **con guion bajo** (`ignorealpha` da *"invalid field type"*) y
+> `blur` **necesita valor** (`blur on`). Los dos fallos salen solo en
+> `hyprctl configerrors`.
+
+### El módulo de la barra
+
+`waybar/scripts/notificaciones.sh` devuelve texto, tooltip y **clase**; el color de
+cada estado se decide en `style.css` a partir de esa clase, así que no hay ni un
+color escrito en el script.
+
+| Estado | Icono | Color | Por qué |
+|---|---|---|---|
+| Nada pendiente | campana de contorno | `$tenue` | "no tienes nada" no merece llamarte |
+| Hay sin leer | campana rellena | `$amatista` | el color de la casa |
+| No molestar | campana tachada | `$atencion` | no es un error, pero estar en silencio sin saberlo es como se pierden los avisos |
+
+Clic izquierdo descarta, derecho conmuta "no molestar", central recupera.
+
+> `makoctl list` **no devuelve JSON** pese al nombre: es texto para leer. Por eso
+> el script cuenta con `grep` y no parsea nada.
+
+---
+
 ## La pantalla de bloqueo
 
 `SUPER+L` no lanza `hyprlock` a secas. `hypr/scripts/lock.sh`:
@@ -383,9 +455,10 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `waybar/dock.jsonc` | `hypr/scripts/gen-dock.py` |
 | `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` |
 | `waybar/colores.css` | `hypr/scripts/gen-colores.py` |
+| `mako/colores` | `hypr/scripts/gen-colores.py` |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
 
-Se versionan los tres primeros a propósito, para que un clon recién hecho
+Se versionan los cuatro primeros a propósito, para que un clon recién hecho
 arranque sin tener que ejecutar los generadores.
 
 ---
@@ -396,8 +469,8 @@ Hecho: monitores, teclado, barra, dock, lanzador, fondo en vídeo, capturas,
 calendario, monitores del sistema, pantalla de bloqueo, auto-bloqueo por
 inactividad, y el aspecto (paleta, decoración y animaciones).
 
-Pendiente: `env.conf` para Nvidia, reglas de ventana del flujo de seguridad,
-historial del portapapeles y notificaciones.
+Pendiente: `env.conf` para Nvidia, reglas de ventana del flujo de seguridad e
+historial del portapapeles.
 
 > **Aviso de futuro:** Hyprland avisa al arrancar de que *el formato `.conf`
 > dejará de estar soportado en la 0.57*. Todo este repo está en hyprlang `.conf`

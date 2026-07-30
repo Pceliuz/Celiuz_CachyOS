@@ -1,0 +1,88 @@
+# ~/dotfiles/mako/config
+#
+# Las notificaciones. mako es el demonio que atiende org.freedesktop.Notifications
+# por D-Bus; sin el, todo lo que mande `notify-send` desaparece en silencio, que
+# es como estuvo este escritorio hasta ahora.
+#
+# LOS COLORES NO ESTAN AQUI. Vienen de hypr/conf/colores.conf a traves del
+# `include` del final, que escribe hypr/scripts/gen-colores.py. Este archivo se
+# ocupa solo de la forma y del comportamiento.
+#
+# OJO CON EL ORDEN: en mako las opciones globales tienen que ir ANTES de la
+# primera seccion `[criterio]`. Por eso el `include` va AL FINAL, y por eso todo
+# lo global esta arriba. Si anades secciones a mano, van DESPUES del include.
+#
+# Se recarga sin reiniciar con:  makoctl reload
+
+
+# --- Forma ------------------------------------------------------------------
+# Las mismas medidas que las ventanas (conf/decoration.conf) para que se lean
+# como parte del mismo escritorio: 10 de redondeo y 2 de borde.
+font=MesloLGS Nerd Font 11
+width=380
+height=160
+border-size=2
+border-radius=10
+padding=14
+margin=12
+
+# Sitio. Arriba a la derecha, y separadas 44px del filo: la barra mide 38 de
+# alto, asi que con esto la notificacion cae JUSTO debajo y no la tapa cuando
+# la barra esta a la vista. Cuando la barra se auto-oculta queda un hueco, que
+# es preferible a que se pisen.
+anchor=top-right
+outer-margin=44,12,12,12
+
+# Cuantas a la vez. Mas de cinco y dejas de leerlas.
+max-visible=5
+layer=overlay
+
+# El icono de la app, a la izquierda.
+icons=1
+max-icon-size=48
+icon-location=left
+
+# Markup y enlaces: muchas apps mandan <b>negrita</b> y URLs.
+markup=1
+actions=1
+
+
+# --- Comportamiento ---------------------------------------------------------
+# 6 segundos. Lo justo para leer dos lineas sin que estorbe.
+default-timeout=6000
+ignore-timeout=0
+
+# Agrupar por app: diez mensajes seguidos del mismo sitio se apilan en uno con
+# contador, en vez de llenarte media pantalla.
+group-by=app-name
+format=<b>%s</b>\n%b
+
+
+# --- Que se hace al pulsarlas -----------------------------------------------
+on-button-left=invoke-default-action
+on-button-middle=dismiss-group
+on-button-right=dismiss
+on-touch=dismiss
+
+
+# --- Los colores, desde la paleta comun -------------------------------------
+# TIENE QUE IR AL FINAL: el archivo incluido trae secciones [urgency=...], y
+# cualquier opcion global escrita despues de una seccion se leeria como parte
+# de esa seccion, sin dar ningun error.
+include=~/dotfiles/mako/colores
+
+
+# --- Secciones a mano (van DESPUES del include) -----------------------------
+
+# Lo critico no se va solo: se queda hasta que lo cierres tu. Si algo se
+# considera critico y aun asi desaparece a los 6 segundos, no servia de nada
+# marcarlo como critico.
+[urgency=critical]
+default-timeout=0
+
+# "No molestar". Es un MODO de mako, no una opcion: se enciende y se apaga con
+# `makoctl mode -t no-molestar` (bind SUPER+SHIFT+N). Mientras esta puesto, las
+# notificaciones NO se pierden — se guardan y se pueden sacar despues con
+# `makoctl restore`; solo dejan de mostrarse.
+[mode=no-molestar]
+invisible=1

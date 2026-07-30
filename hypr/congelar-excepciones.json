@@ -14,6 +14,8 @@
     "",
     "Se comparan en minusculas. Ver con:  hypr/scripts/lib/juegos.py"
   ],
-  "nunca_congelar": [],
+  "nunca_congelar": [
+    "brave"
+  ],
   "siempre_congelar": []
 }

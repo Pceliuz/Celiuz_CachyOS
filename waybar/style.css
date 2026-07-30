@@ -76,6 +76,7 @@ window#waybar.hidden {
 #memory,
 #pulseaudio,
 #network,
+#custom-notificaciones,
 #tray,
 #clock {
     background-color: transparent;
@@ -99,6 +100,7 @@ window#waybar.hidden {
 #memory:hover,
 #pulseaudio:hover,
 #network:hover,
+#custom-notificaciones:hover,
 #tray:hover,
 #clock:hover {
     background-color: alpha(@superficie, 0.92);
@@ -172,6 +174,23 @@ window#waybar.hidden {
 
 #pulseaudio.muted {
     color: @tenue;
+}
+
+/* --- Notificaciones --- */
+/* Los tres estados los marca waybar/scripts/notificaciones.sh con la clase.
+ * En reposo va en @tenue y no en @amatista a proposito: "no tienes nada" no
+ * merece llamarte la atencion, y si brillara igual que lo demas dejarias de
+ * mirarlo cuando SI hay algo. */
+#custom-notificaciones.normal    { color: @tenue; }
+#custom-notificaciones.pendiente { color: @amatista; }
+#custom-notificaciones.apagado   { color: @apagado; }
+
+/* No molestar: no es un error, asi que no va en @alerta — pero tiene que
+ * cantar, porque estar en silencio sin saberlo es como se pierden los avisos.
+ * @atencion (el ambar de "espera") es exactamente ese papel. */
+#custom-notificaciones.dnd {
+    color: @atencion;
+    border-color: alpha(@atencion, 0.35);
 }
 
 #network.disconnected {

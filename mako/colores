@@ -1,0 +1,23 @@
+# GENERADO POR hypr/scripts/gen-colores.py — NO EDITAR A MANO.
+#
+# Los colores de las notificaciones, sacados de hypr/conf/colores.conf,
+# que es la misma fuente que usan Hyprland, hyprlock y la barra.
+#
+# mako NO tiene variables, asi que el reparto de papeles (que tono va en
+# el borde, cual en el texto) esta en la tabla MAKO del generador.
+#
+# Este archivo se incluye AL FINAL de mako/config, porque trae secciones
+# y en mako las opciones globales tienen que ir antes de la primera.
+
+background-color=#1a0830eb
+text-color=#e4c7ffff
+border-color=#b16cffff
+progress-color=over #6a00f473
+
+[urgency=low]
+border-color=#2d1b4eff
+text-color=#8a7aa8ff
+
+[urgency=critical]
+border-color=#eb6f92ff
+text-color=#eb6f92ff
