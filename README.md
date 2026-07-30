@@ -305,6 +305,40 @@ alrededor de un vatio.
 
 ---
 
+## La barra
+
+Cuatro instancias de waybar: la barra de arriba, el dock de abajo y una
+línea-tirador para cada una. La barra en sí es **invisible** — solo flotan los
+iconos, y la pastilla violeta de cada módulo aparece al pasar el puntero. El
+auto-ocultado lo lleva `waybar-autohide.py`.
+
+Reparto: a la izquierda los sensores (velocidad, temperatura, CPU, memoria); en
+el centro el reloj y los siete escritorios; a la derecha volumen, red,
+notificaciones y bandeja.
+
+### La velocidad de internet
+
+A la izquierda del todo, `↓ 252.9kB/s  ↑ 5.8kB/s`. Es una **segunda instancia
+del módulo `network`** de waybar (`network#velocidad`), no un script: el módulo ya
+calcula el ancho de banda, solo estaba escondido en el tooltip. La instancia de la
+derecha sigue enseñando la IP.
+
+No se le fija `interface` a propósito — waybar toma sola la de la ruta por
+defecto, así que sigue funcionando si cambias de cable o pasas a wifi.
+
+> **`min-width` en el CSS no es cosmético.** Las cifras cambian de ancho todo el
+> rato (`0 B` → `12.4 MB`), y sin un hueco reservado el módulo crece y encoge,
+> **empujando de lado a todos los sensores de su derecha** varias veces por
+> segundo.
+
+> Dos detalles que se pagan si no se saben: los campos `bandwidth*` **ya traen la
+> unidad por segundo** (`252.9kB/s`), así que añadir `/s` da `kB/s/s`. Y el
+> `interval` **es también la ventana de promediado**, porque waybar calcula la
+> velocidad entre dos lecturas; por debajo de 2 s las cifras saltan demasiado
+> para leerlas.
+
+---
+
 ## Notificaciones
 
 **mako**, del repo oficial. Es quien atiende `org.freedesktop.Notifications` por
@@ -364,6 +398,12 @@ Clic izquierdo descarta, derecho conmuta "no molestar", central recupera.
 
 > `makoctl list` **no devuelve JSON** pese al nombre: es texto para leer. Por eso
 > el script cuenta con `grep` y no parsea nada.
+
+> **Los glifos de la Nerd Font se escriben con escapes, no como caracteres.** Están
+> en el rango de Uso Privado y, escritos tal cual, las herramientas de texto los
+> aplastan: ya pasó dos veces en este repo — la última, la campana de "sin nada" y
+> la de "hay pendientes" acabaron con el **mismo** codepoint y los dos estados se
+> veían idénticos. En JSON van como `\uf063`; en Python, con `chr(0xf063)`.
 
 ---
 

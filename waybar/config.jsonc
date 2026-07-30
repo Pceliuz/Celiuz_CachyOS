@@ -29,7 +29,7 @@
     // Los sensores van todos juntos a la izquierda, agrupados por componente:
     // primero la CPU (temperatura y uso), luego la memoria (RAM y swap) y al
     // final la GPU (temperatura y uso).
-    "modules-left": ["temperature", "cpu", "memory", "hyprland/submap"],
+    "modules-left": ["network#velocidad", "temperature", "cpu", "memory", "hyprland/submap"],
     // El reloj va pegado a la izquierda de los workspaces, y el conjunto de los
     // dos es lo que queda centrado en la pantalla.
     "modules-center": ["clock", "hyprland/workspaces"],
@@ -106,6 +106,32 @@
         "on-click": "pavucontrol",
         "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
         "tooltip-format": "{desc} — {volume}%"
+    },
+
+    // --- IZQUIERDA: velocidad de internet ---
+    // Segunda instancia del modulo `network`. Waybar permite varias del mismo
+    // modulo con la sintaxis modulo#alias; la de la derecha ensena la IP y esta
+    // el trafico. Comparten el mismo codigo, asi que no cuesta nada mas.
+    //
+    // NO se fija `interface` a proposito: waybar coge sola la de la ruta por
+    // defecto. Ahora mismo es un adaptador USB (enp22s0f0u1), y si algun dia
+    // pasas a wifi o cambias de cable esto sigue funcionando sin tocarlo.
+    "network#velocidad": {
+        // Los glifos van como escapes \uXXXX y NO como caracteres sueltos: son
+        // del rango de Uso Privado de la Nerd Font, y escritos tal cual se
+        // corrompen al pasar por herramientas de texto (ya paso dos veces en
+        // este repo). Asi el archivo es ASCII puro y no hay nada que se pueda
+        // aplastar. \uf063 es la flecha abajo y \uf062 la de arriba.
+        "format": "<span size='130%'>\uf063</span> {bandwidthDownBytes}  <span size='130%'>\uf062</span> {bandwidthUpBytes}",
+        "format-disconnected": "<span size='130%'>\uf063</span> --  <span size='130%'>\uf062</span> --",
+        // 2 s: waybar calcula la velocidad como la media entre dos lecturas, asi
+        // que este numero es tambien la ventana de promediado. Menos de eso da
+        // cifras que saltan demasiado para leerlas.
+        "interval": 2,
+        // Los campos bandwidth* YA traen la unidad por segundo ("252.9kB/s"), asi
+        // que anadir "/s" aqui daria "kB/s/s".
+        "tooltip-format": "{ifname}\nBajada: {bandwidthDownBytes}\nSubida: {bandwidthUpBytes}\nTotal: {bandwidthTotalBytes}",
+        "on-click": "kitty --class monitor-tui -e nmtui"
     },
 
     "network": {

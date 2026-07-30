@@ -176,6 +176,20 @@ window#waybar.hidden {
     color: @tenue;
 }
 
+/* --- Velocidad de internet (network#velocidad) --- */
+/* El alias `modulo#nombre` de waybar se convierte en id + clase, asi que este
+ * selector afecta SOLO a la instancia de la izquierda; la de la derecha (la de
+ * la IP) sigue con las reglas de #network de arriba.
+ *
+ * min-width es lo importante aqui. Las cifras cambian de ancho todo el rato
+ * ("0 B" -> "12.4 MB"), y sin un ancho reservado el modulo crece y encoge, lo
+ * que EMPUJA de lado a todos los sensores de su derecha varias veces por
+ * segundo. Con esto el hueco es fijo y solo cambian los numeros dentro.
+ * El texto se centra para que no baile pegado a un lado. */
+#network.velocidad {
+    min-width: 168px;
+}
+
 /* --- Notificaciones --- */
 /* Los tres estados los marca waybar/scripts/notificaciones.sh con la clase.
  * En reposo va en @tenue y no en @amatista a proposito: "no tienes nada" no
