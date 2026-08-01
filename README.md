@@ -33,7 +33,11 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   que la baja al pulsarla.
 - **`gen-dock.py`** — genera `waybar/dock.jsonc` a partir de `waybar/dock-apps.json`.
   El dock **no se edita a mano**. Con clic derecho en cualquier icono se abre
-  `dock-manager.py`, que añade y quita apps.
+  `dock-manager.py`, que añade y quita apps. Su lista de apps sale de
+  `$XDG_DATA_DIRS` más los exports de Flatpak (usuario y sistema) y de Snap: una
+  lista fija de carpetas se deja fuera lo que instales por vías nuevas.
+- **`vista-escritorios.py`** — el selector de `SUPER + TAB`: enseña los
+  escritorios que tienen apps abiertas y eliges a cuál ir. Ver su sección abajo.
 - **`calendar-panel.py`** — al pulsar el reloj se abre un calendario con los
   feriados peruanos (`lib/pe_fechas.py`) y los eventos de Google Calendar
   (`lib/gcal.py`).
@@ -48,6 +52,9 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   incoherencias que son config válida pero no hacen nada.
 - **`wallpaper-pause.py`** — pausa el vídeo del fondo cuando queda tapado, y lo
   mata entero mientras corra algo de la `stoplist` (juegos).
+- **`teclado.py`** — la sesión lleva dos distribuciones (us y latam). Este avisa
+  por notificación de cuál hay puesta: al arrancar, y cada vez que la cambias con
+  `SUPER + DEL`. Ver su sección abajo.
 
 ---
 
@@ -132,7 +139,164 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
 | `SUPER + flechas` | Mover el foco |
 | `SUPER + clic izq/der` | Mover / redimensionar flotantes |
+| `SUPER + TAB` | Cambiar de escritorio manteniendo SUPER, viendo cada uno de verdad |
+| `SUPER + SHIFT + TAB` | Lo mismo, hacia atrás |
+| `SUPER + DEL` | Cambiar de distribución de teclado (us ⇄ latam) |
 | `SUPER + SHIFT + P` | Salir de Hyprland |
+
+---
+
+## El cambiador de escritorios (SUPER + TAB)
+
+El gesto de Windows, pero de **escritorios** y no de ventanas:
+
+1. **Mantienes `SUPER` y pulsas `TAB`**: aparecen flotando en el centro de la
+   pantalla los escritorios **que tienen apps abiertas** (los vacíos no salen).
+2. **Sin soltar `SUPER`**, cada `TAB` salta al siguiente — y el escritorio
+   **cambia de verdad**, no es una miniatura: ves lo que hay.
+3. **Sueltas `SUPER`** y te quedas donde estabas mirando.
+
+`SUPER + SHIFT + TAB` va hacia atrás. `Escape` te devuelve al escritorio del que
+saliste, marcado como **DESDE AQUI**. `1-9` va directo a ese escritorio. `Enter`
+o un clic también confirman, por si sueltas `SUPER` antes de tiempo.
+
+Igual que el Alt+Tab de Windows, la propia combinación ya te deja mirando el
+**siguiente**: un toque rápido de `SUPER + TAB` te lleva al otro escritorio sin
+pulsar nada más.
+
+Son dos gestos distintos y conviene que sigan siéndolo:
+
+| | |
+|---|---|
+| `SUPER + 1..7` | *"quiero **abrir** algo ahí"*. Saltas a ciegas, y está bien así. |
+| `SUPER + TAB` | *"quiero **volver** a lo que tengo abierto"*, pero no te acuerdas de en cuál lo dejaste. Lo ves y lo eliges. |
+
+### Por qué son tarjetas flotantes y no un panel
+
+**La previsualización es el cambio de verdad**, igual que en CeliuzPaper al
+elegir fondo: allí el fondo cambia a pantalla completa mientras te mueves por la
+tira y `Escape` deja el que tenías. Aquí igual — y por eso **no hay ni barra ni
+velo**: la capa ocupa la pantalla entera pero está vacía, y lo único que se
+pinta son las tarjetas del centro. Cualquier fondo taparía justo lo que estás
+eligiendo. (La primera versión era una tira apoyada abajo y tapaba parte de la
+app previsualizada; por eso se cambió.)
+
+Que eso funcione no era evidente: un `dispatch workspace` **con la capa abierta
+sí cambia el escritorio a la vista**, porque las capas pertenecen al monitor y
+no al escritorio, así que las tarjetas se quedan encima mientras por detrás
+cambia todo. Comprobado en un Hyprland anidado antes de escribirlo.
+
+### Quién mueve la selección (no es el teclado)
+
+**La capa nunca llega a ver el `TAB`.** Hyprland atiende sus *binds* antes de
+entregar la tecla al cliente, así que mientras `SUPER` siga pulsado cada `TAB`
+vuelve a disparar el atajo y la ventana no se entera de nada. Está comprobado en
+la sesión real con `VISTA_DEBUG`: en el registro no aparece ni una pulsación de
+tecla, aparecen **procesos nuevos**.
+
+Por eso el segundo `SUPER + TAB` **no abre nada**: le manda una señal
+(`SIGUSR1`, o `SIGUSR2` hacia atrás) a la ventana que ya está abierta para que
+avance, y se va. La primera versión mataba a la anterior y abría otra, y el
+efecto era el que se notaba al usarlo: cambiaba a un escritorio y al segundo
+`TAB` "se regresaba y se cerraba" — porque al morir por `SIGTERM` la anterior
+volvía a su escritorio de partida.
+
+**La trampa que costó encontrar:** ese mismo salto, hecho justo antes de cerrar
+la capa, **se deshace solo**. `hyprctl` responde `ok` y el escritorio vuelve al
+anterior sin ningún aviso: al destruirse una capa con el teclado en exclusiva,
+Hyprland devuelve el foco a la ventana que lo tenía, y esa ventana se trae
+consigo su escritorio. Por eso el destino se guarda y el salto **se repite
+después** de cerrar.
+
+### Las redes de seguridad
+
+**No se le puede preguntar al sistema si `SUPER` sigue pulsada**: en esta sesión
+`Gdk.Keymap.get_modifier_state()` devuelve **siempre `0x4000040`**, con el bit de
+SUPER puesto aunque no la toque nadie — no es el estado en vivo, es el mapa de
+qué bit le corresponde. Está medido. Por eso el "soltar" se detecta por dos
+avisos y no preguntando: el evento de teclado de la propia ventana, y el `bindr`
+de Hyprland para cuando la ventana aún no existía.
+
+Coge el teclado en exclusiva, así que lleva tres redes:
+
+- **`Escape`**, que además te devuelve de donde saliste.
+- **Cierre automático a los 20 s** sin tocar nada, que se rearma con cada tecla:
+  no te echa mientras decides, solo si te fuiste y la dejaste puesta. Una capa
+  así colgada te dejaría sin teclado en todo el escritorio, y eso no puede
+  depender de que el código no falle nunca.
+- **El toque rápido**, que es el caso que se quedaba colgado. Si pulsas y
+  sueltas antes de que la ventana exista, el aviso de "solté SUPER" llega
+  cuando todavía no hay nadie escuchando. Se arregla con dos cosas: el aviso lo
+  manda **Hyprland** (`bindr` en `keybinds.conf` → `SIGWINCH`), y el script
+  deja el pidfile puesto **antes de cargar GTK**, que cuesta 100 ms medidos.
+  Si aun así llega antes de tiempo, queda apuntado y se atiende en cuanto hay
+  ventana.
+
+Con `VISTA_DEBUG=1` escribe cada tecla y cada cambio de modificadores en
+`$XDG_RUNTIME_DIR/vista-escritorios.log`.
+
+Los colores no están escritos en el script: lee `conf/colores.conf` en caliente y
+arma su CSS con la paleta, así que si cambia el amatista, esta pantalla cambia
+sola.
+
+---
+
+## El teclado
+
+El teclado es un **Attack Shark X820: ANSI de 75%**. Eso obligó a cambiar la
+distribución, y conviene saber por qué antes de "arreglarla" otra vez.
+
+`latam` es una distribución **ISO, de 105 teclas**, y este teclado no tiene dos
+que ella da por hechas:
+
+- **`<LSGT>`**, la tecla de `<` `>` entre el Shift izquierdo y la Z. En latam
+  esos dos símbolos viven **solo** ahí: `Shift+,` y `Shift+.` dan `;` y `:`.
+- **Alt derecho (AltGr)**. Comprobado pulsando el teclado entero con
+  `xkbcli interactive-wayland`: no existe. Y en latam `@`, `\`, `~` y `^` están
+  todos en el tercer nivel, o sea detrás de AltGr.
+
+Con latam en este teclado, esos **seis símbolos eran imposibles de escribir**.
+Además la serigrafía mentía en casi toda la fila de símbolos: la tecla que dice
+`;:` daba `ñ`, la de `'"` daba `{[`.
+
+La solución tiene tres partes, todas en `conf/input.conf`:
+
+| | |
+|---|---|
+| `kb_layout = us,latam` | Dos distribuciones a la vez. La **#0 es `us`**, la que arranca. |
+| `kb_variant = altgr-intl,` | La variante de `us` no cambia nada del nivel base — solo añade `ñ` y tildes en el tercer nivel. Sale gratis. |
+| `kb_options = lv3:switch` | **El Ctrl derecho hace de AltGr.** Es la opción que xkb llama literalmente "Right Ctrl". |
+
+Con `us` puesta, lo que dice la tecla es lo que sale: `< > @ \ | ~ ^` directos o
+con Shift. El español no se pierde: `Ctrl derecho + n` da `ñ`, `+ a` da `á`,
+`+ /` da `¿`, y `Ctrl derecho + Shift + 1` da `¡`. Y `latam` sigue de segunda,
+intacta, para escribir con la memoria muscular de siempre.
+
+**El coste, que es real:** el Ctrl derecho deja de ser Ctrl. Todos los atajos y
+los juegos usan el izquierdo, así que no se nota — pero si algún día un Ctrl "no
+responde", es esto y no un fallo.
+
+### Saber en cuál estás
+
+El problema de tener dos distribuciones no es cambiar: es no saber en cuál estás
+hasta que escribes mal. Por eso `teclado.py` **avisa siempre**:
+
+- Al arrancar la sesión (`exec-once` en `autostart.conf`), diciendo con cuál
+  empiezas y recordando el atajo.
+- Cada vez que pulsas `SUPER + DEL`.
+
+Dos detalles que no son adorno:
+
+- El aviso de arranque **espera a que mako coja el bus** antes de mandarse.
+  `exec-once` no garantiza orden, y una notificación mandada antes de que exista
+  el demonio se pierde sin dejar rastro — justo el fallo que este script existe
+  para no tener.
+- Los avisos llevan la etiqueta `x-canonical-private-synchronous`, que mako
+  entiende como *sustituye al anterior*: pulsar el atajo cuatro veces seguidas
+  reescribe un aviso, no apila cuatro.
+
+`teclado.py estado` imprime la activa en una línea, para la barra o para el
+asistente.
 
 ---
 
