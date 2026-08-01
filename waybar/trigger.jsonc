@@ -35,6 +35,6 @@
         // un caracter: asi el grosor no depende del tamano de fuente.
         "format": " ",
         "tooltip": false,
-        "on-click": "echo show > $XDG_RUNTIME_DIR/waybar-autohide.fifo"
+        "on-click": "test -p $XDG_RUNTIME_DIR/waybar-autohide.fifo && echo show > $XDG_RUNTIME_DIR/waybar-autohide.fifo"
     }
 }

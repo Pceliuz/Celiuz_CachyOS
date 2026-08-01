@@ -89,7 +89,22 @@ Para lanzar cosas:
   la tubería, `fc-list` muere por SIGPIPE y el pipeline devuelve fallo aunque
   hubiera coincidencia. Guarda la salida en una variable.
 - **`pkill -f 'wallpaper-pause.py'` puede matar al propio shell** que lo lanza, si
-  su línea de comandos contiene esa ruta. Mata por PID.
+  su línea de comandos contiene esa ruta. Mata por PID. Le pasaba al atajo
+  `SUPER+SHIFT+C`, que por eso ahora usa `waybar-autohide.py --reiniciar`.
+- **git borra los ficheros ignorados si vienen de un commit anterior.** Al
+  cambiar a una rama donde `waybar/dock-apps.json` todavía estaba versionado,
+  git lo sobrescribe con la versión del repo sin avisar (es "ignorado", no
+  "sin seguimiento"); y al volver, lo borra del disco. Con él se va el dock del
+  equipo. **Cópialos aparte antes de cualquier `checkout`, `merge`, `pull` o
+  `stash` que cruce el commit `ef7a528`.** Pasó de verdad el 2026-08-01, en la
+  laptop, después de haberlo documentado como riesgo para la otra máquina.
+- **Si desaparece `$XDG_RUNTIME_DIR/waybar-autohide.fifo`, el escritorio se
+  queda medio mudo**: seis piezas mandan órdenes por ahí (las dos
+  líneas-tirador, `SUPER+C`, el panel de calendario, el gestor del dock y la
+  pantalla de bloqueo) y `echo x > ruta-sin-fifo` **crea un fichero normal y
+  sale con 0**, así que todas fallan calladas. El demonio ahora lo rehace solo
+  cada segundo; para diagnosticarlo,
+  `ls -l /proc/<pid>/fd` marca `(deleted)` el descriptor huérfano.
 
 ## Antes de dar algo por terminado
 

@@ -361,17 +361,84 @@ class Bar:
                 pass
 
 
-def main():
-    # Un FIFO nuevo en cada arranque: si quedo uno huerfano de una sesion
-    # anterior, se reemplaza.
+def abrir_fifo():
+    """Crea el FIFO de ordenes de cero y lo deja abierto. Devuelve el descriptor.
+
+    O_RDWR y no O_RDONLY: manteniendo nosotros mismos un extremo de escritura
+    abierto, el FIFO nunca da EOF y select() no se dispara en bucle.
+    """
     try:
-        os.remove(FIFO_PATH)
+        os.remove(FIFO_PATH)   # un huerfano de otra sesion, o un fichero suelto
     except FileNotFoundError:
         pass
     os.mkfifo(FIFO_PATH, 0o600)
-    # O_RDWR y no O_RDONLY: manteniendo nosotros mismos un extremo de escritura
-    # abierto, el FIFO nunca da EOF y select() no se dispara en bucle.
-    fifo = os.open(FIFO_PATH, os.O_RDWR | os.O_NONBLOCK)
+    return os.open(FIFO_PATH, os.O_RDWR | os.O_NONBLOCK)
+
+
+def es_nuestro(fifo):
+    """Si la ruta del FIFO sigue siendo el mismo fichero que tenemos abierto.
+
+    Deja de serlo cuando alguien lo borra: otra instancia del demonio que
+    arranca, o una que se apaga y se lleva por delante el FIFO de la que se
+    queda. Entonces nuestro descriptor apunta a un inodo sin nombre —lo delata
+    `ls -l /proc/<pid>/fd`, que lo marca "(deleted)"— y NADIE puede volver a
+    hablarnos: el demonio sigue escondiendo y sacando barras por posicion del
+    puntero, pero se queda sordo para siempre.
+
+    Y sordo sin decirlo: `echo show > ...fifo` sobre una ruta sin FIFO CREA un
+    fichero normal, escribe dentro y sale con 0. Los clicks en las lineas-tirador
+    y el SUPER+C parecen funcionar y no hacen nada. Paso de verdad el 2026-08-01.
+    """
+    try:
+        en_disco = os.stat(FIFO_PATH)
+    except OSError:
+        return False
+    abierto = os.fstat(fifo)
+    return (en_disco.st_ino, en_disco.st_dev) == (abierto.st_ino, abierto.st_dev)
+
+
+def matar_otros():
+    """SIGTERM a las otras instancias del demonio, y esperar a que se vayan.
+
+    Por PID y no con `pkill -f waybar-autohide.py`, que es lo que hacia el atajo
+    de reinicio y tenia dos fallos: el patron encaja tambien con el shell que
+    lanza el reinicio —su linea de comandos contiene esa misma ruta—, asi que se
+    mataba a si mismo antes de relanzar nada; y no esperaba, de modo que el
+    `cleanup` de la instancia vieja llegaba tarde y borraba el FIFO que la nueva
+    acababa de crear.
+    """
+    yo = os.getpid()
+    otros = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == yo:
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                partes = fh.read().decode(errors="replace").split("\0")
+        except OSError:
+            continue
+        if len(partes) >= 2 and "python" in partes[0] and \
+                partes[1].endswith("waybar-autohide.py"):
+            otros.append(int(pid))
+
+    for pid in otros:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    # Esperar a que suelten sus barras y su FIFO antes de crear los nuestros.
+    limite = time.monotonic() + 5.0
+    while otros and time.monotonic() < limite:
+        otros = [p for p in otros if os.path.exists(f"/proc/{p}")]
+        if otros:
+            time.sleep(0.1)
+
+
+def main():
+    if "--reiniciar" in sys.argv:
+        matar_otros()
+
+    fifo = abrir_fifo()
 
     bars = {
         "main": Bar("config.jsonc", "trigger.jsonc", in_top_zone),
@@ -381,10 +448,14 @@ def main():
     def cleanup(*_):
         for bar in bars.values():
             bar.kill()
-        try:
-            os.remove(FIFO_PATH)
-        except OSError:
-            pass
+        # Solo se borra el FIFO si sigue siendo EL NUESTRO. Sin esta condicion,
+        # una instancia que se apaga tarde se lleva por delante el FIFO de la que
+        # acaba de arrancar y deja el sistema entero sin canal de ordenes.
+        if es_nuestro(fifo):
+            try:
+                os.remove(FIFO_PATH)
+            except OSError:
+                pass
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, cleanup)
@@ -393,9 +464,23 @@ def main():
     # Deja que las cuatro barras creen sus superficies antes de senalarlas.
     time.sleep(1.0)
 
+    proxima_revision = 0.0
+
     while True:
         # El timeout de select() hace de reloj del bucle: no hace falta sleep.
         ready, _, _ = select.select([fifo], [], [], TICK)
+
+        # Una vez por segundo se comprueba que el FIFO de la ruta sigue siendo el
+        # que tenemos abierto, y si no, se rehace. Es lo que impide que el
+        # demonio se quede sordo sin remedio: seis piezas le hablan por aqui —las
+        # dos lineas-tirador, SUPER+C, el panel de calendario, el gestor del dock
+        # y la pantalla de bloqueo— y todas fallan calladas si el FIFO no esta.
+        ahora = time.monotonic()
+        if ahora >= proxima_revision:
+            proxima_revision = ahora + 1.0
+            if not es_nuestro(fifo):
+                os.close(fifo)
+                fifo = abrir_fifo()
         if ready:
             try:
                 data = os.read(fifo, 1024).decode(errors="replace")
