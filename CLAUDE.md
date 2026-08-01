@@ -61,8 +61,14 @@ Para lanzar cosas:
 - `hypr/scripts/terminal.sh <clase> <cmd>` — ventanas flotantes (btop, nmtui, el
   aviso de recarga). Cada terminal nombra la opción de clase distinto y la tabla
   está solo ahí. La clase no es decorativa: es lo que activa `windowrules.conf`.
+  Con `--sin-uwsm` delante se salta el prefijo de systemd, para quien ya lo pone.
 
-**Queda pendiente**: `fuzzel/fuzzel.ini` todavía tiene `terminal=kitty -e`.
+`fuzzel/fuzzel.ini` lo llama por `terminal=celiuz-terminal --sin-uwsm
+fuzzel-term`, un enlace a ese mismo script que `instalar.sh` deja en
+`~/.local/bin`. Va por el PATH y no por ruta a propósito: **fuzzel no expande `~`
+ni `$HOME`** en esa opción. Y el `include=` de fuzzel tampoco vale para sacar la
+línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale con
+1 y no abre el lanzador** (Hyprland, en cambio, solo avisa).
 
 ## Trampas comprobadas (no las redescubras)
 

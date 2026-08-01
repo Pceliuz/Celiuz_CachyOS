@@ -146,6 +146,12 @@ desplegar() {
         enlazar "$REPO/$pieza" "$CONFIG/$pieza"
     done
 
+    # fuzzel lanza las apps de terminal (nmtui, vim...) con lo que diga su opcion
+    # `terminal`, y ahi no sirve ni una ruta con ~ —no la expande— ni una
+    # absoluta —seria la del equipo del autor—. Por el PATH si funciona.
+    hacer mkdir -p "$HOME/.local/bin"
+    enlazar "$REPO/hypr/scripts/terminal.sh" "$HOME/.local/bin/celiuz-terminal"
+
     # Hyprland 0.56 busca hyprland.lua ANTES que hyprland.conf. Si aparece uno
     # —lo repone cualquier reinstalacion de CachyOS— nuestra config queda
     # ignorada en silencio, con un solo "Lua config not found" de diferencia en
@@ -171,7 +177,7 @@ celiuzpaper() {
     # Exec=/home/celiuz/...).
     case ":$PATH:" in
         *":$HOME/.local/bin:"*) ;;
-        *) aviso "~/.local/bin no esta en tu PATH: el icono de CeliuzPaper no abrira nada" ;;
+        *) aviso "~/.local/bin no esta en tu PATH: ni el icono de CeliuzPaper ni las apps de terminal del lanzador abriran nada" ;;
     esac
 
     hacer update-desktop-database "$DATOS/applications" 2>/dev/null
