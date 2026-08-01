@@ -73,11 +73,15 @@ FIFO_BARRA = os.path.join(RUNTIME, "waybar-autohide.fifo")
 GLIFO_MAS = chr(0xF0419)     # md-plus_circle_outline
 GLIFO_MENOS = chr(0xF0377)   # md-minus_circle_outline
 
-DIRS_APPS = [
-    os.path.expanduser("~/.local/share/applications"),
-    "/usr/share/applications",
-    "/usr/local/share/applications",
+# Directorios donde CUALQUIER instalador deja .desktop, mas alla de los que
+# marque la sesion. Van como red de seguridad, no como lista principal: los de
+# Flatpak y Snap NO existen hasta que se instala el primer paquete de cada uno,
+# y si el usuario instala su primer flatpak sin volver a iniciar sesion, la
+# sesion sigue con el $XDG_DATA_DIRS viejo, sin ellos. El caso de un usuario
+# instalando su primera app es justo el que tiene que funcionar.
+DIRS_EXTRA = [
     "/var/lib/flatpak/exports/share/applications",
+    "/var/lib/snapd/desktop/applications",
 ]
 
 CSS = b"""
@@ -241,6 +245,61 @@ def cursor_pos():
 # --- Las apps instaladas -----------------------------------------------------
 
 CAMPOS_EXEC = re.compile(r"%[fFuUdDnNickvm]")
+MARCAS_FLATPAK = re.compile(r"(?<!\S)@@u?(?!\S)")
+
+
+def dirs_apps():
+    """Los directorios de .desktop, de mas prioridad a menos.
+
+    Se calcula en cada escaneo en vez de fijarlo en una constante al arrancar:
+    una lista escrita a mano se queda corta en cuanto el usuario instala por una
+    via que no estaba prevista. Manda $XDG_DATA_DIRS, que es donde la sesion
+    declara de verdad de donde salen las apps (ahi es donde Flatpak se anade
+    solo via /etc/profile.d), y detras se anaden los DIRS_EXTRA que no estuvieran
+    ya. El orden importa porque decide quien gana al deduplicar.
+    """
+    inicio = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    # Los valores por defecto de la spec, para cuando la variable no viene puesta.
+    resto = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    candidatos = [os.path.join(inicio, "applications")]
+    candidatos += [os.path.join(d, "applications") for d in resto.split(":") if d]
+    # El Flatpak de usuario cuelga del mismo sitio que el resto de datos del
+    # usuario, asi que se saca de `inicio` y no de una ruta escrita a mano.
+    candidatos.append(os.path.join(inicio, "flatpak/exports/share/applications"))
+    candidatos += DIRS_EXTRA
+
+    dirs, vistos = [], set()
+    for carpeta in candidatos:
+        # Por ruta real: en esta maquina $XDG_DATA_DIRS trae los exports de
+        # Flatpak repetidos, y sin normalizar se escanearia dos veces cada uno.
+        try:
+            clave = os.path.realpath(carpeta)
+        except OSError:
+            continue
+        if clave in vistos or not os.path.isdir(carpeta):
+            continue
+        vistos.add(clave)
+        dirs.append(carpeta)
+    return dirs
+
+
+def firma_apps():
+    """Estado de los directorios de .desktop, para saber si hay que reescanear.
+
+    Basta con la fecha de los directorios: al instalar o desinstalar algo cambia
+    la del directorio que gana o pierde el fichero, y los que aparecen de cero
+    (el primer flatpak, el primer snap) cambian la lista de directorios en si.
+    No se guarda nada en disco a proposito: un cache en ~/.cache que hubiera que
+    borrar a mano es exactamente el fallo que se esta arreglando.
+    """
+    firma = []
+    for carpeta in dirs_apps():
+        for raiz, _, _ in os.walk(carpeta):
+            try:
+                firma.append((raiz, os.stat(raiz).st_mtime_ns))
+            except OSError:
+                continue
+    return tuple(firma)
 
 
 def apps_instaladas():
@@ -250,24 +309,36 @@ def apps_instaladas():
     tema de iconos. Es lo que se guarda en el dock, y lo que hace que la app
     aparezca ahi con su icono de verdad y no con un glifo elegido a mano.
 
-    Se queda con las que un menu de aplicaciones mostraria: Type=Application, sin
-    NoDisplay ni Hidden. Del Exec se quitan los codigos de campo (%U, %F...), que
-    son para el lanzador y no valen en una linea de comandos suelta.
+    Se deduplica por Desktop File ID y no por nombre de fichero, que es lo que
+    manda la spec XDG: el id es la ruta relativa al directorio de aplicaciones
+    con las barras cambiadas por guiones, asi que hay que recorrer tambien los
+    subdirectorios (hay paquetes que meten sus .desktop en uno). Si el mismo id
+    sale en varios directorios gana el primero, o sea el de mas prioridad: es lo
+    que permite que un .desktop en ~/.local/share/applications pise al del
+    sistema, que es para lo que existe ese directorio.
     """
-    vistos = {}
-    for carpeta in DIRS_APPS:
-        if not os.path.isdir(carpeta):
-            continue
-        for nombre in sorted(os.listdir(carpeta)):
-            if not nombre.endswith(".desktop") or nombre in vistos:
-                continue
-            datos = _leer_desktop(os.path.join(carpeta, nombre))
-            if datos:
-                vistos[nombre] = datos
-    return sorted(vistos.values(), key=lambda a: a[0].lower())
+    apps, ids = {}, set()
+    for carpeta in dirs_apps():
+        for raiz, _, ficheros in os.walk(carpeta):
+            for nombre in sorted(ficheros):
+                if not nombre.endswith(".desktop"):
+                    continue
+                ruta = os.path.join(raiz, nombre)
+                ident = os.path.relpath(ruta, carpeta)[:-8].replace(os.sep, "-")
+                # El id se marca como visto aunque el .desktop acabe descartado:
+                # un fichero con NoDisplay=true en ~/.local/share/applications es
+                # precisamente como se oculta una app del sistema, y si el de
+                # abajo pudiera colarse en su lugar no serviria de nada.
+                if ident in ids:
+                    continue
+                ids.add(ident)
+                datos = _leer_desktop(ruta, ident)
+                if datos:
+                    apps[ident] = datos
+    return sorted(apps.values(), key=lambda a: a[0].lower())
 
 
-def _leer_desktop(ruta):
+def _leer_desktop(ruta, ident):
     seccion = None
     campos = {}
     try:
@@ -288,6 +359,18 @@ def _leer_desktop(ruta):
     except OSError:
         return None
 
+    # Se descarta SOLO lo que no es una app lanzable o lo que su propio autor
+    # marco como no mostrable, y nada mas:
+    #   Type != Application  -> son Link o Directory, no hay nada que ejecutar.
+    #   NoDisplay=true       -> el .desktop existe solo para asociar tipos de
+    #                           fichero o para ser lanzado por otra app.
+    #   Hidden=true           -> equivale a borrado, la spec obliga a ignorarlo.
+    #   sin Exec              -> no habria comando que poner en el dock.
+    # A proposito NO se filtra por OnlyShowIn/NotShowIn: eso es para que GNOME y
+    # KDE se escondan mutuamente sus paneles de ajustes, y como Hyprland no es
+    # ninguno de los dos, aplicarlo tiraria la mitad del menu del sistema. Ni por
+    # Terminal=true: una app de consola es perfectamente valida en el dock, y mas
+    # abajo se le da su terminal.
     if campos.get("Type", "Application") != "Application":
         return None
     if campos.get("NoDisplay", "").lower() == "true":
@@ -302,12 +385,16 @@ def _leer_desktop(ruta):
     nombre = (campos.get("Name[es]") or campos.get("Name")
               or os.path.basename(ruta)[:-8])
     comentario = campos.get("Comment[es]") or campos.get("Comment") or ""
-    comando = CAMPOS_EXEC.sub("", ejecutar).replace('"%c"', "").strip()
+    comando = CAMPOS_EXEC.sub("", ejecutar).replace('"%c"', "")
+    # Flatpak envuelve los ficheros a abrir entre marcas `@@u ... @@` para
+    # pasarlos por el portal. Quitados los codigos de campo esas marcas se
+    # quedan sueltas en la linea y flatpak aborta con un error de sintaxis.
+    comando = MARCAS_FLATPAK.sub("", comando)
+    comando = " ".join(comando.split())
     if campos.get("Terminal", "").lower() == "true":
         # Una app de consola sin terminal no se ve: se le pone la del sistema.
         comando = f"kitty -e {comando}"
-    return (nombre, comando, comentario, os.path.basename(ruta)[:-8],
-            campos.get("Icon", "").strip())
+    return (nombre, comando, comentario, ident, campos.get("Icon", "").strip())
 
 
 def icono_existe(nombre):
@@ -331,6 +418,7 @@ class Gestor(Gtk.Window):
         self.pulsado = pulsado          # "appN" del icono con el que se abrio
         self.iconos = nf_icons.iconos()
         self.apps_cache = None          # se lee al entrar en "anadir"
+        self.apps_firma = None          # estado de los directorios al leerlo
         self.auto_cierre = True         # solo mientras se este en el menu
         self.margen_abajo = alto_dock() + SEPARACION
 
@@ -484,8 +572,13 @@ class Gestor(Gtk.Window):
         self.caja.pack_start(self.busqueda, False, False, 0)
 
         self.lista_apps = self._lista_scroll(320)
-        if self.apps_cache is None:
+        # El escaneo se repite si algun directorio de .desktop ha cambiado desde
+        # la ultima vez, para que instalar una app con el gestor abierto y volver
+        # a entrar en "anadir" la encuentre sin tener que cerrar nada.
+        firma = firma_apps()
+        if self.apps_cache is None or self.apps_firma != firma:
             self.apps_cache = apps_instaladas()
+            self.apps_firma = firma
         self._pintar_apps()
         self._pista(f"{len(self.apps_cache)} aplicaciones instaladas.")
         self.show_all()
