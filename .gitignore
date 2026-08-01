@@ -7,6 +7,24 @@ __pycache__/
 *.log
 *.tmp
 
+# LO QUE ES DE CADA MAQUINA Y NO DEL REPO.
+#
+# Estos cuatro estaban versionados y fue el fallo mas caro de todos: clonar el
+# repo en otro equipo te traia el dock del autor —sus apps, y hasta dos juegos
+# suyos lanzados por steam://rungameid— con dock-icons.css apuntando a rutas
+# absolutas de /home/celiuz que en tu maquina no existen. El resultado eran
+# iconos que no abrian nada, o que abrian el Steam de otro.
+#
+# Los crea instalar.sh en cada equipo:
+#   dock-apps.json   tus apps del dock (arranca con tu terminal y tu navegador)
+#   dock.jsonc       generado de lo anterior por hypr/scripts/gen-dock.py
+#   dock-icons.css   idem, con las rutas de los iconos de TU tema
+#   local.conf       tu terminal, para los atajos
+waybar/dock-apps.json
+waybar/dock.jsonc
+waybar/dock-icons.css
+hypr/conf/local.conf
+
 # Credenciales: NO deben estar aqui, y si alguna vez alguien copia una por error,
 # que git se niegue a subirla. Las de verdad viven fuera del repo a proposito:
 #   ~/.config/gcal-panel/credentials.json    (client_id y secret de Google)

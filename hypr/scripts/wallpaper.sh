@@ -31,6 +31,24 @@ sleep 0.5
 pkill -9 -x mpvpaper 2>/dev/null
 sleep 0.3
 
+# El demonio que pausa el video cuando hay una ventana tapandolo y lo mata
+# entero mientras juegas. Va aparte de mpvpaper a proposito: sobrevive a que
+# mpvpaper muera y lo vuelve a levantar.
+#
+# Se arranca AQUI, antes de comprobar si hay fondo elegido, y tambien en modo
+# --only-mpv si no estuviera vivo. Las dos cosas por el mismo fallo: en una
+# sesion donde todavia no se ha elegido fondo, este script salia por el `exit 0`
+# de abajo sin llegar a lanzarlo, y cuando CeliuzPaper elegia el primero llamaba
+# con --only-mpv, que tampoco lo lanzaba. Resultado: el fondo no se pausaba en
+# toda la sesion, y solo se arreglaba reiniciando.
+#
+# En modo completo se lanza siempre, porque al viejo acabamos de matarlo arriba y
+# preguntar por el seria una carrera: si tarda en morir, el pgrep lo ve todavia,
+# no se lanza a nadie, y la sesion se queda sin demonio.
+if [ "$SOLO_MPV" -eq 0 ] || ! pgrep -f 'wallpaper-paus[e].py' >/dev/null 2>&1; then
+    setsid "$HOME/dotfiles/hypr/scripts/wallpaper-pause.py" >/dev/null 2>&1 &
+fi
+
 if [ ! -e "$CURRENT" ]; then
     echo "wallpaper: no hay fondo elegido todavia." >&2
     echo "           Usa: ~/dotfiles/hypr/scripts/set-wallpaper.sh <ruta-al-video>" >&2
@@ -74,10 +92,3 @@ fi
 mpvpaper -f \
     -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 --input-ipc-server=$RUNTIME/mpvpaper.sock" \
     ALL "$CURRENT"
-
-# El demonio que pausa el video cuando hay una ventana tapandolo y lo mata
-# entero mientras juegas. Va aparte de mpvpaper a proposito: sobrevive a que
-# mpvpaper muera y lo vuelve a levantar.
-if [ "$SOLO_MPV" -eq 0 ]; then
-    setsid "$HOME/dotfiles/hypr/scripts/wallpaper-pause.py" >/dev/null 2>&1 &
-fi

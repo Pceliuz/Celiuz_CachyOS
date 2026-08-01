@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 ~/dotfiles/hypr/scripts/lib/gcal.py
 

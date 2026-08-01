@@ -69,7 +69,7 @@
         "format-icons": ["󱃂", "󰔏", "󰸁"],
         "interval": 2,
         "tooltip-format": "CPU (Tctl): {temperatureC}°C",
-        "on-click": "kitty --class monitor-tui -e btop"
+        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui btop"
     },
 
     "cpu": {
@@ -79,14 +79,14 @@
         "format": "<span size='130%'>󰻠</span> {usage}%",
         "interval": 2,
         "tooltip-format": "Uso total: {usage}%\nCarga (1/5/15 min): {load}\nFrecuencia media: {avg_frequency} GHz",
-        "on-click": "kitty --class monitor-tui -e btop"
+        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui btop"
     },
 
     "memory": {
         "format": "<span size='130%'>󰍛</span> {percentage}%",
         "interval": 2,
         "tooltip-format": "RAM: {used:0.1f}G / {total:0.1f}G",
-        "on-click": "kitty --class monitor-tui -e btop"
+        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui btop"
     },
 
 
@@ -131,7 +131,7 @@
         // Los campos bandwidth* YA traen la unidad por segundo ("252.9kB/s"), asi
         // que anadir "/s" aqui daria "kB/s/s".
         "tooltip-format": "{ifname}\nBajada: {bandwidthDownBytes}\nSubida: {bandwidthUpBytes}\nTotal: {bandwidthTotalBytes}",
-        "on-click": "kitty --class monitor-tui -e nmtui"
+        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui nmtui"
     },
 
     "network": {
@@ -143,7 +143,7 @@
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} — IP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
         "interval": 5,
         // nmtui viene con networkmanager, no hace falta instalar nada extra.
-        "on-click": "kitty --class monitor-tui -e nmtui"
+        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui nmtui"
     },
 
     // --- DERECHA: notificaciones (mako) ---

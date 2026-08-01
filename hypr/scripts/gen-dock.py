@@ -14,6 +14,8 @@ usaria un asistente para tocar el dock: escribe el JSON de datos y llama aqui.
 
 Uso:
     gen-dock.py                       regenera dock.jsonc y recarga el dock
+    gen-dock.py seed                  crea el dock de partida: tu terminal y tu
+                                      navegador, averiguados en la maquina
     gen-dock.py list                  lista las apps con su indice
     gen-dock.py icons <texto>         busca glifos en la Nerd Font
     gen-dock.py add --icon md-discord --label Discord --cmd discord
@@ -27,13 +29,19 @@ waybar/style.css: si cambias uno hay que mirar el otro.
 import argparse
 import json
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 
+import apps  # noqa: E402
 import nf_icons  # noqa: E402
 
 WAYBAR = os.path.expanduser("~/dotfiles/waybar")
+# NINGUNO DE LOS TRES SE VERSIONA, y es a proposito: son el dock de ESTA maquina.
+# Cuando si estaban en git, clonar el repo te traia las apps del autor —incluidos
+# dos juegos suyos por steam://rungameid— y un dock-icons.css con rutas absolutas
+# a /home/celiuz que en otro equipo no existen. Los crea instalar.sh.
 DATOS = os.path.join(WAYBAR, "dock-apps.json")
 SALIDA = os.path.join(WAYBAR, "dock.jsonc")
 # Hoja de estilo generada con la imagen de fondo de cada boton (el icono propio
@@ -41,16 +49,26 @@ SALIDA = os.path.join(WAYBAR, "dock.jsonc")
 SALIDA_CSS = os.path.join(WAYBAR, "dock-icons.css")
 GESTOR = "$HOME/dotfiles/hypr/scripts/dock-manager.py"
 
-# Las apps se lanzan a traves de uwsm para que cada una viva en su PROPIO scope
-# de systemd (app.slice/app-graphical.slice/app-*.scope). Sin esto caen todas en
+# Las apps NO se lanzan directamente: pasan por lanzar.sh, que las arranca con
+# `uwsm app --` y avisa con una notificacion si el comando no existe.
+#
+# Lo de uwsm es para que cada app viva en su PROPIO scope de systemd
+# (app.slice/app-graphical.slice/app-*.scope). Sin esto caen todas en
 # `session.slice/wayland-wm@hyprland.desktop.service`, el mismo cgroup que
 # Hyprland, waybar y mpvpaper — comprobado el 2026-07-27. Y eso rompe el
 # congelado selectivo al bloquear la pantalla (ver scripts/lib/congelar.py): no
 # hay forma de parar una app sin parar de paso el compositor.
 #
+# Lo del aviso es para que se entienda: uwsm ya notifica si el comando no existe,
+# pero con un "Error: Command not found" generico que no dice de que icono viene
+# ni que se puede quitar. Ver la cabecera de lanzar.sh.
+#
 # El comando que guarda dock-apps.json sigue siendo el limpio ("brave", "steam
 # steam://rungameid/..."); el prefijo se pone aqui, al generar.
-PREFIJO_LANZAMIENTO = "uwsm app --"
+PREFIJO_LANZAMIENTO = "$HOME/dotfiles/hypr/scripts/lanzar.sh"
+# El prefijo de antes. Se sigue reconociendo para no acabar con un comando
+# doblemente prefijado si dock-apps.json viene de una version anterior.
+PREFIJO_VIEJO = "uwsm app --"
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 FIFO = os.path.join(RUNTIME, "waybar-autohide.fifo")
@@ -78,8 +96,38 @@ ALTO = 88       # alto de la barra del dock
 # Mas botones que esto y hay que alargar la lista de #custom-appN de style.css.
 MAX_BOTONES = 20
 
+# La cabecera que lleva dock-apps.json. Vive aqui y no en el fichero porque el
+# fichero ya no se versiona: lo escribe `gen-dock.py seed` en cada instalacion.
+CABECERA_DATOS = [
+    "LAS APPS DEL DOCK — de ESTA maquina. Este fichero NO esta en git: lo crea",
+    "instalar.sh con tu terminal y tu navegador, y a partir de ahi es tuyo.",
+    "waybar/dock.jsonc y waybar/dock-icons.css se generan de aqui con",
+    "hypr/scripts/gen-dock.py y tampoco hay que tocarlos.",
+    "",
+    "Lo normal es no editar esto a mano: clic derecho en cualquier icono del",
+    "dock abre el gestor, que anade y quita apps por ti. Desde la terminal:",
+    "  gen-dock.py list",
+    "  gen-dock.py add --icon md-discord --label Discord --cmd discord",
+    "  gen-dock.py remove 3",
+    "  gen-dock.py seed --forzar     vuelve al dock de partida (terminal + navegador)",
+    "",
+    "Campos de cada app:",
+    "  icon      - codigo del glifo en la Nerd Font, en hexadecimal. Se guarda como",
+    "              texto y no como el caracter en si a proposito: los glifos de la",
+    "              zona de uso privado se corrompen al pasar por editores y",
+    "              herramientas de texto. Para buscar uno: gen-dock.py icons <algo>",
+    "  icon_name - icono propio de la app (su campo Icon=). Manda sobre el glifo.",
+    "  label     - lo que sale en el tooltip al posar el puntero.",
+    "  cmd       - lo que se ejecuta al hacer clic izquierdo.",
+]
+
 
 def cargar():
+    # Si no hay fichero de datos es que nadie ha pasado instalar.sh todavia: se
+    # siembra al vuelo en vez de reventar. Importa porque a esto se llega tambien
+    # desde el clic derecho del dock, y ahi un rastreo de Python no se ve.
+    if not os.path.exists(DATOS):
+        sembrar()
     with open(DATOS) as fh:
         datos = json.load(fh)
     datos.setdefault("apps", [])
@@ -140,15 +188,24 @@ def escapar(texto):
 
 
 def lanzar(cmd):
-    """Antepone el prefijo de uwsm al comando de una app (ver PREFIJO_LANZAMIENTO).
+    """Antepone el lanzador al comando de una app (ver PREFIJO_LANZAMIENTO).
 
     Si el comando ya lo lleva, se deja como esta: asi regenerar el dock dos veces
-    no acaba con `uwsm app -- uwsm app -- brave`.
+    no acaba con `lanzar.sh lanzar.sh brave`.
     """
     cmd = str(cmd).strip()
-    if not cmd or cmd.startswith(PREFIJO_LANZAMIENTO):
+    if not cmd or cmd.startswith(PREFIJO_LANZAMIENTO) or cmd.startswith(PREFIJO_VIEJO):
         return cmd
     return f"{PREFIJO_LANZAMIENTO} {cmd}"
+
+
+def instalada(cmd):
+    """Si el comando de una app se puede ejecutar de verdad en esta maquina."""
+    cmd = str(cmd).strip()
+    if not cmd:
+        return False
+    primero = cmd.split()[0]
+    return bool(shutil.which(primero)) or os.access(primero, os.X_OK)
 
 
 def generar(datos=None):
@@ -236,6 +293,15 @@ def generar(datos=None):
         fh.write("\n".join(lineas))
 
     generar_css(ids, apps, rutas)
+
+    # Un comando que no existe no da error al pulsarlo: lanzar.sh avisa por
+    # notificacion, pero mas vale decirlo tambien AQUI, que es cuando todavia se
+    # puede arreglar. Es el fallo que dejaba "iconos que no abren nada".
+    faltan = [a.get("label") or a.get("cmd") for a in apps if not instalada(a.get("cmd"))]
+    for nombre in faltan:
+        print(f"aviso: «{nombre}» no esta instalado en esta maquina; su icono no "
+              f"abrira nada (quitalo con el clic derecho en el dock)", file=sys.stderr)
+
     return len(apps), ancho
 
 
@@ -275,6 +341,38 @@ def generar_css(ids, apps, rutas):
     return con_icono
 
 
+def semilla():
+    """El dock de partida de una instalacion nueva: terminal y navegador.
+
+    Solo esas dos, y averiguadas en la maquina (ver lib/apps.py). El repo no
+    puede traer apps concretas: es publico, y las del autor son iconos muertos en
+    cualquier otro equipo. Dos que funcionen valen mas que ocho que no; el resto
+    las pone cada uno con el clic derecho.
+    """
+    entradas = []
+    term = apps.terminal()
+    if term:
+        # El .desktop de la mayoria de terminales se llama a si mismo en
+        # minusculas y a secas ("kitty"), que en un tooltip no dice gran cosa.
+        term["label"] = f"Terminal — {term['label']}"
+        entradas.append(term)
+    nav = apps.navegador()
+    if nav:
+        entradas.append(nav)
+    return entradas
+
+
+def sembrar(forzar=False):
+    """Escribe dock-apps.json de cero. Devuelve las apps que dejo puestas."""
+    if os.path.exists(DATOS) and not forzar:
+        raise SystemExit(f"gen-dock seed: {DATOS} ya existe. "
+                         f"Usa --forzar si de verdad quieres reemplazarlo.")
+    entradas = semilla()
+    datos = {"//": CABECERA_DATOS, "apps": entradas}
+    guardar(datos)
+    return entradas
+
+
 def recargar():
     """Le pide al demonio que reinicie el dock para que lea el nuevo config."""
     try:
@@ -310,13 +408,29 @@ def resolver_icono(valor):
 def main():
     ap = argparse.ArgumentParser(add_help=True, description="Genera el dock de waybar")
     ap.add_argument("accion", nargs="?", default="gen",
-                    choices=["gen", "list", "add", "remove", "icons"])
+                    choices=["gen", "list", "add", "remove", "icons", "seed"])
     ap.add_argument("resto", nargs="*")
+    ap.add_argument("--forzar", action="store_true",
+                    help="seed: reemplaza dock-apps.json aunque ya exista")
     ap.add_argument("--icon", help="glifo de la Nerd Font (nombre o hex), de respaldo")
     ap.add_argument("--icon-name", help="icono propio de la app (campo Icon= de su .desktop)")
     ap.add_argument("--label"), ap.add_argument("--cmd")
     ap.add_argument("--no-reload", action="store_true")
     args = ap.parse_args()
+
+    if args.accion == "seed":
+        puestas = sembrar(forzar=args.forzar)
+        if not puestas:
+            print("gen-dock seed: no encuentro ni terminal ni navegador en esta "
+                  "maquina; el dock queda vacio (anade apps con el clic derecho)",
+                  file=sys.stderr)
+        for entrada in puestas:
+            print(f"puesta: {entrada['label']:28} {entrada['cmd']}")
+        n, ancho = generar()
+        print(f"dock.jsonc generado: {n} apps, {ancho} px de ancho, {ALTO} de alto")
+        if not args.no_reload:
+            recargar()
+        return
 
     if args.accion == "list":
         for i, app in enumerate(cargar()["apps"], 1):
@@ -327,8 +441,9 @@ def main():
                 icono = f"glifo U+{app['icon'].upper()}"
             else:
                 icono = "glifo generico (no encuentro su icono)"
+            falta = "" if instalada(app.get("cmd")) else "  [NO INSTALADA]"
             print(f"{i:2}. {glifo(app)}  {app.get('label', ''):32} "
-                  f"{app.get('cmd', ''):34} {icono}")
+                  f"{app.get('cmd', ''):34} {icono}{falta}")
         return
 
     if args.accion == "icons":

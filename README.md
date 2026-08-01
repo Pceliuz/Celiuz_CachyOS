@@ -64,7 +64,7 @@ Todo está en los repos oficiales de CachyOS/Arch. No hace falta nada del AUR.
 
 ```sh
 sudo pacman -S hyprland waybar fuzzel kitty hyprlock hypridle mpvpaper mako \
-               grim slurp wl-clipboard uwsm \
+               grim slurp wl-clipboard uwsm libnotify \
                python-gobject gtk-layer-shell ffmpeg librsvg \
                ttf-meslo-nerd noto-fonts-cjk \
                mission-center nvtop btop \
@@ -87,20 +87,37 @@ Notas:
 Se enlaza, no se copia, para que editar el repo sea editar la config:
 
 ```sh
-git clone git@github.com:Pceliuz/Celiuz_CachyOS.git ~/dotfiles
-
-ln -sfn ~/dotfiles/hypr     ~/.config/hypr
-ln -sfn ~/dotfiles/waybar   ~/.config/waybar
-ln -sfn ~/dotfiles/fuzzel   ~/.config/fuzzel
-ln -sfn ~/dotfiles/mako     ~/.config/mako
-ln -sfn ~/dotfiles/mpvpaper ~/.config/mpvpaper
-
-mkdir -p ~/.local/bin ~/.local/share/applications \
-         ~/.local/share/icons/hicolor/scalable/apps
-ln -sfn ~/dotfiles/celiuzpaper/celiuzpaper.py      ~/.local/bin/celiuzpaper
-ln -sfn ~/dotfiles/celiuzpaper/celiuzpaper.desktop ~/.local/share/applications/
-ln -sfn ~/dotfiles/celiuzpaper/celiuzpaper.svg     ~/.local/share/icons/hicolor/scalable/apps/
+git clone https://github.com/Pceliuz/Celiuz_CachyOS.git ~/dotfiles
+cd ~/dotfiles
+./instalar.sh
 ```
+
+La ruta `~/dotfiles` no es opcional: los `.conf` escriben
+`$HOME/dotfiles/...` literalmente.
+
+`instalar.sh` se puede repetir cuantas veces haga falta y no pisa lo que ya
+esté hecho. Antes de nada, `./instalar.sh --revisar` cuenta lo que haría sin
+tocar nada. Lo que hace:
+
+- Avisa de los paquetes que falten (no instala nada por su cuenta).
+- Enlaza `hypr`, `waybar`, `fuzzel`, `mako` y `mpvpaper` a `~/.config`,
+  **apartando antes** lo que hubiera. Esto último importa: `ln -sfn` sobre una
+  carpeta que ya existe crea el enlace *dentro* de ella y la config no se
+  despliega, sin dar ningún error. En CachyOS `~/.config/hypr` ya existe.
+- Avisa si aparece un `hyprland.lua`: Hyprland 0.56 lo prefiere antes que
+  `hyprland.conf`, así que si CachyOS repone el suyo, esta config queda ignorada
+  en silencio.
+- Instala CeliuzPaper (binario, `.desktop` e icono) y refresca las cachés.
+- **Crea el dock de esta máquina** con tu terminal y tu navegador
+  predeterminado, averiguados en el sistema. Solo esos dos: el resto los pones
+  tú con el clic derecho sobre cualquier icono del dock. El repo no trae apps de
+  nadie a propósito — las del autor serían iconos muertos en tu equipo.
+- Escribe `hypr/conf/local.conf` con tu terminal, que es la que abre
+  `SUPER + RETURN`.
+
+Cuando termine, **cierra la sesión y vuelve a entrar**: los `exec-once` de
+Hyprland solo corren al arrancar la sesión, así que recargar con
+`SUPER + SHIFT + R` no basta la primera vez.
 
 Después, dos cosas que el repo **no** trae y hay que poner a mano:
 
@@ -120,7 +137,7 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 
 | Tecla | Qué hace |
 |---|---|
-| `SUPER + RETURN` | Terminal (kitty) |
+| `SUPER + RETURN` | Terminal (la que detecte `instalar.sh`) |
 | `SUPER + Q` | Cerrar ventana |
 | `SUPER + V` | Flotante / anclada |
 | `SUPER + B` | Lanzador de aplicaciones |

@@ -13,6 +13,10 @@ ve. Hace dos cosas distintas:
      ~/.config/mpvpaper/stoplist (tus juegos), y lo vuelve a levantar al
      cerrarlos. Ahi si se libera todo: los ~430 MB de RAM y la VRAM.
 
+  3. LO RESUCITA si se muere por su cuenta, hasta MAX_REVIVIR veces seguidas.
+     Sin esto, un mpvpaper que se cae deja el escritorio sin fondo hasta que
+     reinicies la sesion, y sin decir nada.
+
 POR QUE HAY QUE HACERLO A MANO
 ------------------------------
 mpvpaper trae -p (auto-pause) y -s (auto-stop) justo para el punto 1, pero
@@ -29,7 +33,9 @@ COMO
 ----
 Se suscribe al socket de eventos de Hyprland (.socket2.sock) en vez de sondear:
 reacciona al instante y no cuesta nada. Cada 5 s como mucho, ademas, revisa la
-stoplist leyendo /proc (sin lanzar pidof, para no crear procesos a cada rato).
+stoplist leyendo /proc (sin lanzar pidof, para no crear procesos a cada rato) y
+reconcilia la pausa contra lo que mpv tiene de verdad, porque mpvpaper se
+reinicia por fuera de aqui (CeliuzPaper, set-wallpaper.sh) y vuelve sin pausa.
 
 Ordenes por el FIFO ($XDG_RUNTIME_DIR/wallpaper-pause.fifo): `hold` para que deje
 de tocar la pausa y `release` para que vuelva a mandar. Las usa CeliuzPaper: al
@@ -55,6 +61,12 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
 STOPLIST = os.path.expanduser("~/.config/mpvpaper/stoplist")
 LANZADOR = os.path.expanduser("~/dotfiles/hypr/scripts/wallpaper.sh")
+# El enlace al video que esta puesto. Si no existe es que aun no se ha elegido
+# ninguno, y entonces no hay nada que revivir.
+CURRENT = os.path.expanduser("~/dotfiles/hypr/wallpapers/current")
+# Cuantas veces seguidas se intenta resucitar mpvpaper antes de rendirse y
+# decirlo. Ver el bloque 1b del bucle.
+MAX_REVIVIR = 3
 
 # Ordenes de fuera, por FIFO:
 #   hold     -> deja de tocar la pausa (lo pide CeliuzPaper mientras eliges
@@ -131,6 +143,20 @@ def mpv(orden):
         return None
 
 
+def pausa_real():
+    """Lo que mpv tiene puesto DE VERDAD, o None si no se le pudo preguntar."""
+    respuesta = mpv({"command": ["get_property", "pause"]})
+    if not respuesta:
+        return None
+    try:
+        datos = json.loads(respuesta.decode(errors="replace").splitlines()[0])
+    except (ValueError, IndexError):
+        return None
+    if datos.get("error") != "success":
+        return None
+    return bool(datos.get("data"))
+
+
 def procesos_en_marcha():
     """Nombres de todos los procesos vivos, leyendo /proc directamente."""
     nombres = set()
@@ -166,6 +192,14 @@ def matar_mpvpaper():
     subprocess.run(["pkill", "-9", "-x", "mpvpaper"], stdout=subprocess.DEVNULL)
 
 
+def avisar(titulo, cuerpo):
+    """Una notificacion. Es la unica salida visible que tiene este demonio: corre
+    suelto con setsid y su stdout va a /dev/null."""
+    subprocess.run(["notify-send", "-a", "Fondo de pantalla", "-u", "normal",
+                    "-i", "dialog-warning", titulo, cuerpo],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def levantar_mpvpaper():
     # --only-mpv para que el lanzador no nos mate a nosotros de rebote.
     subprocess.run([LANZADOR, "--only-mpv"],
@@ -199,6 +233,7 @@ def main():
     pausado = None       # lo ultimo que le dijimos a mpv
     parado_por_juego = False
     retenido = False     # alguien pidio `hold`: no se toca la pausa
+    revividos = 0        # intentos seguidos de resucitar mpvpaper (ver 1b)
 
     while True:
         try:
@@ -230,7 +265,12 @@ def main():
                             pausado = None   # obliga a recalcular abajo
 
                 # --- 1. La stoplist: juegos ---
-                hay_juego = bool(leer_stoplist() & procesos_en_marcha())
+                vivos = procesos_en_marcha()
+                hay_juego = bool(leer_stoplist() & vivos)
+                # Se saca de la lista que ya tenemos en la mano en vez de lanzar
+                # un pgrep: este bucle da una vuelta cada 5 s y el fichero evita
+                # crear procesos a proposito (ver la cabecera).
+                hay_fondo = "mpvpaper" in vivos
                 if hay_juego and not parado_por_juego:
                     matar_mpvpaper()
                     parado_por_juego = True
@@ -239,7 +279,31 @@ def main():
                     levantar_mpvpaper()
                     parado_por_juego = False
                     pausado = None
+                    revividos = 0
                     time.sleep(1.5)   # deja que mpv abra su socket
+
+                # --- 1b. Se murio solo ---
+                # Hasta ahora mpvpaper solo se relanzaba tras matarlo la
+                # stoplist: si se caia por cualquier otro motivo, el escritorio
+                # se quedaba sin fondo hasta el siguiente reinicio de sesion, sin
+                # avisar. Pasa de verdad — se cayo durante las pruebas del
+                # 2026-08-01 sin dejar rastro en el journal.
+                #
+                # Se reintenta un numero limitado de veces: si el video esta
+                # corrompido o el archivo ya no existe, mpvpaper muere nada mas
+                # nacer y sin tope esto seria un bucle de arranques cada 5 s.
+                elif (not hay_fondo and os.path.exists(CURRENT)
+                      and revividos < MAX_REVIVIR):
+                    revividos += 1
+                    levantar_mpvpaper()
+                    pausado = None
+                    time.sleep(1.5)
+                    if not mpvpaper_vivo() and revividos >= MAX_REVIVIR:
+                        avisar("El fondo de pantalla no arranca",
+                               "mpvpaper se cierra solo al abrirlo. Prueba a "
+                               "elegir otro video con CeliuzPaper.")
+                elif hay_fondo:
+                    revividos = 0     # volvio a estar bien: cuenta a cero
 
                 # --- 2. Los eventos de Hyprland: pausa por ventanas encima ---
                 recontar = False
@@ -253,10 +317,6 @@ def main():
                         if linea.decode(errors="replace").startswith(EVENTOS):
                             recontar = True
 
-                # Tambien se recuenta en el primer paso tras (re)conectar o tras
-                # levantar mpvpaper, que es cuando `pausado` vale None.
-                if not recontar and pausado is not None:
-                    continue
                 if parado_por_juego:
                     continue
                 if retenido:
@@ -265,13 +325,27 @@ def main():
                     pausado = None
                     continue
 
+                # Sin evento de Hyprland, el latido (cada PERIODO) sirve para
+                # RECONCILIAR: se mira lo que mpv tiene de verdad en vez de
+                # fiarse de `pausado`. Hace falta porque mpvpaper se reinicia
+                # por fuera de aqui —CeliuzPaper al aplicar un fondo,
+                # set-wallpaper.sh— y vuelve siempre sin pausa; con la copia
+                # local diciendo que ya estaba pausado, el video se quedaba
+                # corriendo hasta el siguiente evento de ventanas, o para
+                # siempre si no lo habia. Cuesta una consulta al socket.
+                if not recontar:
+                    pausado = pausa_real()
+
                 n = ventanas_activas()
                 if n is None:
                     continue
                 quiere_pausa = n > 0
                 if quiere_pausa != pausado:
-                    mpv({"command": ["set_property", "pause", quiere_pausa]})
-                    pausado = quiere_pausa
+                    # Solo se apunta si la orden LLEGO. Si mpvpaper todavia no
+                    # ha abierto su socket, apuntarla dejaria a `pausado`
+                    # mintiendo y el fondo no se pausaria nunca.
+                    if mpv({"command": ["set_property", "pause", quiere_pausa]}) is not None:
+                        pausado = quiere_pausa
         except OSError:
             pass
         finally:
