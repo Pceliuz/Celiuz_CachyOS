@@ -88,6 +88,8 @@ FONDO="$CACHE/lock-bg.jpg"
 FONDO_TMP="$CACHE/lock-bg.tmp.jpg"
 # Fragmento que hyprlock.conf carga con `source`. Ver el comentario de alli.
 FRAGMENTO="$CACHE/lock-fondo.conf"
+# El otro fragmento generado: las medidas de ESTA pantalla. Ver escribir_medidas.
+MEDIDAS="$CACHE/lock-medidas.conf"
 LOG="$CACHE/lock.log"
 SCRIPTS="$HOME/dotfiles/hypr/scripts"
 
@@ -168,13 +170,38 @@ capturar_fondo() {
     pos=$(mpv_propiedad time-pos) || return 1
     video=$(realpath -e "$video" 2>/dev/null) || return 1
 
-    ancho=$(hyprctl monitors -j 2>/dev/null \
-        | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["width"])' 2>/dev/null)
+    # El ancho lo dice lib/pantalla.py, que ademas sabe de escala y de rotacion.
+    # Antes se leia aqui el primer monitor a pelo, con un 1920 de reserva: en una
+    # pantalla mas pequena el fotograma salia mas grande que la salida.
+    ancho=$("$SCRIPTS/lib/pantalla.py" ancho 2>/dev/null)
     [[ "$ancho" =~ ^[0-9]+$ ]] || ancho=1920
 
     ffmpeg -nostdin -loglevel error -ss "$pos" -i "$video" \
            -frames:v 1 -vf "scale=${ancho}:-2" -q:v 3 -y "$FONDO_TMP" \
         && mv -f "$FONDO_TMP" "$FONDO"
+}
+
+escribir_medidas() {
+    # Las medidas de la pantalla que hay AHORA MISMO delante, para que la tarjeta
+    # y las fuentes salgan proporcionadas en cualquier equipo.
+    #
+    # Se reescribe en cada bloqueo y no se genera al instalar a proposito: asi
+    # cambiar de monitor, conectar un proyector o clonar el repo en otra maquina
+    # no deja medidas viejas puestas.
+    #
+    # Si esto fallara, NO se toca el fichero: hyprlock.conf trae sus propios
+    # valores por defecto y este fragmento solo los pisa. Un bloqueo con la
+    # tarjeta de otro tamano es un defecto; un bloqueo que no dibuja es quedarse
+    # fuera de la sesion.
+    mkdir -p "$CACHE"
+    if "$SCRIPTS/lib/pantalla.py" --hyprlock > "$MEDIDAS.tmp" 2>/dev/null \
+       && [ -s "$MEDIDAS.tmp" ]; then
+        mv -f "$MEDIDAS.tmp" "$MEDIDAS"
+        echo "lock: medidas de $("$SCRIPTS/lib/pantalla.py" nombre 2>/dev/null) escritas"
+    else
+        rm -f "$MEDIDAS.tmp"
+        echo "lock: no se pudieron medir la pantalla; se usan los valores por defecto" >&2
+    fi
 }
 
 escribir_fragmento() {
@@ -271,6 +298,10 @@ trap limpiar EXIT INT TERM HUP
 
 # --- 4. Manos a la obra -------------------------------------------------------
 mkdir -p "$CACHE"
+
+# Lo primero de todo: medir la pantalla. Va antes de capturar el fondo porque el
+# fotograma se reescala al ancho que salga de aqui.
+escribir_medidas
 
 # El fotograma se captura SIEMPRE, tambien en modo xray: si el xray fallara y
 # hubiera que caer al modo de reserva, la imagen ya esta lista.
