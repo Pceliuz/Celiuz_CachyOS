@@ -94,6 +94,17 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   parte oscurecida y la clara. En el sobremesa no se notaba porque allí el
   número coincidía con la resolución. Lo que va a pantalla completa se pone en
   **porcentaje** (`size = 100%, 100%`), que hyprlock mide contra la salida.
+- **Un toggle perdido invierte las barras para siempre.** waybar solo ofrece
+  SIGUSR1 (alternar), así que un estado *recordado* que se desvíe una vez deja
+  las barras al revés: puestas con apps abiertas y escondidas con el escritorio
+  vacío. Pasaba al desbloquear la pantalla: `recomponer()` manda `unlock` —que
+  relanza waybar— y vuelve al escritorio con ventanas **en el mismo instante**,
+  así que la señal de ocultar salía cuando waybar aún no tenía superficie y se
+  perdía. En el sobremesa waybar arrancaba a tiempo y por eso allí no se veía;
+  en la laptop se reprodujo 3 de 3. Por eso `update()` lee la capa REAL con
+  `j/layers` (`top` = puesta, `bottom` = escondida) en vez de recordarla: si una
+  señal se pierde, el ciclo siguiente lo corrige solo. **No vuelvas a un estado
+  recordado**, por barato que parezca.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
 - **`uwsm app -- inexistente` sale con 1 y notifica**, no falla en silencio. Si lo

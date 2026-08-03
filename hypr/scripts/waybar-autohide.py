@@ -164,6 +164,33 @@ def read_state():
     return windows, cursor_x, cursor_y
 
 
+# Niveles de capa de Hyprland: 0 background, 1 bottom, 2 top, 3 overlay. Las
+# cuatro instancias de waybar nacen en `top`; al ocultarse bajan a `bottom`.
+LAYER_TOP = 2
+
+
+def layer_levels():
+    """{namespace: nivel} de las capas vivas. Una ida y vuelta de 0,05 ms.
+
+    Es la UNICA fuente fiable de si una barra esta puesta o no. Waybar solo
+    ofrece un toggle (SIGUSR1), y una senal que se pierde no deja ningun rastro
+    del lado del demonio: sin mirar aqui, el estado recordado se queda mintiendo
+    para siempre.
+    """
+    try:
+        data = json.loads(query("j/layers"))
+    except ValueError:
+        return {}
+    niveles = {}
+    for monitor in data.values():
+        for nivel, superficies in monitor.get("levels", {}).items():
+            for capa in superficies:
+                ns = capa.get("namespace")
+                if ns:
+                    niveles[ns] = int(nivel)
+    return niveles
+
+
 def in_top_zone(x, y):
     """La barra de arriba ocupa todo el ancho: solo importa la altura."""
     return y < HOVER_ZONE
@@ -218,20 +245,20 @@ def launch(config):
 class Bar:
     """Una barra y su linea-tirador: siempre visibles la una o la otra."""
 
-    def __init__(self, config, trigger_config, in_zone):
+    def __init__(self, config, trigger_config, in_zone, namespace, trigger_namespace):
         self.in_zone = in_zone
         self.config = config
         self.trigger_config = trigger_config
+        # Como se llaman las dos capas en Hyprland (el "name" de cada jsonc). Es
+        # por donde update() consulta el estado REAL en vez de recordarlo.
+        self.namespace = namespace
+        self.trigger_namespace = trigger_namespace
         self.proc = launch(config)
         self.trigger = launch(trigger_config)
         self.manual = False   # el usuario la saco con click en la linea
         self.held = False     # algo la esta reteniendo (el panel de calendario)
         self.locked = False   # la pantalla esta bloqueada: oculta pase lo que pase
         self.left_at = 0.0    # momento en que el puntero salio de la barra
-        # Estado conocido al arrancar: la barra visible (start_hidden = false) y
-        # su tirador oculto (start_hidden = true). Alternar solo cuando haga
-        # falta exige partir del estado real, no de None.
-        self.applied = True
 
     def toggle(self):
         """SIGUSR1 = toggle (el valor por defecto de waybar).
@@ -308,9 +335,9 @@ class Bar:
                 pass
         self.proc = launch(self.config)
         self.trigger = launch(self.trigger_config)
-        # Estado recien nacido: barra visible, tirador oculto. Y se le da margen
-        # de cortesia para que se vea el cambio antes de que se esconda sola.
-        self.applied = True
+        # Margen de cortesia para que se vea el cambio antes de que se esconda
+        # sola. No hace falta anotar "queda visible": update() lo lee de la capa
+        # real, y mientras la superficie no exista no le manda ninguna senal.
         self.manual = True
         self.left_at = time.monotonic()
         # `held` se conserva a proposito: quien recarga el dock es el gestor de
@@ -321,7 +348,21 @@ class Bar:
         # geometria recordada para no calcular la zona con la vieja.
         _dock_geo["t"] = -GEO_REFRESH
 
-    def update(self, windows, x, y):
+    def visible_real(self, capas):
+        """True/False segun la capa REAL de la barra. None si aun no existe.
+
+        Waybar no desmapea al ocultarse: baja su superficie de la capa `top` a la
+        `bottom`, asi que el nivel dice exactamente en que estado esta. Se exigen
+        las DOS superficies porque el toggle las mueve juntas: si una todavia no
+        nacio, la senal la recibiria solo la otra y quedarian descuadradas.
+        """
+        nivel = capas.get(self.namespace)
+        nivel_tirador = capas.get(self.trigger_namespace)
+        if nivel is None or nivel_tirador is None:
+            return None
+        return nivel >= LAYER_TOP
+
+    def update(self, windows, x, y, capas):
         if self.locked:
             # Durante el bloqueo las barras estan MUERTAS (ver command("lock")),
             # asi que aqui no hay nada que alternar: mandarles una senal seria
@@ -342,9 +383,23 @@ class Bar:
         else:
             want_visible = False
 
-        if want_visible != self.applied:
+        # Se compara contra la capa REAL, nunca contra lo que creamos haber
+        # dejado. Waybar solo ofrece un toggle, asi que un estado recordado que
+        # se desvie UNA sola vez deja las barras invertidas para siempre: puestas
+        # con apps abiertas y escondidas con el escritorio vacio.
+        #
+        # Y se desviaba de verdad al desbloquear la pantalla (2026-08-01,
+        # reproducido 3 de 3 en la laptop): `unlock` relanza waybar y lock.sh
+        # vuelve al escritorio con ventanas en ese mismo instante, asi que el
+        # toggle de ocultar salia cuando waybar aun no tenia superficie y se
+        # perdia. En el sobremesa waybar arrancaba a tiempo y por eso alli no se
+        # veia. Mirando la capa, una senal perdida se corrige sola al ciclo
+        # siguiente en vez de invertirlo todo.
+        visible = self.visible_real(capas)
+        if visible is None:
+            return                      # sin superficie: la senal se perderia
+        if want_visible != visible:
             self.toggle()
-            self.applied = want_visible
 
     def alive(self):
         # Con la pantalla bloqueada las matamos nosotros a proposito, asi que
@@ -441,8 +496,10 @@ def main():
     fifo = abrir_fifo()
 
     bars = {
-        "main": Bar("config.jsonc", "trigger.jsonc", in_top_zone),
-        "dock": Bar("dock.jsonc", "dock-trigger.jsonc", in_dock_zone),
+        "main": Bar("config.jsonc", "trigger.jsonc", in_top_zone,
+                    "waybar-main", "waybar-trigger"),
+        "dock": Bar("dock.jsonc", "dock-trigger.jsonc", in_dock_zone,
+                    "waybar-dock", "waybar-dock-trigger"),
     }
 
     def cleanup(*_):
@@ -494,8 +551,9 @@ def main():
                     bar.command(cmd)
 
         windows, cursor_x, cursor_y = read_state()
+        capas = layer_levels()
         for bar in bars.values():
-            bar.update(windows, cursor_x, cursor_y)
+            bar.update(windows, cursor_x, cursor_y, capas)
 
         # Si alguna barra muere (crash, kill manual), no seguimos a ciegas.
         if not all(bar.alive() for bar in bars.values()):
