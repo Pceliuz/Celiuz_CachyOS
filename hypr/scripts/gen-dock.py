@@ -37,7 +37,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 import apps  # noqa: E402
 import nf_icons  # noqa: E402
 
-WAYBAR = os.path.expanduser("~/dotfiles/waybar")
+# La raiz del repo, sacada de DONDE ESTA ESTE FICHERO (hypr/scripts/gen-dock.py
+# -> dos carpetas arriba). Antes ponia "~/dotfiles/waybar" y eso obligaba a
+# clonar el repo justo ahi: en ~/.dotfiles o ~/repos/dotfiles generaba en una
+# ruta que no era la suya, o directamente en el repo de otro. Lo destapo una
+# prueba, que con un HOME de mentira acabo escribiendo en el repo de verdad.
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+WAYBAR = os.path.join(RAIZ, "waybar")
 # NINGUNO DE LOS TRES SE VERSIONA, y es a proposito: son el dock de ESTA maquina.
 # Cuando si estaban en git, clonar el repo te traia las apps del autor —incluidos
 # dos juegos suyos por steam://rungameid— y un dock-icons.css con rutas absolutas
@@ -47,7 +53,9 @@ SALIDA = os.path.join(WAYBAR, "dock.jsonc")
 # Hoja de estilo generada con la imagen de fondo de cada boton (el icono propio
 # de la app). style.css la carga con @import y no hay que tocarla a mano.
 SALIDA_CSS = os.path.join(WAYBAR, "dock-icons.css")
-GESTOR = "$HOME/dotfiles/hypr/scripts/dock-manager.py"
+# Rutas absolutas de ESTE repo. Van absolutas a proposito: dock.jsonc es
+# generado y no se versiona, asi que puede contener rutas de la maquina.
+GESTOR = os.path.join(RAIZ, "hypr/scripts/dock-manager.py")
 
 # Las apps NO se lanzan directamente: pasan por lanzar.sh, que las arranca con
 # `uwsm app --` y avisa con una notificacion si el comando no existe.
@@ -65,7 +73,7 @@ GESTOR = "$HOME/dotfiles/hypr/scripts/dock-manager.py"
 #
 # El comando que guarda dock-apps.json sigue siendo el limpio ("brave", "steam
 # steam://rungameid/..."); el prefijo se pone aqui, al generar.
-PREFIJO_LANZAMIENTO = "$HOME/dotfiles/hypr/scripts/lanzar.sh"
+PREFIJO_LANZAMIENTO = os.path.join(RAIZ, "hypr/scripts/lanzar.sh")
 # El prefijo de antes. Se sigue reconociendo para no acabar con un comando
 # doblemente prefijado si dock-apps.json viene de una version anterior.
 PREFIJO_VIEJO = "uwsm app --"

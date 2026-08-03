@@ -91,7 +91,11 @@ FRAGMENTO="$CACHE/lock-fondo.conf"
 # El otro fragmento generado: las medidas de ESTA pantalla. Ver escribir_medidas.
 MEDIDAS="$CACHE/lock-medidas.conf"
 LOG="$CACHE/lock.log"
-SCRIPTS="$HOME/dotfiles/hypr/scripts"
+# Donde estan los demas scripts. Se saca de DONDE ESTA ESTE FICHERO y no de
+# "$HOME/dotfiles/...", que era lo de antes: asi el repo funciona igual clonado
+# en ~/.dotfiles, en ~/repos/dotfiles o donde sea. Ademas es lo que permite
+# probarlo con un HOME de mentira (ver tests/e2e/bloqueo.sh).
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- 0. Despegarse de quien nos llamo ----------------------------------------
 # `setsid -f` nos pone en una sesion nueva y devuelve el control al instante
