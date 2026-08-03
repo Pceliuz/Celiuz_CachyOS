@@ -43,7 +43,13 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   (`lib/gcal.py`).
 - **`celiuzpaper`** — cambia el fondo de pantalla en vídeo. Al moverte por la tira
   el fondo cambia **de verdad** a pantalla completa; Enter lo fija, Escape
-  restaura. También sirve por CLI (`--list`, `--set`, `--random`, `--current`).
+  restaura. Los fondos vienen de varios sitios y cada uno es un **módulo** en la
+  fila de arriba: el Workshop de Wallpaper Engine, tu carpeta de vídeos y las
+  carpetas que añadas tú. `TAB` cambia de módulo. También sirve por CLI
+  (`--list`, `--set`, `--random`, `--current`, `--carpetas`).
+- **`lib/pantalla.py`** — dice qué pantalla hay delante y **de ahí salen las
+  medidas** del bloqueo y del selector de fondos, en vez de estar escritas para
+  el monitor del autor. Ver su sección abajo.
 - **`lock.sh` + `hyprlock.conf`** — la pantalla de bloqueo. Ver su sección abajo,
   porque hace bastante más que lanzar `hyprlock`.
 - **`gen-colores.py`** — pasa la paleta de `colores.conf` al CSS de waybar y a la
@@ -667,6 +673,51 @@ navegador), y eso es justo lo que se quiere.
 
 ---
 
+## La pantalla, y por qué nada va escrito en píxeles
+
+`hypr/scripts/lib/pantalla.py` responde a una sola pregunta —**qué pantalla hay
+delante**— y de su respuesta salen las medidas del bloqueo y del selector de
+fondos.
+
+Existe por un fallo real. El velo que oscurece la pantalla de bloqueo tenía el
+tamaño escrito a mano, `1920, 1080`. En la laptop (1366x768) hyprlock **no lo
+recortó: lo reescaló**, y quedó un rectángulo oscuro de 1089x612 pegado a la
+esquina de arriba a la izquierda, con un escalón bien visible entre la zona
+oscurecida y la clara. En el sobremesa no se notaba porque allí el número
+coincidía con la resolución.
+
+```sh
+hypr/scripts/lib/pantalla.py            # qué hay y qué medidas salen
+hypr/scripts/lib/pantalla.py --json     # todo, para otro script
+hypr/scripts/lib/pantalla.py ancho      # un dato suelto
+```
+
+Tres cosas que conviene saber:
+
+- **Se mide en caliente, no se genera al instalar.** Un fichero escrito en la
+  instalación se queda viejo en cuanto cambias de monitor o conectas un
+  proyector. Preguntándolo al arrancar, clonar el repo y usarlo es lo mismo.
+- **Los datos salen de Hyprland**; si no hay sesión (instalando desde un TTY) se
+  leen de `/sys/class/drm`, y en último caso se asume 1920x1080. Nunca se queda
+  sin número.
+- **Lo que puede ir en porcentaje, va en porcentaje.** El velo del bloqueo es
+  `size = 100%, 100%`, que hyprlock mide contra la salida. Las medidas
+  calculadas son solo para lo que no admite porcentaje, como el tamaño de fuente.
+
+### Por qué el bloqueo trae sus medidas por duplicado
+
+`hyprlock.conf` define las medidas de 1080p **y justo después** carga las de tu
+pantalla, que pisan a las primeras (hyprlang deja redefinir una variable y gana
+la última). Parece redundante y no lo es: si el fichero generado faltara —cache
+borrada, primer arranque, un fallo al medir— hyprlock avisa del `source` que no
+encuentra pero **sigue**, con los valores de fábrica.
+
+Con las medidas solo en el fichero generado, ese mismo fallo dejaría la config
+llena de variables sin definir. Una pantalla mal proporcionada es un defecto; un
+bloqueo que no dibuja es quedarse fuera de la sesión.
+
+---
+
 ## Archivos generados
 
 No se editan a mano; los escribe un script y llevan cabecera avisándolo:
@@ -678,9 +729,21 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `waybar/colores.css` | `hypr/scripts/gen-colores.py` |
 | `mako/colores` | `hypr/scripts/gen-colores.py` |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
+| `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
+| `hypr/conf/local.conf` | `instalar.sh` |
 
-Se versionan los cuatro primeros a propósito, para que un clon recién hecho
-arranque sin tener que ejecutar los generadores.
+**`colores.css` y `mako/colores` sí se versionan**: salen de la paleta y son
+iguales en cualquier equipo. Los del dock y `local.conf` **no**, porque dependen
+de la máquina — los crea `instalar.sh`. Los dos de `~/.cache` tampoco: se
+rehacen en cada bloqueo.
+
+Además, fuera del repo a propósito:
+
+| Archivo | Qué guarda |
+|---|---|
+| `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadiste tú |
+
+Es de tu equipo, no del repo: en otra máquina esas rutas no existirían.
 
 ---
 

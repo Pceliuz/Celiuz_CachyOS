@@ -27,6 +27,20 @@ si su contenido sería correcto en el equipo de otra persona:
 
 Los cuatro los crea `./instalar.sh`.
 
+Y hay cosas que directamente **no viven en el repo**, por lo mismo:
+
+| Fuera del repo | Qué es |
+|---|---|
+| `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadió el usuario |
+| `~/.cache/celiuzpaper/lock-*.conf` | fondo y medidas del bloqueo, rehechos en cada bloqueo |
+
+**Ni se te ocurra "arreglar" esto detectando la máquina al instalar y escribiendo
+un fichero.** Lo que depende del equipo se pregunta EN CALIENTE: la pantalla con
+`lib/pantalla.py`, la terminal y el navegador con `lib/apps.py`, la carpeta de
+vídeos con `wallpapers.carpeta_videos()`. Un valor detectado en la instalación se
+queda viejo en cuanto cambias de monitor o de predeterminado, y encima falla en
+silencio.
+
 ## Generado vs. escrito a mano
 
 Varios ficheros llevan `GENERADO — NO EDITAR` en su cabecera. Va en serio: al
@@ -37,6 +51,13 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
 | `waybar/colores.css`, `mako/colores` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/conf/local.conf` | `instalar.sh` | detección en la máquina |
+| `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
+
+Ese último es la excepción que confirma la regla: `hyprlock.conf` trae **también**
+sus propios valores por defecto y el generado solo los pisa. Si el fichero no
+existe, hyprlock se queja del `source` pero dibuja igual. Con las medidas solo en
+el generado, un fallo al medir dejaría la config llena de variables sin definir —
+y quedarse sin pantalla de bloqueo es lo peor que puede pasar en este repo.
 
 ## Nada de apps concretas cableadas
 
@@ -90,9 +111,28 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   vuelta al `.conf`.
 - **Para validar config sin arriesgar la sesión viva**, instancia anidada:
   ```sh
-  env -u HYPRLAND_INSTANCE_SIGNATURE WLR_BACKENDS=headless Hyprland &
-  hyprctl -i "$(ls -t /run/user/1000/hypr/ | head -1)" configerrors
+  env -u HYPRLAND_INSTANCE_SIGNATURE AQ_BACKENDS=headless AQ_NO_MODIFIERS=1 Hyprland &
+  INST=$(ls -t /run/user/1000/hypr/ | head -1)
+  hyprctl -i "$INST" configerrors
   ```
+  `AQ_BACKENDS`, no `WLR_BACKENDS`: desde 0.5x el backend es aquamarine y la
+  variable de wlroots la ignora en silencio. Sobre esta NVIDIA hace falta además
+  `AQ_NO_MODIFIERS=1` o se queda en `bo null` sin monitor.
+- **`HYPRLAND_INSTANCE_SIGNATURE` NO mete un programa gráfico en el anidado.** Esa
+  variable solo le dice a `hyprctl` con quién hablar; un cliente Wayland elige
+  compositor por **`WAYLAND_DISPLAY`** y por nada más. Lanzar algo con solo la
+  primera es creer que apuntas al anidado mientras apuntas a la sesión real —
+  así se bloqueó la pantalla del autor el 2026-08-03, con `lock.sh`. La señal
+  que lo delata está en el diario: `Configuring surface for logical [1920, 1080]`,
+  el tamaño de la pantalla de verdad y no la del anidado.
+  **Comprueba la puntería con algo inofensivo antes de lanzar nada serio**: abre
+  una terminal con ese `WAYLAND_DISPLAY` y mira que sale en
+  `hyprctl -i "$INST" clients` y **no** en `hyprctl clients`.
+- **Una ventana normal se dibuja POR DEBAJO de una capa `OVERLAY`.** Un diálogo
+  abierto desde una app que es capa a pantalla completa (CeliuzPaper) queda
+  detrás y parece que la app se colgó. Hay que esconder la capa (`hide()`)
+  mientras dure y volver a mostrarla después; y soltarle el teclado, porque una
+  capa en modo `EXCLUSIVE` no deja escribir al diálogo.
 - **En hyprlock, un `shape` más grande que la pantalla no se recorta: se
   reescala.** El velo del bloqueo tenía `size = 1920, 1080` escrito a mano y en
   la laptop (1366x768) salía un rectángulo de 1089x612 pegado a la esquina

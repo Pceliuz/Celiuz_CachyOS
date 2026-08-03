@@ -3,10 +3,13 @@
 CeliuzPaper — el selector de fondos de pantalla.
 
     celiuzpaper                 abre el selector
-    celiuzpaper --list          lista los fondos en la terminal
+    celiuzpaper --list          lista los fondos en la terminal, por modulos
     celiuzpaper --set <texto>   pone el fondo que coincida con ese texto
     celiuzpaper --random        pone uno al azar (distinto del actual)
     celiuzpaper --current       dice cual esta puesto
+    celiuzpaper --carpetas      lista tus carpetas de fondos
+    celiuzpaper --carpetas add <ruta>      mira tambien en esa carpeta
+    celiuzpaper --carpetas remove <ruta>   deja de mirarla
 
 LA IDEA
 -------
@@ -17,6 +20,17 @@ foto pequena de el. Se puede porque mpv acepta `loadfile` por su socket IPC: el
 video se cambia en marcha, sin reiniciar mpvpaper y sin parpadeo (~0.3 s).
 
 Enter (o clic) lo deja puesto de forma permanente; Escape devuelve el que tenias.
+
+DE DONDE SALEN LOS FONDOS
+-------------------------
+De varias fuentes, y cada una es un MODULO en la fila de arriba: los del Workshop
+de Wallpaper Engine, los de tu carpeta de videos (la que diga el sistema, en el
+idioma que sea) y las carpetas que anadas tu con el boton ＋. TAB cambia de
+modulo, las flechas se mueven dentro.
+
+Ninguna se configura: la app mira que hay en la maquina cada vez que se abre. Sin
+Steam no sale el modulo de Wallpaper Engine, y ya esta. Por eso clonar el repo en
+otro equipo y abrirla es todo lo que hay que hacer.
 
 EL DISENO, Y POR QUE
 --------------------
@@ -49,29 +63,44 @@ gi.require_version("GtkLayerShell", "0.1")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf, GtkLayerShell, Pango  # noqa: E402
 
+import pantalla  # noqa: E402
 import wallpapers as wp  # noqa: E402
 
 # --- Medidas ------------------------------------------------------------------
-# Tarjeta 16:9. 220 de ancho deja ver ~7 de golpe en 1920 y sigue siendo
+# NINGUNA medida esta escrita para una pantalla concreta: salen de lib/pantalla.py
+# con el tamano de la que haya delante. En 1920x1080 dan exactamente los mismos
+# numeros de siempre (factor 1); en la laptop de 1366x768 encogen solas.
+_M = pantalla.medidas()
+
+
+def _px(valor):
+    """Un numero pensado para 1080p, traido a esta pantalla."""
+    return int(round(valor * _M["factor"]))
+
+
+# Tarjeta 16:9. 220 de ancho (en 1080p) deja ver ~7 de golpe y sigue siendo
 # reconocible de un vistazo.
-TARJETA_W = 220
-TARJETA_H = 124
-SEPARACION = 14
+TARJETA_W = _M["paper_tarjeta_w"]
+TARJETA_H = _M["paper_tarjeta_h"]
+SEPARACION = _M["paper_separacion"]
 # Cuanto se encoge una tarjeta no elegida. Es el "efecto de levantar" sin cambiar
 # el tamano de la casilla: si cambiara, la tira daria saltos al moverse.
-ENCOGIDO = 5
-RADIO = 14
+ENCOGIDO = max(3, _px(5))
+RADIO = _M["paper_radio"]
 
 # Franja oscura de abajo. El degradado sube hasta ALTO_VELO y ahi ya es
-# transparente del todo.
-ALTO_VELO = 380
-MARGEN = 46
-# Alto FIJO del bloque de abajo (cabecera + tira + pie). Fijarlo no es cosmetico:
-# si el bloque crece o se encoge —al llegar los datos de un video, o al pasar de
-# un titulo latino a uno chino, que es mas alto— GTK recoloca todo y, al ser una
-# ventana transparente, no limpia lo que habia antes: quedan tarjetas fantasma
-# pegadas en la pantalla. Con el alto fijo nada se mueve y no hay restos.
-ALTO_BLOQUE = 272
+# transparente del todo. Se mide como PROPORCION de la pantalla y no con el
+# factor: es lo que tapa el fondo, y debe ocupar lo mismo en cualquier monitor.
+ALTO_VELO = _M["paper_velo"]
+MARGEN = _M["paper_margen"]
+# Alto de la fila de modulos (Wallpaper Engine / tu carpeta de videos / ...).
+ALTO_MODULOS = max(26, _px(34))
+# Alto FIJO del bloque de abajo (modulos + cabecera + tira + pie). Fijarlo no es
+# cosmetico: si el bloque crece o se encoge —al llegar los datos de un video, o
+# al pasar de un titulo latino a uno chino, que es mas alto— GTK recoloca todo y,
+# al ser una ventana transparente, no limpia lo que habia antes: quedan tarjetas
+# fantasma pegadas en la pantalla. Con el alto fijo nada se mueve y no hay restos.
+ALTO_BLOQUE = _px(272) + ALTO_MODULOS + _px(10)
 
 # Espera antes de cambiar el fondo de verdad al pasar por una tarjeta. Sin esto,
 # barrer la tira con el raton dispararia diez cambios seguidos.
@@ -147,6 +176,43 @@ window {{
 #aviso {{
     font-size: 12px;
     color: #eb6f92;
+}}
+
+/* --- Los modulos (de donde salen los fondos) ---
+ * Cada fuente es un boton-pastilla. Sin fondo cuando no esta elegido, para que
+ * la fila no compita con las tarjetas; encendido en amatista el que si. Es el
+ * mismo lenguaje que la barra de arriba del escritorio, donde la pastilla solo
+ * aparece al pasar el puntero. */
+.modulo {{
+    font-size: {_px(12)}px;
+    color: {COLOR_TENUE};
+    background: none;
+    background-color: rgba(26, 8, 48, 0.55);
+    border: 1px solid rgba(177, 108, 255, 0.20);
+    border-radius: {max(6, _px(9))}px;
+    padding: {max(2, _px(4))}px {max(7, _px(12))}px;
+    margin-right: {max(4, _px(8))}px;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}}
+.modulo:hover {{
+    color: {COLOR_TEXTO};
+    border-color: rgba(177, 108, 255, 0.55);
+}}
+.modulo.elegido {{
+    color: {COLOR_TEXTO};
+    background-color: rgba(26, 8, 48, 0.92);
+    border-color: {COLOR_AMATISTA};
+}}
+/* La cuenta de fondos de cada modulo, mas apagada que su nombre. */
+.modulo .cuenta {{
+    color: {COLOR_TENUE};
+    font-size: {_px(11)}px;
+}}
+/* El de anadir carpeta: solo el signo, sin nombre, para que se lea como una
+ * accion y no como una fuente mas. */
+#modulo-anadir {{
+    font-size: {_px(14)}px;
+    padding: {max(2, _px(4))}px {max(8, _px(13))}px;
 }}
 
 #difuminado-izq {{
@@ -313,12 +379,15 @@ class Tarjeta(Gtk.DrawingArea):
 
 
 class Selector(Gtk.Window):
-    def __init__(self, fondos, no_usables=0):
+    def __init__(self):
         super().__init__()
-        self.fondos = fondos
-        self.no_usables = no_usables
+        self.modulos = []
+        self.modulo = 0
+        self.fondos = []
+        self.no_usables = 0
         self.tarjetas = []
         self.indice = 0
+        self._cargar_modulos()
         self.pendiente = None          # temporizador del retardo de la vista
         self.anim_desliz = None
         self.aplicado = False
@@ -352,14 +421,59 @@ class Selector(Gtk.Window):
 
         self.show_all()
 
-        # Arranca en el que esta puesto, sin previsualizar nada (ya se esta
-        # viendo) y sin animar el deslizado: tiene que aparecer ya centrado.
-        inicial = next((i for i, f in enumerate(self.fondos)
-                        if os.path.realpath(f["video"]) == self.puesto), 0)
-        self.indice = inicial
-        self._pintar_seleccion()
-        GLib.idle_add(self._centrar, inicial, False)
+        # Arranca en el modulo y la tarjeta del fondo que esta puesto, sin
+        # previsualizar nada (ya se esta viendo) y sin animar el deslizado: tiene
+        # que aparecer ya centrado.
+        self._ir_al_puesto()
+        GLib.idle_add(self._centrar, self.indice, False)
         GLib.idle_add(self._cargar_datos)
+
+    # --- Los modulos (de donde salen los fondos) ---
+
+    def _cargar_modulos(self, recordar=None):
+        """Rehace la lista de modulos leyendo las fuentes que haya ahora.
+
+        Se llama al abrir y cada vez que se anade o se quita una carpeta, asi que
+        no hay que reiniciar la app para ver una fuente nueva.
+
+        `recordar` es el id del modulo en el que estabas, para volver a el si
+        sigue existiendo: al quitar una carpeta, quedarte donde estabas.
+        """
+        todos = wp.escanear()
+        reparto = wp.por_fuente(todos)
+        usables = wp.usables(todos)
+        self.no_usables = len(todos) - len(usables)
+
+        self.modulos = []
+        fuentes = wp.fuentes()
+        # Una fuente vacia no merece pestana... salvo las que anadio el usuario:
+        # esas se ensenan aunque no tengan nada, o no habria forma de quitarlas.
+        visibles = [f for f in fuentes if reparto.get(f["id"]) or f["quitable"]]
+        if len(visibles) > 1:
+            self.modulos.append({"id": "todos", "nombre": "Todos", "ruta": None,
+                                 "quitable": False, "fondos": usables})
+        for fuente in visibles:
+            self.modulos.append({"id": fuente["id"], "nombre": fuente["nombre"],
+                                 "ruta": fuente["ruta"], "quitable": fuente["quitable"],
+                                 "fondos": reparto.get(fuente["id"], [])})
+
+        if not self.modulos:
+            # Ni Steam ni carpeta de videos: la app se abre igual, con el boton de
+            # anadir carpeta, que es justo lo que hace falta en ese caso.
+            self.modulos.append({"id": "vacio", "nombre": "Sin fondos", "ruta": None,
+                                 "quitable": False, "fondos": []})
+
+        self.modulo = 0
+        if recordar:
+            self.modulo = next((i for i, m in enumerate(self.modulos)
+                                if m["id"] == recordar), 0)
+        self.fondos = self.modulos[self.modulo]["fondos"]
+
+    def _ir_al_puesto(self):
+        """Deja elegida la tarjeta del fondo que esta puesto ahora mismo."""
+        self.indice = next((i for i, f in enumerate(self.fondos)
+                            if os.path.realpath(f["video"]) == self.puesto), 0)
+        self._pintar_seleccion()
 
     # --- Montaje ---
 
@@ -432,6 +546,17 @@ class Selector(Gtk.Window):
         self.add(raiz)
         self.raiz = raiz
 
+        # --- Fila de modulos: de donde salen los fondos ---
+        # Va ARRIBA del todo, antes del nombre del fondo, porque es la pregunta
+        # anterior: primero de donde, y luego cual.
+        self.fila_modulos = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.fila_modulos.set_margin_start(MARGEN)
+        self.fila_modulos.set_margin_end(MARGEN)
+        self.fila_modulos.set_margin_bottom(_px(10))
+        self.fila_modulos.set_size_request(-1, ALTO_MODULOS)
+        raiz.pack_start(self.fila_modulos, False, False, 0)
+        self._pintar_modulos()
+
         # --- Cabecera: nombre del fondo y sus datos ---
         cabecera = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         cabecera.set_margin_start(MARGEN)
@@ -456,7 +581,7 @@ class Selector(Gtk.Window):
         cuenta.set_valign(Gtk.Align.END)
         self.contador = Gtk.Label(label="", xalign=1)
         self.contador.set_name("contador")
-        self.total = Gtk.Label(label=f"de {len(self.fondos)} fondos", xalign=1)
+        self.total = Gtk.Label(label=self._texto_total(), xalign=1)
         self.total.set_name("contador-total")
         cuenta.pack_start(self.contador, False, False, 0)
         cuenta.pack_start(self.total, False, False, 0)
@@ -468,17 +593,13 @@ class Selector(Gtk.Window):
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
         self.scroll.set_size_request(-1, TARJETA_H + 16)
-        tira = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SEPARACION)
+        self.tira = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SEPARACION)
         # Media pantalla de aire a los lados: asi el primero y el ultimo tambien
         # pueden quedarse centrados.
-        tira.set_margin_start(MARGEN)
-        tira.set_margin_end(MARGEN)
-        for fondo in self.fondos:
-            tarjeta = Tarjeta(fondo, self)
-            tarjeta.poner_imagen(wp.miniatura(fondo, generar=False))
-            self.tarjetas.append(tarjeta)
-            tira.pack_start(tarjeta, False, False, 0)
-        self.scroll.add(tira)
+        self.tira.set_margin_start(MARGEN)
+        self.tira.set_margin_end(MARGEN)
+        self._rellenar_tira()
+        self.scroll.add(self.tira)
 
         # La tira es mas ancha que la pantalla, asi que por los lados siempre hay
         # tarjetas cortadas. Dos velos degradados en los bordes las disuelven en la
@@ -506,15 +627,189 @@ class Selector(Gtk.Window):
         pie.set_margin_top(12)
         pie.set_margin_bottom(MARGEN - 18)
         teclas = Gtk.Label(
-            label="←  →   elegir       ENTER / clic   poner       ESC   cancelar",
+            label="←  →   elegir       TAB   modulo       ENTER / clic   poner"
+                  "       ESC   cancelar",
             xalign=0)
         teclas.set_name("teclas")
+        # Las dos etiquetas del pie se recortan si no caben. Sin esto, en una
+        # pantalla estrecha la nota de la derecha se sale por el borde y se pinta
+        # ENCIMA de las teclas: se leen las dos a la vez y no se entiende ninguna.
+        teclas.set_ellipsize(Pango.EllipsizeMode.END)
         pie.pack_start(teclas, True, True, 0)
 
         self.nota = Gtk.Label(label=self._texto_nota(), xalign=1)
         self.nota.set_name("aviso" if not self.hay_mpv else "nota")
+        self.nota.set_ellipsize(Pango.EllipsizeMode.END)
+        self.nota.set_max_width_chars(46)
         pie.pack_start(self.nota, False, False, 0)
         raiz.pack_start(pie, False, False, 0)
+
+    # --- Dibujar los modulos y la tira ---
+
+    def _pintar_modulos(self):
+        """Rehace la fila de pestanas. Barata: son botones de texto."""
+        for hijo in self.fila_modulos.get_children():
+            hijo.destroy()
+
+        for i, modulo in enumerate(self.modulos):
+            boton = Gtk.Button()
+            boton.set_relief(Gtk.ReliefStyle.NONE)
+            etiqueta = Gtk.Label()
+            cuenta = len(modulo["fondos"])
+            # El nombre y la cuenta con pesos distintos: la cuenta acompana, no
+            # compite. Se escapa el nombre porque viene de una carpeta del disco
+            # y puede traer & o <.
+            etiqueta.set_markup(
+                f"{GLib.markup_escape_text(modulo['nombre'])}"
+                f"  <span size='smaller' alpha='60%'>{cuenta}</span>")
+            boton.add(etiqueta)
+            contexto = boton.get_style_context()
+            contexto.add_class("modulo")
+            if i == self.modulo:
+                contexto.add_class("elegido")
+            boton.connect("clicked", self._clic_modulo, i)
+            # Con el boton enfocable, las flechas moverian el foco entre pestanas
+            # en vez de recorrer la tira, que es el gesto principal.
+            boton.set_can_focus(False)
+            self.fila_modulos.pack_start(boton, False, False, 0)
+
+        anadir = Gtk.Button(label="＋")
+        anadir.set_relief(Gtk.ReliefStyle.NONE)
+        anadir.set_name("modulo-anadir")
+        anadir.get_style_context().add_class("modulo")
+        anadir.set_tooltip_text("Anadir una carpeta con tus videos")
+        anadir.set_can_focus(False)
+        anadir.connect("clicked", lambda *_: self.anadir_carpeta())
+        self.fila_modulos.pack_start(anadir, False, False, 0)
+
+        self.fila_modulos.show_all()
+
+    def _rellenar_tira(self):
+        """Pone en la tira las tarjetas del modulo elegido."""
+        for hijo in self.tira.get_children():
+            hijo.destroy()
+        self.tarjetas = []
+        for fondo in self.fondos:
+            tarjeta = Tarjeta(fondo, self)
+            tarjeta.poner_imagen(wp.miniatura(fondo, generar=False))
+            self.tarjetas.append(tarjeta)
+            self.tira.pack_start(tarjeta, False, False, 0)
+        self.tira.show_all()
+
+    def _clic_modulo(self, _boton, indice):
+        self.ir_a_modulo(indice)
+
+    def ir_a_modulo(self, indice):
+        """Cambia de fuente: otra tira, misma ventana."""
+        if not self.modulos:
+            return
+        indice = max(0, min(len(self.modulos) - 1, indice))
+        if indice == self.modulo:
+            return
+        self.modulo = indice
+        self.fondos = self.modulos[indice]["fondos"]
+        self._pintar_modulos()
+        self._rellenar_tira()
+        self.total.set_text(self._texto_total())
+        # Si el fondo puesto esta en este modulo, se cae sobre el; si no, al
+        # primero. Cambiar de pestana NO cambia el fondo: la vista previa solo
+        # sale al moverse por las tarjetas, para que curiosear sea gratis.
+        self._ir_al_puesto()
+        self._centrar(self.indice, False)
+        GLib.idle_add(self._cargar_datos)
+        self.queue_draw()
+
+    def mover_modulo(self, delta):
+        if len(self.modulos) > 1:
+            self.ir_a_modulo((self.modulo + delta) % len(self.modulos))
+
+    def _texto_total(self):
+        n = len(self.fondos)
+        if n == 1:
+            return "1 fondo"
+        return f"de {n} fondos"
+
+    # --- Anadir y quitar carpetas ---
+
+    def anadir_carpeta(self):
+        """Abre el selector de carpetas del sistema y anade la que elijas.
+
+        HAY QUE ESCONDER ESTA VENTANA MIENTRAS DURA, y no es un capricho: esto es
+        una capa `OVERLAY` a pantalla completa, y en Hyprland una ventana normal
+        se dibuja POR DEBAJO de las capas overlay. El dialogo saldria detras y no
+        se veria: parecerian que la app se ha colgado. Con la capa escondida, el
+        dialogo queda a la vista y al volver se remonta sola.
+
+        Y se suelta el teclado ademas de esconderla: la capa lo pide en modo
+        EXCLUSIVE (para que las flechas funcionen nada mas aparecer) y con el
+        puesto el dialogo no podria ni escribir en su buscador.
+
+        Se usa el dialogo de GTK y no `FileChooserNative` a proposito: el nativo
+        sale por el portal de escritorio, que es otro proceso y aparece donde
+        este el portal, no necesariamente aqui — y ademas obligaria a tener
+        xdg-desktop-portal instalado para algo que GTK ya sabe hacer solo.
+        """
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.NONE)
+        self.hide()
+
+        dialogo = Gtk.FileChooserDialog(
+            title="Elige una carpeta con tus videos",
+            action=Gtk.FileChooserAction.SELECT_FOLDER)
+        dialogo.add_buttons("Cancelar", Gtk.ResponseType.CANCEL,
+                            "Anadir", Gtk.ResponseType.ACCEPT)
+        dialogo.set_default_response(Gtk.ResponseType.ACCEPT)
+        # Empieza en la carpeta de videos si la hay, que es donde va a mirar
+        # cualquiera; si no, en la casa.
+        dialogo.set_current_folder(wp.carpeta_videos() or os.path.expanduser("~"))
+        try:
+            respuesta = dialogo.run()
+            elegida = dialogo.get_filename()
+        finally:
+            dialogo.destroy()
+            self.show()
+            GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+
+        if respuesta != Gtk.ResponseType.ACCEPT or not elegida:
+            return
+        try:
+            nueva = wp.anadir_carpeta(elegida)
+        except (OSError, ValueError) as error:
+            return self._avisar(f"no se pudo anadir: {error}")
+        if not nueva:
+            return self._avisar("esa carpeta ya estaba")
+        self._recargar_fuentes(ir_a="extra:" + os.path.realpath(elegida))
+
+    def quitar_carpeta_actual(self):
+        """Quita la carpeta del modulo en el que estas. No borra ningun video."""
+        modulo = self.modulos[self.modulo] if self.modulos else None
+        if not modulo or not modulo.get("quitable"):
+            return
+        wp.quitar_carpeta(modulo["ruta"])
+        self._avisar(f"quitada «{modulo['nombre']}» de la lista")
+        self._recargar_fuentes()
+
+    def _recargar_fuentes(self, ir_a=None):
+        """Relee las fuentes y rehace la ventana sin cerrarla."""
+        recordar = ir_a or (self.modulos[self.modulo]["id"] if self.modulos else None)
+        self._cargar_modulos(recordar=recordar)
+        self._pintar_modulos()
+        self._rellenar_tira()
+        self.total.set_text(self._texto_total())
+        self._ir_al_puesto()
+        self._centrar(self.indice, False)
+        GLib.idle_add(self._cargar_datos)
+        self.queue_draw()
+
+    def _avisar(self, texto):
+        """Un mensaje corto en el pie, donde ya se miran las notas."""
+        self.nota.set_text(texto)
+        self.nota.set_name("nota")
+        GLib.timeout_add(4000, self._restaurar_nota)
+
+    def _restaurar_nota(self):
+        self.nota.set_text(self._texto_nota())
+        self.nota.set_name("aviso" if not self.hay_mpv else "nota")
+        return False
 
     def _texto_nota(self):
         if not self.hay_mpv:
@@ -536,12 +831,24 @@ class Selector(Gtk.Window):
         self._programar_vista()
 
     def mover(self, delta):
+        if not self.fondos:
+            return
         self.indice = max(0, min(len(self.fondos) - 1, self.indice + delta))
         self._pintar_seleccion()
         self._centrar(self.indice, True)
         self._programar_vista()
 
     def _pintar_seleccion(self):
+        if not self.fondos:
+            # Un modulo puede estar vacio: una carpeta recien anadida sin videos,
+            # o un equipo sin Steam ni carpeta de videos. Se dice que pasa, en vez
+            # de dejar la ventana muda o reventar por un indice.
+            self.titulo.set_text("aqui no hay videos")
+            self.datos.set_text("elige otro modulo, o anade una carpeta con ＋")
+            self.contador.set_text("0")
+            self.queue_draw()
+            return
+        self.indice = max(0, min(len(self.fondos) - 1, self.indice))
         fondo = self.fondos[self.indice]
         for i, tarjeta in enumerate(self.tarjetas):
             elegida = i == self.indice
@@ -656,6 +963,8 @@ class Selector(Gtk.Window):
             self.aplicar()
 
     def aplicar(self):
+        if not self.fondos:
+            return
         fondo = self.fondos[self.indice]
         try:
             wp.aplicar(fondo["video"])
@@ -692,10 +1001,21 @@ class Selector(Gtk.Window):
         nombre = Gdk.keyval_name(evento.keyval)
         if nombre in ("Escape", "q"):
             self.cancelar()
-        elif nombre in ("Right", "l", "Down", "Tab"):
+        # TAB deja de mover por la tira y pasa a cambiar de MODULO: es el gesto
+        # de "mirar en otro sitio", y para moverse por la tira ya estan las
+        # flechas, que es lo que usa todo el mundo.
+        elif nombre == "Tab":
+            self.mover_modulo(1)
+        elif nombre == "ISO_Left_Tab":
+            self.mover_modulo(-1)
+        elif nombre in ("Right", "l", "Down"):
             self.mover(1)
-        elif nombre in ("Left", "h", "Up", "ISO_Left_Tab"):
+        elif nombre in ("Left", "h", "Up"):
             self.mover(-1)
+        elif nombre == "plus" or nombre == "KP_Add":
+            self.anadir_carpeta()
+        elif nombre == "Delete":
+            self.quitar_carpeta_actual()
         elif nombre in ("Return", "KP_Enter", "space"):
             self.aplicar()
         elif nombre == "Home":
@@ -735,11 +1055,18 @@ def cli_list():
     fondos = wp.escanear()
     puesto = wp.actual()
     us = wp.usables(fondos)
+    reparto = wp.por_fuente(fondos)
     print(f"\n  CELIUZPAPER  ·  {len(us)} fondos usables de {len(fondos)}\n")
-    print("  " + "─" * 66)
-    for fondo in us:
-        marca = "●" if os.path.realpath(fondo["video"]) == puesto else " "
-        print(f"  {marca} {fondo['titulo'][:44]:44}  {wp.describir(fondo)}")
+    for fuente in wp.fuentes():
+        suyos = reparto.get(fuente["id"], [])
+        print("  " + "─" * 66)
+        donde = f"   {fuente['ruta']}" if fuente["ruta"] else ""
+        print(f"  {fuente['nombre'].upper()}  ({len(suyos)}){donde}")
+        for fondo in suyos:
+            marca = "●" if os.path.realpath(fondo["video"]) == puesto else " "
+            print(f"  {marca} {fondo['titulo'][:44]:44}  {wp.describir(fondo)}")
+        if not suyos:
+            print("    (vacia)")
     otros = [f for f in fondos if not f["usable"]]
     if otros:
         tipos = {}
@@ -749,6 +1076,40 @@ def cli_list():
         print("  " + "─" * 66)
         print(f"  No usables por mpvpaper: {detalle}")
     print(f"\n  ● = puesto ahora. Para cambiar:  celiuzpaper --set <texto>\n")
+
+
+def cli_carpetas(args):
+    """Anadir, quitar y listar las carpetas propias, sin abrir la ventana.
+
+    Es la puerta por la que entra el asistente: la GUI y esto llaman a lo mismo.
+    """
+    if not args:
+        propias = wp.carpetas_extra()
+        print(f"\n  Carpeta de videos del sistema: {wp.carpeta_videos() or '(ninguna)'}")
+        print(f"  Carpetas anadidas por ti ({len(propias)}):")
+        for ruta in propias:
+            print(f"    - {ruta}")
+        if not propias:
+            print("    (ninguna)   anade una con:  celiuzpaper --carpetas add <ruta>")
+        print()
+        return
+    orden, resto = args[0], args[1:]
+    if orden in ("add", "anadir") and resto:
+        ruta = " ".join(resto)
+        try:
+            if wp.anadir_carpeta(ruta):
+                print(f"Anadida: {os.path.realpath(os.path.expanduser(ruta))}")
+            else:
+                print("Esa carpeta ya estaba (o ya la cubre otra fuente).")
+        except NotADirectoryError:
+            sys.exit(f"celiuzpaper: «{ruta}» no es una carpeta")
+        return
+    if orden in ("remove", "quitar", "rm") and resto:
+        ruta = " ".join(resto)
+        wp.quitar_carpeta(ruta)
+        print(f"Quitada de la lista: {ruta}  (no se ha borrado ningun video)")
+        return
+    sys.exit("celiuzpaper --carpetas [add <ruta> | remove <ruta>]")
 
 
 def cli_set(texto):
@@ -791,6 +1152,8 @@ def main():
             return cli_set(resto)
         if orden in ("-r", "--random"):
             return cli_random()
+        if orden in ("-f", "--carpetas"):
+            return cli_carpetas(args[1:])
         if orden in ("-c", "--current"):
             puesto = wp.actual()
             return print(puesto or "(ninguno)")
@@ -798,14 +1161,11 @@ def main():
             return print(__doc__.strip())
         sys.exit(f"celiuzpaper: no entiendo «{orden}». Prueba --help")
 
-    fondos = wp.escanear()
-    us = wp.usables(fondos)
-    if not us:
-        sys.exit("celiuzpaper: no encuentro ningun fondo de video utilizable.\n"
-                 "Suscribete a fondos de tipo VIDEO en el Workshop de Wallpaper "
-                 "Engine, o pon tus propios videos en ~/dotfiles/hypr/wallpapers/propios/")
-
-    selector = Selector(us, no_usables=len(fondos) - len(us))
+    # La app se abre aunque no haya ni un fondo: sin Steam y sin carpeta de
+    # videos, lo que hace falta es el boton de anadir carpeta, y para eso hay que
+    # entrar. Antes se salia con un mensaje, que en un equipo recien clonado
+    # dejaba al usuario sin manera de empezar.
+    selector = Selector()
 
     # Si a la app la matan (kill, cierre de sesion, un fallo), tiene que dejar el
     # sistema como estaba: sin el `hold` del demonio de ahorro puesto, con el fondo

@@ -7,11 +7,23 @@ donde estan, cual esta puesto, como se cambia y como se le habla a mpvpaper.
 Lo usan CeliuzPaper (la app) y set-wallpaper.sh (la version de terminal), y es
 por donde entraria un asistente: aqui no hay interfaz, solo datos y acciones.
 
-Los fondos vienen del Workshop de Wallpaper Engine. De sus cuatro tipos solo los
-de tipo "video" son un archivo reproducible por mpvpaper; los de "scene" y "web"
-necesitan el motor de Wallpaper Engine, y los de "application" son ejecutables de
-Windows (el vector de la campana de malware del Workshop de 2025: aqui no se
-ejecutan, pero se reconocen y se descartan).
+Los fondos salen de varias FUENTES, y cada una es un modulo en el selector:
+
+  Wallpaper Engine   los del Workshop de Steam. De sus cuatro tipos solo los de
+                     tipo "video" son un archivo reproducible por mpvpaper; los
+                     de "scene" y "web" necesitan el motor de Wallpaper Engine, y
+                     los de "application" son ejecutables de Windows (el vector
+                     de la campana de malware del Workshop de 2025: aqui no se
+                     ejecutan, pero se reconocen y se descartan).
+  Tu carpeta de      la que el sistema diga, en el idioma que sea. NO se busca
+  videos             "Videos" a pelo: se pregunta al estandar XDG, que aqui
+                     responde ~/Vídeos y en otro equipo respondera ~/Videos,
+                     ~/Vidéos o lo que toque.
+  Carpetas anadidas  las que anadas tu desde la app, guardadas FUERA del repo.
+
+Nada de esto se configura al instalar: si no hay Steam, el modulo de Wallpaper
+Engine no aparece; si no hay carpeta de videos, tampoco. Clonar el repo en otra
+maquina y abrir la app es todo lo que hay que hacer.
 """
 
 import json
@@ -38,14 +50,22 @@ CACHE_DATOS = os.path.join(CACHE, "info.json")
 
 # 431960 = el appid de Wallpaper Engine en Steam.
 WE_APPID = 431960
-# Carpetas propias, para videos que no vengan del Workshop. No hace falta que
-# existan; si las creas, sus videos salen en la lista automaticamente.
-CARPETAS_PROPIAS = [
-    os.path.join(CASA, "Vídeos/wallpapers"),
-    os.path.join(CASA, "Videos/wallpapers"),
-    os.path.join(WALLDIR, "propios"),
-]
-EXTENSIONES = (".mp4", ".mkv", ".webm", ".mov", ".avi")
+# Carpeta del repo para dejar videos propios. Es la unica ruta fija que queda, y
+# esta dentro del propio repo, asi que vale igual en cualquier equipo.
+CARPETA_REPO = os.path.join(WALLDIR, "propios")
+EXTENSIONES = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")
+
+# Las carpetas que anade el usuario se guardan AQUI y no en el repo: son de esta
+# maquina y solo de esta (la regla de oro del CLAUDE.md). Un clon en otro equipo
+# empieza sin ninguna, que es lo correcto.
+CONFIG = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.join(CASA, ".config")),
+                      "celiuzpaper")
+CARPETAS_JSON = os.path.join(CONFIG, "carpetas.json")
+
+# Hasta donde se baja al recorrer una carpeta. Con 3 entra lo que la gente tiene
+# de verdad (Vídeos/fondos/anime/x.mp4) sin que un ~/Vídeos enorme cueste
+# segundos ni se cuele un arbol entero de otra cosa.
+PROFUNDIDAD = 3
 
 # Ancho al que se guardan las miniaturas. 440 da nitidez de sobra para tarjetas
 # de 220 px y sigue pesando ~15 KB por fondo.
@@ -102,36 +122,201 @@ def _leer_item(carpeta):
     }
 
 
-def _leer_propio(ruta):
+def carpeta_videos():
+    """La carpeta de videos del usuario, se llame como se llame en su idioma.
+
+    Aqui es ~/Vídeos, con tilde; en un sistema en ingles es ~/Videos y en frances
+    ~/Vidéos. Adivinar el nombre seria empezar mal, asi que se pregunta al
+    estandar XDG, que es justamente quien sabe la respuesta:
+
+      1. $XDG_VIDEOS_DIR, si el entorno ya la trae puesta.
+      2. ~/.config/user-dirs.dirs, que es el fichero donde vive de verdad. Se lee
+         a mano en vez de llamar a `xdg-user-dir` para no depender de que
+         xdg-user-dirs este instalado.
+      3. El binario `xdg-user-dir`, por si el fichero no estuviera.
+      4. Los dos nombres mas repetidos, como ultimo recurso.
+
+    Devuelve None si no existe ninguna: la app se apana sin ella.
+    """
+    ruta = os.environ.get("XDG_VIDEOS_DIR")
+    if not ruta:
+        try:
+            with open(os.path.join(CASA, ".config/user-dirs.dirs"),
+                      encoding="utf-8", errors="replace") as fh:
+                encontrado = re.search(r'^\s*XDG_VIDEOS_DIR\s*=\s*"?([^"\n]+)"?',
+                                       fh.read(), re.M)
+            if encontrado:
+                # El fichero guarda las rutas como "$HOME/Vídeos".
+                ruta = encontrado.group(1).replace("$HOME", CASA).replace("${HOME}", CASA)
+        except OSError:
+            ruta = None
+    if not ruta:
+        try:
+            ruta = subprocess.run(["xdg-user-dir", "VIDEOS"], capture_output=True,
+                                  text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            ruta = None
+    if not ruta or os.path.realpath(ruta) == os.path.realpath(CASA):
+        # Sin configurar, xdg-user-dir contesta el propio $HOME. Recorrer la casa
+        # entera buscando videos no es lo que nadie espera.
+        for nombre in ("Vídeos", "Videos", "Vidéos"):
+            candidata = os.path.join(CASA, nombre)
+            if os.path.isdir(candidata):
+                return candidata
+        return None
+    return ruta if os.path.isdir(ruta) else None
+
+
+# --- Carpetas que anade el usuario --------------------------------------------
+
+def carpetas_extra():
+    """Las carpetas anadidas a mano, en orden y sin las que ya no existan."""
+    try:
+        with open(CARPETAS_JSON, encoding="utf-8") as fh:
+            guardadas = json.load(fh).get("carpetas") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+    salida = []
+    for ruta in guardadas:
+        if isinstance(ruta, str) and os.path.isdir(ruta) and ruta not in salida:
+            salida.append(ruta)
+    return salida
+
+
+def _guardar_carpetas(lista):
+    os.makedirs(CONFIG, exist_ok=True)
+    tmp = CARPETAS_JSON + ".nuevo"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump({"carpetas": lista}, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, CARPETAS_JSON)
+
+
+def anadir_carpeta(ruta):
+    """Anade una carpeta a las fuentes. Devuelve False si no aporta nada nuevo.
+
+    Se rechaza la que ya estaria cubierta por otra fuente (la de videos, el
+    Workshop, o una anadida antes): tenerla dos veces solo duplicaria tarjetas.
+    """
+    ruta = os.path.realpath(os.path.expanduser(ruta))
+    if not os.path.isdir(ruta):
+        raise NotADirectoryError(ruta)
+    ya = [os.path.realpath(f["ruta"]) for f in fuentes() if f.get("ruta")]
+    if ruta in ya:
+        return False
+    lista = carpetas_extra()
+    lista.append(ruta)
+    _guardar_carpetas(lista)
+    return True
+
+
+def quitar_carpeta(ruta):
+    """Quita una carpeta anadida. No borra ni un archivo: solo deja de mirarla."""
+    ruta = os.path.realpath(os.path.expanduser(ruta))
+    lista = [c for c in carpetas_extra() if os.path.realpath(c) != ruta]
+    _guardar_carpetas(lista)
+    return True
+
+
+# --- Las fuentes, que son los modulos del selector ----------------------------
+
+def fuentes():
+    """Los sitios de donde salen fondos, en el orden en que se ensenan.
+
+    Solo aparece la fuente que EXISTE en esta maquina: sin Steam no hay modulo de
+    Wallpaper Engine, y sin carpeta de videos tampoco el suyo. Asi el selector se
+    adapta solo al equipo en el que se abra, sin configurar nada.
+    """
+    lista = []
+    workshop = _bibliotecas_steam()
+    if workshop:
+        lista.append({"id": "workshop", "nombre": "Wallpaper Engine",
+                      "tipo": "workshop", "ruta": None, "rutas": workshop,
+                      "quitable": False})
+    videos = carpeta_videos()
+    if videos:
+        lista.append({"id": "videos", "nombre": os.path.basename(videos.rstrip("/")),
+                      "tipo": "carpeta", "ruta": videos, "rutas": [videos],
+                      "quitable": False})
+    if os.path.isdir(CARPETA_REPO):
+        lista.append({"id": "repo", "nombre": "Del repo", "tipo": "carpeta",
+                      "ruta": CARPETA_REPO, "rutas": [CARPETA_REPO],
+                      "quitable": False})
+    for ruta in carpetas_extra():
+        lista.append({"id": "extra:" + ruta,
+                      "nombre": os.path.basename(ruta.rstrip("/")) or ruta,
+                      "tipo": "carpeta", "ruta": ruta, "rutas": [ruta],
+                      "quitable": True})
+    return lista
+
+
+def _videos_de(carpeta):
+    """Los videos de una carpeta y sus subcarpetas, hasta PROFUNDIDAD niveles."""
+    encontrados = []
+    base = carpeta.rstrip("/")
+    for raiz, subs, ficheros in os.walk(base):
+        nivel = raiz[len(base):].count(os.sep)
+        # Las ocultas fuera: ahi viven caches y basura de otras apps, no fondos.
+        subs[:] = [] if nivel >= PROFUNDIDAD - 1 else [s for s in subs
+                                                      if not s.startswith(".")]
+        for nombre in sorted(ficheros):
+            if nombre.lower().endswith(EXTENSIONES) and not nombre.startswith("."):
+                encontrados.append(os.path.join(raiz, nombre))
+    return encontrados
+
+
+def _leer_propio(ruta, fuente="repo"):
     return {
-        "id": "propio:" + os.path.basename(ruta),
+        # El id lleva la ruta entera para que dos videos con el mismo nombre en
+        # carpetas distintas no compartan miniatura en cache.
+        "id": "propio:" + ruta.replace("/", "_"),
         "titulo": os.path.splitext(os.path.basename(ruta))[0],
         "tipo": "video",
         "video": ruta,
         "vista": "",
         "etiquetas": ["propio"],
         "usable": True,
+        "fuente": fuente,
     }
 
 
 def escanear():
-    """Todos los fondos encontrados, usables o no, ordenados por titulo."""
+    """Todos los fondos encontrados, usables o no, ordenados por titulo.
+
+    Cada fondo sale etiquetado con la fuente de la que viene (`fuente`), que es
+    lo que despues reparte las tarjetas por modulos en el selector.
+    """
     fondos = []
-    for dir_workshop in _bibliotecas_steam():
-        for nombre in sorted(os.listdir(dir_workshop)):
-            carpeta = os.path.join(dir_workshop, nombre)
-            if os.path.isdir(carpeta):
-                item = _leer_item(carpeta)
-                if item:
-                    fondos.append(item)
-    for carpeta in CARPETAS_PROPIAS:
-        if not os.path.isdir(carpeta):
-            continue
-        for nombre in sorted(os.listdir(carpeta)):
-            if nombre.lower().endswith(EXTENSIONES):
-                fondos.append(_leer_propio(os.path.join(carpeta, nombre)))
+    for fuente in fuentes():
+        if fuente["tipo"] == "workshop":
+            for dir_workshop in fuente["rutas"]:
+                try:
+                    nombres = sorted(os.listdir(dir_workshop))
+                except OSError:
+                    continue
+                for nombre in nombres:
+                    carpeta = os.path.join(dir_workshop, nombre)
+                    if os.path.isdir(carpeta):
+                        item = _leer_item(carpeta)
+                        if item:
+                            item["fuente"] = fuente["id"]
+                            fondos.append(item)
+        else:
+            for ruta in _videos_de(fuente["ruta"]):
+                fondos.append(_leer_propio(ruta, fuente["id"]))
     fondos.sort(key=lambda f: f["titulo"].lower())
     return fondos
+
+
+def por_fuente(fondos=None):
+    """Los fondos USABLES repartidos por fuente: {id_fuente: [fondos]}.
+
+    Se reparte despues de quitar duplicados, no antes, para que la cuenta que
+    ensena cada modulo sea la de las tarjetas que se van a ver de verdad.
+    """
+    reparto = {}
+    for fondo in usables(fondos):
+        reparto.setdefault(fondo.get("fuente", "?"), []).append(fondo)
+    return reparto
 
 
 def usables(fondos=None):

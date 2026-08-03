@@ -238,6 +238,35 @@ fondo() {
         gris "    elige uno con: celiuzpaper"
         gris "    o a mano con:  hypr/scripts/set-wallpaper.sh <ruta-al-video>"
     fi
+    # La carpeta de videos del sistema, que es un modulo mas del selector. Se
+    # pregunta a la libreria para no repetir aqui la logica de XDG.
+    local videos
+    videos=$(python3 -c "
+import sys; sys.path.insert(0, '$REPO/hypr/scripts/lib')
+import wallpapers as wp
+print(wp.carpeta_videos() or '')" 2>/dev/null)
+    if [ -n "$videos" ]; then
+        gris "  tu carpeta de videos: $videos  (sale como modulo en celiuzpaper)"
+    fi
+}
+
+# --- 7. La pantalla -----------------------------------------------------------
+# No hay nada que instalar: se mide en caliente cada vez. Se ensena para que se
+# vea CON QUE numeros va a trabajar el escritorio en este equipo, que es de donde
+# salen las medidas del bloqueo y del selector de fondos.
+
+pantalla() {
+    titulo "7. Pantalla"
+    local resumen
+    resumen=$("$REPO/hypr/scripts/lib/pantalla.py" 2>/dev/null)
+    if [ -z "$resumen" ]; then
+        aviso "no se pudo medir la pantalla (lib/pantalla.py)"
+        return
+    fi
+    printf '%s\n' "$resumen" | sed '/^$/d' | sed 's/^/  /'
+    if printf '%s' "$resumen" | grep -q "NO detectada"; then
+        aviso "sin pantalla detectada: se usan medidas de reserva (1920x1080)"
+    fi
 }
 
 # --- Adelante ----------------------------------------------------------------
@@ -255,6 +284,7 @@ else
     dock
     terminal_local
     fondo
+    pantalla
 fi
 
 titulo "Resumen"
