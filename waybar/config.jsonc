@@ -174,13 +174,18 @@
         // Se ve "󰥔 26 jul  20:15". Ni clic derecho ni tooltip: el izquierdo
         // abre el panel de calendario y con eso basta.
         //
-        // Para que el mes salga en espanol hacen falta LAS DOS COSAS de abajo:
-        //  - el nombre EXACTO del locale que aparece en `locale -a` (es_PE.utf8).
-        //    Con "es_PE.UTF-8" waybar no falla ni avisa: se queda en ingles.
-        //  - la "L" del formato. Waybar formatea con la libreria fmt, y fmt solo
-        //    consulta el locale cuando el formato lleva ese especificador.
-        // Sin cualquiera de las dos, el mes sale como "Jul" en vez de "jul".
-        "locale": "es_PE.utf8",
+        // La "L" del formato NO es decorativa: waybar formatea con la libreria
+        // fmt, y fmt solo consulta el locale cuando el formato lleva ese
+        // especificador. Sin ella el mes sale "Jul" en vez de "jul" por muy
+        // bien puesto que este el idioma.
+        //
+        // Y NO se pone aqui ningun "locale". Antes decia "es_PE.utf8", que en
+        // esta laptop no esta generado (`locale -a` solo trae es_MX.utf8);
+        // cuando el locale no existe waybar no falla ni avisa: se queda en
+        // ingles y el mes sale "Aug". Cablear un pais es ademas lo que este
+        // repo no debe hacer, que se usa en mas de un equipo. Sin la opcion,
+        // waybar toma el locale de la sesion, y los nombres de mes son iguales
+        // en todos los locales de espanol.
         "format": "<span size='130%'>󰥔</span> {:L%d %b  %H:%M}",
         // El calendario ya no vive aqui. El tooltip de waybar solo sabe dibujar
         // una rejilla de numeros: no puede mostrar feriados ni tus eventos de
