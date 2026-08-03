@@ -39,24 +39,17 @@ fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: co
 un `$HOME` de mentira, `gen-dock.py` acabó escribiendo en el repo **de verdad**
 porque resolvía `~/dotfiles/waybar`.
 
-**Estado real, sin adornos:** solo `lock.sh`, `wallpaper.sh` y `gen-dock.py`
-averiguan su ruta. Quedan **53 apariciones en código** de `$HOME/dotfiles` (más
-30 en comentarios, que dan igual), así que **hoy el repo sigue obligando a
-clonar en `~/dotfiles`** y el README debe seguir diciéndolo. No lo "arregles" a
-medias en la documentación.
+**Ya está hecho (2026-08-03).** No queda ninguna ruta cableada en código: los
+`.conf` se referencian por `$HOME/.config/hypr/...` —el enlace que crea
+`instalar.sh`, que vale se clone el repo donde se clone— y los scripts sacan su
+raíz de `realpath(__file__)` o de `readlink -f "$BASH_SOURCE"`. Lo de `realpath`
+y no `abspath` importa: a estos scripts se les llama por `~/.config/hypr/...` y a
+CeliuzPaper por `~/.local/bin/`, y hay que atravesar el enlace para llegar al
+repo.
 
-**Cuando se aborde, el camino ya está medido y es más corto de lo que parece:**
-
-| Dónde | Cuántas | Cómo |
-|---|---|---|
-| `.conf` (hyprland, keybinds, autostart, hypridle, hyprlock) | 28 | cambiar `$HOME/dotfiles/hypr/` por **`$HOME/.config/hypr/`** |
-| Scripts `.py` y `.sh` | 25 | sacar la raíz de `__file__` / `BASH_SOURCE`, como ya hacen tres |
-
-Lo de los `.conf` funciona porque **`~/.config/hypr` es un enlace que crea
-`instalar.sh`**, así que esa ruta es la misma se clone el repo donde se clone. No
-hace falta ninguna variable ni ningún generador nuevo.
-
-Lo que **no** vale: `source` con ruta relativa. Ver las trampas más abajo.
+**`tests/unidad/portabilidad.sh` es el cerrojo**: falla si alguien vuelve a
+escribir `$HOME/dotfiles` en código, y dice fichero y línea. Los comentarios sí
+pueden mencionarlo.
 
 **Ni se te ocurra "arreglar" esto detectando la máquina al instalar y escribiendo
 un fichero.** Lo que depende del equipo se pregunta EN CALIENTE: la pantalla con

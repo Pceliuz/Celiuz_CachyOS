@@ -73,7 +73,12 @@ TERMINALES = {"kitty", "foot", "alacritty", "wezterm", "ghostty", "konsole"}
 CAPA_PANTALLA_COMPLETA = True
 
 REGLAS_ANANICY = "/etc/ananicy.d"
-EXCEPCIONES = os.path.expanduser("~/dotfiles/hypr/congelar-excepciones.json")
+# La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
+# llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
+# hasta el fichero de verdad dentro del repo, se haya clonado donde se haya
+# clonado. Antes ponia "~/dotfiles/...", que obligaba a clonar justo ahi.
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+EXCEPCIONES = os.path.join(RAIZ, "hypr/congelar-excepciones.json")
 
 # Rastros de Steam en la linea de comandos de un juego lanzado desde Steam.
 HUELLA_STEAM = re.compile(r"(steamapps|SteamLaunch|steam_app_|/steam/|proton)", re.I)

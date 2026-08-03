@@ -57,7 +57,12 @@ import random
 import signal
 import sys
 
-sys.path.insert(0, os.path.expanduser("~/dotfiles/hypr/scripts/lib"))
+# La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
+# llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
+# hasta el fichero de verdad dentro del repo, se haya clonado donde se haya
+# clonado. Antes ponia "~/dotfiles/...", que obligaba a clonar justo ahi.
+RAIZ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(RAIZ, "hypr/scripts/lib"))
 
 import gi
 

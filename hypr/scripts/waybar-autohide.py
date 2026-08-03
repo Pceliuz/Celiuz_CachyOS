@@ -70,7 +70,12 @@ import subprocess
 import sys
 import time
 
-WAYBAR_DIR = os.path.expanduser("~/dotfiles/waybar")
+# La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
+# llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
+# hasta el fichero de verdad dentro del repo, se haya clonado donde se haya
+# clonado. Antes ponia "~/dotfiles/...", que obligaba a clonar justo ahi.
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+WAYBAR_DIR = os.path.join(RAIZ, "waybar")
 
 # Franja desde el borde superior que cuenta como "el puntero esta en la barra".
 # Algo mas que los 38 px de alto, para que rozar el borde no la cierre.

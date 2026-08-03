@@ -234,12 +234,12 @@ def generar(datos=None):
     rutas = [ruta_icono(app.get("icon_name")) for app in apps]
 
     lineas = [
-        "// ~/dotfiles/waybar/dock.jsonc",
+        "// waybar/dock.jsonc",
         "//",
-        "// GENERADO por ~/dotfiles/hypr/scripts/gen-dock.py — NO EDITAR A MANO:",
+        "// GENERADO por hypr/scripts/gen-dock.py — NO EDITAR A MANO:",
         "// cualquier cambio se pierde la proxima vez que se anada o quite una app.",
         "//",
-        "// Las apps se editan en ~/dotfiles/waybar/dock-apps.json, o con el clic",
+        "// Las apps se editan en waybar/dock-apps.json, o con el clic",
         "// derecho sobre cualquier icono del dock, que abre el gestor.",
         "//",
         "// El aspecto (colores, tamano de la pastilla, redondeo) esta en el bloque",
@@ -321,9 +321,9 @@ def generar_css(ids, apps, rutas):
     comunes (tamano, centrado, no repetir) estan alli; aqui solo la ruta.
     """
     lineas = [
-        "/* ~/dotfiles/waybar/dock-icons.css",
+        "/* waybar/dock-icons.css",
         " *",
-        " * GENERADO por ~/dotfiles/hypr/scripts/gen-dock.py — NO EDITAR A MANO.",
+        " * GENERADO por hypr/scripts/gen-dock.py — NO EDITAR A MANO.",
         " * Lo carga style.css con @import.",
         " *",
         " * Los iconos propios de las apps van como background-image y no con el",

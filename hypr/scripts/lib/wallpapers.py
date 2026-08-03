@@ -37,9 +37,14 @@ import socket
 import subprocess
 
 CASA = os.path.expanduser("~")
-WALLDIR = os.path.join(CASA, "dotfiles/hypr/wallpapers")
+# La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
+# llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
+# hasta el fichero de verdad dentro del repo, se haya clonado donde se haya
+# clonado. Antes ponia "~/dotfiles/...", que obligaba a clonar justo ahi.
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+WALLDIR = os.path.join(RAIZ, "hypr/wallpapers")
 CURRENT = os.path.join(WALLDIR, "current")
-LANZADOR = os.path.join(CASA, "dotfiles/hypr/scripts/wallpaper.sh")
+LANZADOR = os.path.join(RAIZ, "hypr/scripts/wallpaper.sh")
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")

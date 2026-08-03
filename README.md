@@ -98,8 +98,17 @@ cd ~/dotfiles
 ./instalar.sh
 ```
 
-La ruta `~/dotfiles` no es opcional: los `.conf` escriben
-`$HOME/dotfiles/...` literalmente.
+**Clónalo donde quieras.** `~/dotfiles`, `~/.dotfiles`, `~/repos/mis-configs`: da
+igual. Los `.conf` se referencian entre ellos por `$HOME/.config/hypr/...`, que
+es el enlace que crea el instalador, y los scripts averiguan la raíz del repo a
+partir de dónde está su propio fichero. Lo único que no debes hacer es mover la
+carpeta *después* de instalar sin volver a ejecutar `./instalar.sh`, porque los
+enlaces de `~/.config` seguirían apuntando al sitio viejo.
+
+(Antes esto no era así: el repo obligaba a clonar exactamente en `~/dotfiles` y,
+si lo ponías en otro sitio, media configuración quedaba muerta **sin dar ningún
+error**. Hay una prueba, `tests/unidad/portabilidad.sh`, que impide que la
+costumbre vuelva.)
 
 `instalar.sh` se puede repetir cuantas veces haga falta y no pisa lo que ya
 esté hecho. Antes de nada, `./instalar.sh --revisar` cuenta lo que haría sin

@@ -60,10 +60,15 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 # Lo abre mpvpaper con --input-ipc-server (ver wallpaper.sh).
 MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
 STOPLIST = os.path.expanduser("~/.config/mpvpaper/stoplist")
-LANZADOR = os.path.expanduser("~/dotfiles/hypr/scripts/wallpaper.sh")
+# La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
+# llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
+# hasta el fichero de verdad dentro del repo, se haya clonado donde se haya
+# clonado. Antes ponia "~/dotfiles/...", que obligaba a clonar justo ahi.
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+LANZADOR = os.path.join(RAIZ, "hypr/scripts/wallpaper.sh")
 # El enlace al video que esta puesto. Si no existe es que aun no se ha elegido
 # ninguno, y entonces no hay nada que revivir.
-CURRENT = os.path.expanduser("~/dotfiles/hypr/wallpapers/current")
+CURRENT = os.path.join(RAIZ, "hypr/wallpapers/current")
 # Cuantas veces seguidas se intenta resucitar mpvpaper antes de rendirse y
 # decirlo. Ver el bloque 1b del bucle.
 MAX_REVIVIR = 3

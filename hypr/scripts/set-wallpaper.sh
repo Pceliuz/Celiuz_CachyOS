@@ -16,7 +16,10 @@
 
 set -uo pipefail
 
-APP="$HOME/dotfiles/celiuzpaper/celiuzpaper.py"
+# La raiz del repo, sacada de donde esta este fichero: asi vale clonado en
+# cualquier ruta y no solo en ~/dotfiles.
+RAIZ="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)"
+APP="$RAIZ/celiuzpaper/celiuzpaper.py"
 
 case "${1:-}" in
     "")            exec "$APP" ;;
