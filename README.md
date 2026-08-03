@@ -24,6 +24,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 | `celiuzpaper/` | App propia para cambiar el fondo de pantalla. |
 | `mako/` | Notificaciones. `config` a mano, `colores` generado. |
 | `mpvpaper/` | Lista de programas que pausan el fondo en vídeo. |
+| `tests/` | Pruebas automáticas. `./tests/run.sh` y listo — no hacen falta ni Hyprland corriendo ni nada instalado. |
 
 ### Las piezas a medida
 
@@ -830,12 +831,30 @@ Es de tu equipo, no del repo: en otra máquina esas rutas no existirían.
 
 ## Estado
 
-Hecho: monitores, teclado, barra, dock, lanzador, fondo en vídeo, capturas,
-calendario, monitores del sistema, pantalla de bloqueo, auto-bloqueo por
-inactividad, y el aspecto (paleta, decoración y animaciones).
+**Hecho:** monitores, teclado (dos distribuciones), barra y dock con
+auto-ocultado, lanzador, cambiador de escritorios (`SUPER+TAB`), fondo en vídeo o
+imagen con su selector propio, capturas, calendario, monitores del sistema,
+pantalla de bloqueo y auto-bloqueo, el aspecto (paleta, decoración y
+animaciones), adaptación a la pantalla que haya, portabilidad a cualquier ruta de
+clonado, y pruebas automáticas.
 
-Pendiente: `env.conf` para Nvidia, reglas de ventana del flujo de seguridad e
-historial del portapapeles.
+**Pendiente, por orden de valor:**
+
+| | Qué | Por qué importa |
+|---|---|---|
+| 1 | **`env.conf` para Nvidia — está vacío** | Es lo que más puede afectar jugando en Wayland. Ojo: muchas variables que circulan por los foros llevan años obsoletas en 0.56 y algunas empeoran el rendimiento; hay que comprobar cuáles hacen falta de verdad, no copiar listas. Pista: el Hyprland anidado sobre esta NVIDIA solo levanta con `AQ_NO_MODIFIERS=1`. |
+| 2 | **Teclas multimedia y la perilla del teclado** | No hay ni un bind de volumen en toda la config. Es rápido. |
+| 3 | **Historial del portapapeles** | `SUPER+SHIFT+V` ya está reservado. Candidato: cliphist. |
+| 4 | **Reglas de ventana del flujo de seguridad** | VMs, Burp… Hay que decidir antes qué herramientas se usan de verdad. |
+| 5 | **El login (SDDM) y el TTY siguen en `latam`** | `/etc/vconsole.conf` gobierna la pantalla de login, así que la contraseña al encender se teclea con otra distribución que la de la sesión. Es un cambio de sistema, fuera del repo. |
+
+Menores, ya ofrecidos y no pedidos: regla de sudo estrecha para
+`ir-a-windows.sh`, `windowrule` para que su terminal salga flotante, atajo propio
+para CeliuzPaper, y un botón de «añadir comando a mano» en el gestor del dock
+(para AppImages y binarios sueltos, que ningún escaneo de `.desktop` cubre).
+
+Para retomar el trabajo hay un **`SIGUIENTE.md`** con el detalle de cada
+pendiente y las pistas que ya se encontraron.
 
 > **Aviso de futuro:** Hyprland avisa al arrancar de que *el formato `.conf`
 > dejará de estar soportado en la 0.57*. Todo este repo está en hyprlang `.conf`
