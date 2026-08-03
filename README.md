@@ -44,8 +44,8 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`celiuzpaper`** — cambia el fondo de pantalla, en vídeo o en imagen fija. Al moverte por la tira
   el fondo cambia **de verdad** a pantalla completa; Enter lo fija, Escape
   restaura. Los fondos vienen de varios sitios y cada uno es un **módulo** en la
-  fila de arriba: el Workshop de Wallpaper Engine, tu carpeta de vídeos y las
-  carpetas que añadas tú. `TAB` cambia de módulo. También sirve por CLI
+  fila de arriba: el Workshop de Wallpaper Engine, **tu carpeta de vídeos**, **tu
+  carpeta de imágenes** y las carpetas que añadas tú. `TAB` cambia de módulo. También sirve por CLI
   (`--list`, `--set`, `--random`, `--current`, `--carpetas`).
 - **`lib/pantalla.py`** — dice qué pantalla hay delante y **de ahí salen las
   medidas** del bloqueo y del selector de fondos, en vez de estar escritas para
@@ -682,8 +682,15 @@ cuesta relacionar con su causa. `wallpaper.sh` la añade mirando la extensión d
 fichero al que apunta el enlace `current` (no la del enlace, que no tiene).
 
 Importa porque casi todo lo que se descarga por ahí son imágenes: wallhaven.cc y
-los repos de colecciones de fondos de GitHub no tienen vídeo. Con esto, cualquier
-carpeta de imágenes vale como fuente — se añade con el botón `＋` de CeliuzPaper.
+los repos de colecciones de fondos de GitHub no tienen vídeo. Por eso **tu
+carpeta de imágenes es un módulo propio** en CeliuzPaper, igual que la de vídeos:
+ahí es donde acaban de verdad los fondos que uno se baja. Y cualquier otra
+carpeta se añade con el botón `＋`.
+
+Las dos carpetas se preguntan al estándar XDG, así que salen con **el nombre que
+tengan en tu idioma** — aquí `Vídeos` e `Imágenes`, en un sistema en inglés
+`Videos` y `Pictures`, en alemán `Bilder`. No se adivina ningún nombre. Si las
+dos apuntaran al mismo sitio, sale una sola pestaña.
 
 Extensiones que se reconocen:
 

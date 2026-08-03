@@ -39,14 +39,24 @@ fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: co
 un `$HOME` de mentira, `gen-dock.py` acabó escribiendo en el repo **de verdad**
 porque resolvía `~/dotfiles/waybar`.
 
-**Estado real de esto, sin adornos:** solo `lock.sh`, `wallpaper.sh` y
-`gen-dock.py` averiguan su ruta. Quedan **~82 apariciones** de `$HOME/dotfiles`
-repartidas entre los `.conf` (42), otros scripts de shell (15) y de Python (25),
-así que **hoy el repo sigue obligando a clonar en `~/dotfiles`**. Los `.conf` son
-el hueso duro: hyprlang no sabe dónde está su propio fichero, y `hyprland.conf`,
-`hyprlock.conf`, `hypridle.conf`, `keybinds.conf` y `autostart.conf` los
-necesitan. Mientras eso siga así, el README debe seguir diciendo que la ruta no
-es opcional — no lo "arregles" a medias en la documentación.
+**Estado real, sin adornos:** solo `lock.sh`, `wallpaper.sh` y `gen-dock.py`
+averiguan su ruta. Quedan **53 apariciones en código** de `$HOME/dotfiles` (más
+30 en comentarios, que dan igual), así que **hoy el repo sigue obligando a
+clonar en `~/dotfiles`** y el README debe seguir diciéndolo. No lo "arregles" a
+medias en la documentación.
+
+**Cuando se aborde, el camino ya está medido y es más corto de lo que parece:**
+
+| Dónde | Cuántas | Cómo |
+|---|---|---|
+| `.conf` (hyprland, keybinds, autostart, hypridle, hyprlock) | 28 | cambiar `$HOME/dotfiles/hypr/` por **`$HOME/.config/hypr/`** |
+| Scripts `.py` y `.sh` | 25 | sacar la raíz de `__file__` / `BASH_SOURCE`, como ya hacen tres |
+
+Lo de los `.conf` funciona porque **`~/.config/hypr` es un enlace que crea
+`instalar.sh`**, así que esa ruta es la misma se clone el repo donde se clone. No
+hace falta ninguna variable ni ningún generador nuevo.
+
+Lo que **no** vale: `source` con ruta relativa. Ver las trampas más abajo.
 
 **Ni se te ocurra "arreglar" esto detectando la máquina al instalar y escribiendo
 un fichero.** Lo que depende del equipo se pregunta EN CALIENTE: la pantalla con
@@ -120,6 +130,12 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
 - **`hyprland.lua` gana a `hyprland.conf`.** Hyprland 0.56 lo busca primero y
   CachyOS trae el suyo en Lua. Si reaparece, esta config queda ignorada en
   silencio. `instalar.sh` avisa.
+- **`source` con ruta RELATIVA no funciona en hyprlang, y falla en silencio.**
+  `source = conf/trozo.conf` desde `hyprland.conf` no carga nada: las variables
+  del fichero quedan sin definir y **`configerrors` sale vacío** (medido en un
+  anidado: el valor se quedó en el de fábrica). Los `source` van con ruta
+  absoluta. La buena es `$HOME/.config/hypr/...`, que vale se clone el repo
+  donde se clone, porque ese enlace lo crea `instalar.sh`.
 - **`hyprctl reload` no basta** para probar cambios de `exec-once`: solo corren al
   arrancar la sesión. Y si la sesión arrancó desde un `.lua`, `reload` no cae de
   vuelta al `.conf`.

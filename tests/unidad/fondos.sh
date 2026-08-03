@@ -45,9 +45,41 @@ rm -f "$XDG_CONFIG_HOME/user-dirs.dirs"; rm -rf "$HOME/Filmy"
 afirmar_igual "" "$(consultar 'print(wp.carpeta_videos() or "")')" \
     "sin carpeta de videos, no se inventa ninguna (ni usa el HOME entero)"
 
+titulo "1b. La carpeta de imagenes, tambien en el idioma que sea"
+mkdir -p "$HOME/Vídeos" "$HOME/Imágenes"
+printf 'XDG_VIDEOS_DIR="$HOME/Vídeos"\nXDG_PICTURES_DIR="$HOME/Imágenes"\n' \
+    > "$XDG_CONFIG_HOME/user-dirs.dirs"
+afirmar_igual "$HOME/Imágenes" "$(consultar 'print(wp.carpeta_imagenes() or "")')" \
+    "encuentra ~/Imágenes con tilde (sistema en espanol)"
+
+rm -rf "$HOME/Imágenes"; mkdir -p "$HOME/Pictures"
+printf 'XDG_VIDEOS_DIR="$HOME/Vídeos"\nXDG_PICTURES_DIR="$HOME/Pictures"\n' \
+    > "$XDG_CONFIG_HOME/user-dirs.dirs"
+afirmar_igual "$HOME/Pictures" "$(consultar 'print(wp.carpeta_imagenes() or "")')" \
+    "encuentra ~/Pictures (sistema en ingles)"
+
+# Las dos carpetas son DOS modulos distintos, con el nombre que tengan de verdad.
+: > "$HOME/Vídeos/clip.mp4"
+: > "$HOME/Pictures/fondo.jpg"
+afirmar_igual "['Vídeos', 'Pictures']" \
+    "$(consultar 'print([f["nombre"] for f in wp.fuentes() if f["id"] in ("videos","imagenes")])')" \
+    "salen como dos modulos, cada uno con su nombre real"
+afirmar_igual "1" "$(consultar 'print(len(wp.por_fuente().get("imagenes", [])))')" \
+    "el modulo de imagenes ensena lo que hay dentro"
+
+# Si un equipo tuviera las dos apuntando al mismo sitio, una sola pestana.
+rm -rf "$HOME/Pictures"
+printf 'XDG_VIDEOS_DIR="$HOME/Vídeos"\nXDG_PICTURES_DIR="$HOME/Vídeos"\n' \
+    > "$XDG_CONFIG_HOME/user-dirs.dirs"
+afirmar_igual "1" \
+    "$(consultar 'print(len([f for f in wp.fuentes() if f["id"] in ("videos","imagenes")]))')" \
+    "si las dos apuntan al mismo sitio, no se duplica la pestana"
+rm -f "$HOME/Vídeos/clip.mp4"
+
 titulo "2. Que encuentra dentro"
 mkdir -p "$HOME/Vídeos/anime" "$HOME/Vídeos/.oculta"
 printf 'XDG_VIDEOS_DIR="$HOME/Vídeos"\n' > "$XDG_CONFIG_HOME/user-dirs.dirs"
+rm -rf "$HOME/Imágenes" "$HOME/Pictures"
 : > "$HOME/Vídeos/uno.mp4"
 : > "$HOME/Vídeos/dos.MKV"
 : > "$HOME/Vídeos/anime/tres.webm"

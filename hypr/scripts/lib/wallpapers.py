@@ -143,28 +143,29 @@ def _leer_item(carpeta):
     }
 
 
-def carpeta_videos():
-    """La carpeta de videos del usuario, se llame como se llame en su idioma.
+def carpeta_xdg(clave, respaldos=()):
+    """Una carpeta del usuario (VIDEOS, PICTURES...), en el idioma que sea.
 
-    Aqui es ~/Vídeos, con tilde; en un sistema en ingles es ~/Videos y en frances
-    ~/Vidéos. Adivinar el nombre seria empezar mal, asi que se pregunta al
-    estandar XDG, que es justamente quien sabe la respuesta:
+    Aqui la de videos es ~/Vídeos con tilde y la de imagenes ~/Imágenes; en un
+    sistema en ingles son ~/Videos y ~/Pictures, y en aleman ~/Bilder. Adivinar
+    el nombre seria empezar mal, asi que se pregunta al estandar XDG, que es
+    justamente quien sabe la respuesta:
 
-      1. $XDG_VIDEOS_DIR, si el entorno ya la trae puesta.
+      1. $XDG_<CLAVE>_DIR, si el entorno ya la trae puesta.
       2. ~/.config/user-dirs.dirs, que es el fichero donde vive de verdad. Se lee
          a mano en vez de llamar a `xdg-user-dir` para no depender de que
          xdg-user-dirs este instalado.
       3. El binario `xdg-user-dir`, por si el fichero no estuviera.
-      4. Los dos nombres mas repetidos, como ultimo recurso.
+      4. Unos cuantos nombres conocidos, como ultimo recurso.
 
     Devuelve None si no existe ninguna: la app se apana sin ella.
     """
-    ruta = os.environ.get("XDG_VIDEOS_DIR")
+    ruta = os.environ.get(f"XDG_{clave}_DIR")
     if not ruta:
         try:
             with open(os.path.join(CASA, ".config/user-dirs.dirs"),
                       encoding="utf-8", errors="replace") as fh:
-                encontrado = re.search(r'^\s*XDG_VIDEOS_DIR\s*=\s*"?([^"\n]+)"?',
+                encontrado = re.search(rf'^\s*XDG_{clave}_DIR\s*=\s*"?([^"\n]+)"?',
                                        fh.read(), re.M)
             if encontrado:
                 # El fichero guarda las rutas como "$HOME/Vídeos".
@@ -173,19 +174,34 @@ def carpeta_videos():
             ruta = None
     if not ruta:
         try:
-            ruta = subprocess.run(["xdg-user-dir", "VIDEOS"], capture_output=True,
+            ruta = subprocess.run(["xdg-user-dir", clave], capture_output=True,
                                   text=True, timeout=5).stdout.strip()
         except (OSError, subprocess.TimeoutExpired):
             ruta = None
     if not ruta or os.path.realpath(ruta) == os.path.realpath(CASA):
         # Sin configurar, xdg-user-dir contesta el propio $HOME. Recorrer la casa
-        # entera buscando videos no es lo que nadie espera.
-        for nombre in ("Vídeos", "Videos", "Vidéos"):
+        # entera buscando fondos no es lo que nadie espera.
+        for nombre in respaldos:
             candidata = os.path.join(CASA, nombre)
             if os.path.isdir(candidata):
                 return candidata
         return None
     return ruta if os.path.isdir(ruta) else None
+
+
+def carpeta_videos():
+    """Tu carpeta de videos, la llame el sistema como la llame."""
+    return carpeta_xdg("VIDEOS", ("Vídeos", "Videos", "Vidéos", "Filme"))
+
+
+def carpeta_imagenes():
+    """Tu carpeta de imagenes, la llame el sistema como la llame.
+
+    Es un modulo aparte del de videos y no una mezcla: ahi es donde la gente
+    guarda de verdad los fondos que se descarga, que casi siempre son imagenes.
+    """
+    return carpeta_xdg("PICTURES", ("Imágenes", "Pictures", "Images", "Bilder",
+                                    "Imagens", "Immagini"))
 
 
 # --- Carpetas que anade el usuario --------------------------------------------
@@ -253,10 +269,23 @@ def fuentes():
         lista.append({"id": "workshop", "nombre": "Wallpaper Engine",
                       "tipo": "workshop", "ruta": None, "rutas": workshop,
                       "quitable": False})
-    videos = carpeta_videos()
-    if videos:
-        lista.append({"id": "videos", "nombre": os.path.basename(videos.rstrip("/")),
-                      "tipo": "carpeta", "ruta": videos, "rutas": [videos],
+    # Las dos carpetas del sistema, cada una su modulo. Se ensena el nombre que
+    # tengan de verdad ("Vídeos", "Imágenes", "Pictures"...), asi que el usuario
+    # ve el suyo y no una traduccion nuestra.
+    #
+    # Si un equipo tuviera las dos apuntando al mismo sitio, se queda una sola:
+    # dos pestanas identicas solo hacen dudar.
+    vistas = set()
+    for clave, carpeta in (("videos", carpeta_videos()),
+                           ("imagenes", carpeta_imagenes())):
+        if not carpeta:
+            continue
+        real = os.path.realpath(carpeta)
+        if real in vistas:
+            continue
+        vistas.add(real)
+        lista.append({"id": clave, "nombre": os.path.basename(carpeta.rstrip("/")),
+                      "tipo": "carpeta", "ruta": carpeta, "rutas": [carpeta],
                       "quitable": False})
     if os.path.isdir(CARPETA_REPO):
         lista.append({"id": "repo", "nombre": "Del repo", "tipo": "carpeta",
