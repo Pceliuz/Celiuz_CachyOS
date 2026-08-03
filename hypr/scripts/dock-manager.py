@@ -47,6 +47,7 @@ import nf_icons  # noqa: E402
 
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 GEN = os.path.join(SCRIPTS, "gen-dock.py")
+TERMINAL = os.path.join(SCRIPTS, "terminal.sh")
 DATOS_DOCK = os.path.expanduser("~/dotfiles/waybar/dock-apps.json")
 
 ANCHO = 460
@@ -393,7 +394,13 @@ def _leer_desktop(ruta, ident):
     comando = " ".join(comando.split())
     if campos.get("Terminal", "").lower() == "true":
         # Una app de consola sin terminal no se ve: se le pone la del sistema.
-        comando = f"kitty -e {comando}"
+        # NO se nombra ninguna terminal aqui. Antes ponia `kitty -e` y en un
+        # equipo sin kitty el icono no abria nada. Quien sabe cual hay instalada
+        # es terminal.sh, y de paso le pone clase propia a la ventana.
+        #
+        # --sin-uwsm porque este comando lo lanza lanzar.sh, que ya mete la app
+        # en su scope de systemd: anidar un uwsm dentro de otro no vale de nada.
+        comando = f"{TERMINAL} --sin-uwsm dock-term {comando}"
     return (nombre, comando, comentario, ident, campos.get("Icon", "").strip())
 
 

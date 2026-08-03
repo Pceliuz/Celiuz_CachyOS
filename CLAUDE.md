@@ -63,6 +63,12 @@ Para lanzar cosas:
   está solo ahí. La clase no es decorativa: es lo que activa `windowrules.conf`.
   Con `--sin-uwsm` delante se salta el prefijo de systemd, para quien ya lo pone.
 
+Una app del dock con `Terminal=true` en su `.desktop` sale por los dos a la vez:
+`dock-manager.py` le pone `terminal.sh --sin-uwsm dock-term` delante al añadirla,
+y `gen-dock.py` antepone `lanzar.sh` al generar. El `--sin-uwsm` es obligatorio
+ahí: sin él saldrían dos scopes de systemd anidados. La clase `dock-term` no
+tiene windowrule a propósito — sale en mosaico, como cualquier otra app del dock.
+
 `fuzzel/fuzzel.ini` lo llama por `terminal=celiuz-terminal --sin-uwsm
 fuzzel-term`, un enlace a ese mismo script que `instalar.sh` deja en
 `~/.local/bin`. Va por el PATH y no por ruta a propósito: **fuzzel no expande `~`
