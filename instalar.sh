@@ -4,9 +4,11 @@
 # Deja este escritorio funcionando en una maquina nueva. Se puede volver a
 # ejecutar cuantas veces haga falta: no repite lo que ya esta hecho.
 #
-#   ./instalar.sh              instala
-#   ./instalar.sh --revisar    solo dice que haria, sin tocar nada
-#   ./instalar.sh --dock       solo rehace el dock de esta maquina
+#   ./instalar.sh                 instala
+#   ./instalar.sh --revisar       solo dice que haria, sin tocar nada
+#   ./instalar.sh --dock          solo rehace el dock de esta maquina
+#   ./instalar.sh --sddm          pantalla de inicio de sesion (PIDE SUDO)
+#   ./instalar.sh --sddm-quitar   la quita y deja la de antes
 #
 # POR QUE HACE FALTA UN INSTALADOR Y NO VALEN CUATRO `ln`
 # ------------------------------------------------------
@@ -29,11 +31,15 @@ DATOS="${XDG_DATA_HOME:-$HOME/.local/share}"
 
 SOLO_REVISAR=0
 SOLO_DOCK=0
+SOLO_SDDM=0
+QUITAR_SDDM=0
 for arg in "$@"; do
     case "$arg" in
-        --revisar|-n) SOLO_REVISAR=1 ;;
-        --dock)       SOLO_DOCK=1 ;;
-        -h|--help)    sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+        --revisar|-n)  SOLO_REVISAR=1 ;;
+        --dock)        SOLO_DOCK=1 ;;
+        --sddm)        SOLO_SDDM=1 ;;
+        --sddm-quitar) QUITAR_SDDM=1 ;;
+        -h|--help)     sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
         *) echo "instalar: no entiendo «$arg». Prueba --help" >&2; exit 2 ;;
     esac
 done
@@ -269,13 +275,195 @@ pantalla() {
     fi
 }
 
+# --- 8. Pantalla de inicio de sesion (SDDM) ----------------------------------
+# ES EL UNICO PASO QUE PIDE ROOT, y por eso va aparte y no se ejecuta con el
+# resto: un tema de SDDM no tiene equivalente por usuario, tiene que vivir en
+# /usr/share/sddm/themes. Todo lo demas de este repo se instala sin contrasena y
+# asi debe seguir.
+#
+# Tampoco es imprescindible: sin correrlo, el escritorio funciona igual y solo
+# te falta la pantalla del arranque.
+
+SDDM_TEMA="/usr/share/sddm/themes/celiuz"
+SDDM_DROPIN="/etc/sddm.conf.d/10-celiuz.conf"
+
+# Segundos del video que se copian. El greeter se ve unos segundos y el fichero
+# acaba en /usr/share, que no es sitio para los 700 MB de un fondo largo. Se
+# puede subir:  SDDM_SEGUNDOS=60 ./instalar.sh --sddm
+SDDM_SEGUNDOS="${SDDM_SEGUNDOS:-30}"
+
+# Hacer algo como root, contandolo antes. En --revisar no pide contrasena ni
+# toca nada, para que se pueda mirar que haria sin dar permisos.
+raiz() {
+    if [ "$SOLO_REVISAR" -eq 1 ]; then
+        gris "  (haria, como root) $*"
+        return 0
+    fi
+    if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
+}
+
+# El fondo del arranque: un video recortado y reescalado A ESTA pantalla, mas un
+# fotograma de reserva.
+#
+# Aqui SI se mide en la instalacion, al contrario que en todo lo demas del repo,
+# y es a proposito: copiar a /usr/share pide root, asi que no hay forma de
+# rehacerlo "en caliente" cada vez que arranca el greeter. La consecuencia hay
+# que decirla y esta en el README: si cambias de fondo o de monitor, vuelve a
+# pasar ./instalar.sh --sddm.
+preparar_fondo_sddm() {
+    local origen="$1" ancho alto tmp escalar
+    ancho=$("$REPO/hypr/scripts/lib/pantalla.py" ancho 2>/dev/null)
+    alto=$("$REPO/hypr/scripts/lib/pantalla.py" alto 2>/dev/null)
+    [ -n "$ancho" ] || ancho=1920
+    [ -n "$alto" ]  || alto=1080
+
+    echo "  fondo: $(basename "$origen")"
+    gris "    a ${ancho}x${alto}, ${SDDM_SEGUNDOS}s como mucho"
+
+    if [ "$SOLO_REVISAR" -eq 1 ]; then
+        gris "  (haria) reescalar el video con ffmpeg y copiarlo como root"
+        return 0
+    fi
+
+    # Llena la pantalla aunque la proporcion no cuadre, igual que --panscan=1.0
+    # en el escritorio: mejor recortar que dejar franjas negras.
+    escalar="scale=$ancho:$alto:force_original_aspect_ratio=increase,crop=$ancho:$alto"
+
+    tmp=$(mktemp -d) || { aviso "no pude crear un temporal para el fondo"; return 1; }
+
+    # El fotograma va PRIMERO a proposito: es la red de seguridad, pesa nada y
+    # sirve aunque el equipo no tenga con que decodificar video. Si solo se
+    # copiara el mp4 y el codec fallara, la pantalla se quedaria en el degradado.
+    if ffmpeg -v error -y -ss 1 -i "$origen" -frames:v 1 -vf "$escalar" \
+              -q:v 3 "$tmp/fondo.jpg" 2>/dev/null; then
+        raiz install -m 644 "$tmp/fondo.jpg" "$SDDM_TEMA/fondo.jpg"
+        hecho "  fotograma de reserva puesto"
+    else
+        aviso "no se pudo sacar el fotograma del fondo (ffmpeg)"
+    fi
+
+    if ffmpeg -v error -y -i "$origen" -t "$SDDM_SEGUNDOS" -an \
+              -vf "$escalar" -c:v libx264 -preset veryfast -crf 26 \
+              -pix_fmt yuv420p "$tmp/fondo.mp4" 2>/dev/null; then
+        raiz install -m 644 "$tmp/fondo.mp4" "$SDDM_TEMA/fondo.mp4"
+        hecho "  video puesto ($(du -h "$tmp/fondo.mp4" | cut -f1))"
+    else
+        aviso "no se pudo reescalar el video (falta libx264 en ffmpeg?); queda el fotograma"
+    fi
+
+    rm -rf "$tmp"
+}
+
+sddm_instalar() {
+    titulo "8. Pantalla de inicio de sesion (SDDM)"
+
+    # El nombre de la funcion NO es `sddm` a proposito: `command -v sddm`
+    # encontraria la funcion en vez del programa y esta comprobacion diria que si
+    # siempre, hasta en un equipo sin SDDM.
+    if ! command -v sddm >/dev/null 2>&1; then
+        aviso "SDDM no esta instalado: este tema es solo para el"
+        gris "    si usas greetd, ly o gdm, esta pantalla no te sirve"
+        gris "    para SDDM:  sudo pacman -S sddm && sudo systemctl enable sddm"
+        return
+    fi
+
+    # Estar instalado no es estar arrancando.
+    if ! systemctl is-enabled sddm.service >/dev/null 2>&1; then
+        aviso "SDDM no esta habilitado: el tema se instala, pero no lo veras hasta activarlo"
+        gris "    sudo systemctl enable sddm.service"
+    fi
+
+    # El modulo QML de video. Se busca la carpeta y no se pregunta a pacman a
+    # proposito: asi la comprobacion sigue diciendo la verdad en una distro que
+    # no sea Arch.
+    if [ ! -d /usr/lib/qt6/qml/QtMultimedia ] && [ ! -d /usr/lib64/qt6/qml/QtMultimedia ]; then
+        aviso "falta el modulo QML de video: el fondo saldra quieto (fotograma)"
+        gris "    sudo pacman -S qt6-multimedia qt6-multimedia-ffmpeg"
+    fi
+
+    # Un `Current=` en /etc/sddm.conf GANA sobre el drop-in, asi que si hay uno
+    # el tema se instalaria y no se veria. Mas vale decirlo que dejar a alguien
+    # buscando por que no cambia nada.
+    if grep -qE '^[[:space:]]*Current[[:space:]]*=' /etc/sddm.conf 2>/dev/null; then
+        aviso "/etc/sddm.conf ya fija un tema y ese manda sobre el drop-in"
+        gris "    quita esa linea Current= o ponla a: Current=celiuz"
+    fi
+
+    echo "  tema -> $SDDM_TEMA"
+    raiz install -d -m 755 "$SDDM_TEMA"
+    local f
+    for f in Main.qml FondoVideo.qml Colores.qml theme.conf metadata.desktop; do
+        if [ ! -f "$REPO/sddm/celiuz/$f" ]; then
+            aviso "falta $f en el repo: el tema quedaria a medias"
+            return
+        fi
+        raiz install -m 644 "$REPO/sddm/celiuz/$f" "$SDDM_TEMA/$f"
+    done
+    hecho "  tema copiado"
+
+    local origen=""
+    [ -e "$REPO/hypr/wallpapers/current" ] && \
+        origen="$(readlink -f "$REPO/hypr/wallpapers/current")"
+    if [ -n "$origen" ] && [ -f "$origen" ]; then
+        preparar_fondo_sddm "$origen"
+    else
+        gris "  todavia no hay fondo elegido: la pantalla usara su degradado"
+        gris "    elige uno con celiuzpaper y vuelve a pasar ./instalar.sh --sddm"
+    fi
+
+    # El drop-in, y no /etc/sddm.conf: ese fichero puede tener ya cosas tuyas
+    # (autologin, por ejemplo) y machacarlo seria justo la clase de sorpresa que
+    # este repo evita. Un fichero propio se quita borrandolo.
+    if [ "$SOLO_REVISAR" -eq 1 ]; then
+        gris "  (haria, como root) escribir $SDDM_DROPIN con Current=celiuz"
+    else
+        raiz install -d -m 755 /etc/sddm.conf.d
+        printf '%s\n' \
+            "# GENERADO por $REPO/instalar.sh --sddm" \
+            "# Se quita con: ./instalar.sh --sddm-quitar" \
+            "[Theme]" \
+            "Current=celiuz" | raiz tee "$SDDM_DROPIN" >/dev/null
+        hecho "  $SDDM_DROPIN escrito"
+    fi
+
+    echo
+    gris "  pruebalo SIN reiniciar:"
+    gris "    sddm-greeter-qt6 --test-mode --theme $SDDM_TEMA"
+    gris "  si algo saliera mal en el arranque: Ctrl+Alt+F2, entra por consola y"
+    gris "    sudo rm $SDDM_DROPIN"
+}
+
+sddm_quitar() {
+    titulo "Quitar la pantalla de inicio de sesion"
+    raiz rm -f "$SDDM_DROPIN"
+    raiz rm -rf "$SDDM_TEMA"
+    hecho "  quitado: SDDM vuelve a su tema de siempre en el proximo arranque"
+}
+
+# En la instalacion normal no se toca nada de esto (pide root): solo se dice como
+# esta, para que nadie tenga que adivinar que existe.
+sddm_estado() {
+    titulo "8. Pantalla de inicio de sesion"
+    if [ -f "$SDDM_TEMA/Main.qml" ]; then
+        verde "  el tema celiuz esta puesto"
+        gris "    tras cambiar de fondo o de monitor:  ./instalar.sh --sddm"
+    else
+        echo "  no instalada (es opcional y es lo unico que pide sudo)"
+        gris "    ./instalar.sh --sddm"
+    fi
+}
+
 # --- Adelante ----------------------------------------------------------------
 
 if [ "$SOLO_REVISAR" -eq 1 ]; then
     printf '\033[1mREVISION — no se va a tocar nada\033[0m\n'
 fi
 
-if [ "$SOLO_DOCK" -eq 1 ]; then
+if [ "$QUITAR_SDDM" -eq 1 ]; then
+    sddm_quitar
+elif [ "$SOLO_SDDM" -eq 1 ]; then
+    sddm_instalar
+elif [ "$SOLO_DOCK" -eq 1 ]; then
     dock
 else
     comprobar_dependencias
@@ -285,6 +473,7 @@ else
     terminal_local
     fondo
     pantalla
+    sddm_estado
 fi
 
 titulo "Resumen"

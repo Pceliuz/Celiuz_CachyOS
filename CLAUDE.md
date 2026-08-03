@@ -66,7 +66,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | Generado | Lo escribe | Desde |
 |---|---|---|
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
-| `waybar/colores.css`, `mako/colores` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
+| `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/conf/local.conf` | `instalar.sh` | detección en la máquina |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
 
@@ -114,7 +114,57 @@ ni `$HOME`** en esa opción. Y el `include=` de fuzzel tampoco vale para sacar l
 línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale con
 1 y no abre el lanzador** (Hyprland, en cambio, solo avisa).
 
+## La pantalla de inicio de sesión (SDDM) es territorio aparte
+
+`sddm/celiuz/` es lo único del repo que **pide root** y lo único que se ejecuta
+**fuera de tu sesión**. Las reglas cambian ahí dentro:
+
+- **Lo que se ve al arrancar es una COPIA** en `/usr/share/sddm/themes/celiuz`.
+  Editar el QML del repo no cambia nada hasta pasar `./instalar.sh --sddm`. Es
+  el error de bucle más fácil de cometer: tocas, pruebas, no cambia, y te vuelves
+  loco.
+- **El greeter corre como el usuario `sddm`**, que no puede entrar en
+  `/home/<tú>` (está a 700). Nada de rutas a tu carpeta: el fondo se copia dentro
+  del tema, y por eso no se actualiza solo al cambiar de wallpaper.
+- **Se instala aparte a propósito.** El resto del repo no pide contraseña nunca y
+  así debe seguir. `sddm_estado()` solo informa en la instalación normal.
+- **La función de bash NO se llama `sddm`**: se llama `sddm_instalar`, porque
+  `command -v sddm` encontraría la función en vez del programa y la comprobación
+  de "¿está instalado SDDM?" diría que sí hasta en un equipo sin él.
+- **Se escribe un drop-in en `/etc/sddm.conf.d/`, nunca `/etc/sddm.conf`**: ese
+  fichero puede tener cosas del usuario (aquí tenía un autologin a medias). Ojo:
+  un `Current=` en `/etc/sddm.conf` **gana** sobre el drop-in, y entonces el tema
+  se instala y no se ve. El instalador lo comprueba y avisa.
+- **Probar es gratis y hay que hacerlo**: `sddm-greeter-qt6 --test-mode --theme
+  <ruta>` abre una ventana normal. Un tema roto deja el arranque sin pantalla; se
+  sale por `Ctrl+Alt+F2` y borrando el drop-in.
+
 ## Trampas comprobadas (no las redescubras)
+
+- **Un `import` que falla en QML tumba el fichero ENTERO**, no solo esa línea. Si
+  `import QtMultimedia` estuviera en `Main.qml`, un equipo sin `qt6-multimedia`
+  se quedaría sin pantalla de inicio de sesión —negra, sin campo de contraseña—
+  y sin más salida que un TTY. Por eso el vídeo vive solo en `FondoVideo.qml` y
+  entra por un `Loader`: así lo peor que pasa es que el fondo caiga al fotograma.
+  **Cualquier import nuevo que pueda faltar va en su propio fichero.**
+- **`Qt.formatDate(fecha, "dddd")` NO respeta el idioma del sistema.** Con un
+  formato propio usa siempre los nombres en inglés. Medido dentro del greeter
+  enseñando las dos cosas juntas: `Qt.locale().name` decía `es_MX` y la misma
+  línea salía `Monday · 03 de August`. Hay que pasar el locale a mano, y eso solo
+  lo admite `toLocaleDateString(Qt.locale(), formato)`.
+- **En QML el alfa va DELANTE (`#AARRGGBB`); en los `.conf` de hyprlang va detrás
+  (`RRGGBBAA`).** Son ocho hex en los dos y ninguno se queja del otro: darle a QML
+  un `RRGGBBAA` no da error, pinta otro color con otra transparencia. Por eso
+  `gen-colores.py` emite los opacos como `#RRGGBB`, que no tiene ambigüedad.
+- **`Component.onCompleted` llega antes que las propiedades que pone un `Loader`
+  asíncrono.** El vídeo del greeter no arrancaba porque el `play()` estaba ahí y
+  la ruta se asignaba después, en `onLoaded`: el fichero se abría (ffmpeg lo
+  anunciaba en el diario) pero `playbackState` nunca pasaba a `Playing`. Va en
+  `onSourceChanged`.
+- **`userModel.lastUser` viene vacío si nunca ha entrado nadie.** En un equipo
+  recién instalado eso dejaría la pantalla pidiendo la contraseña de nadie. El
+  primer delegado de la lista rellena el hueco, y si no hay ninguna cuenta sale
+  un campo para escribirla.
 
 - **`ln -sfn origen ~/.config/hypr` no sirve** si `~/.config/hypr` ya existe como
   carpeta real: crea el enlace *dentro* (`~/.config/hypr/hypr`) y la config no se
@@ -239,7 +289,10 @@ propio `.py`, así que una prueba que los ejecute reescribe el repo de verdad. U
    `[NO INSTALADA]`.
 5. Si tocaste el fondo: comprueba que el demonio está vivo y que `pause` sigue a
    `True` con ventanas abiertas.
-6. Prueba pensando en **la otra máquina**, no solo en esta.
+6. Si tocaste el tema de SDDM: `sddm-greeter-qt6 --test-mode --theme <ruta>` y
+   míralo de verdad. Y pruébalo **también sin `fondo.mp4` y sin `fondo.jpg`**,
+   que es como llega a quien clona el repo.
+7. Prueba pensando en **la otra máquina**, no solo en esta.
 
 ## Cómo subir cambios
 

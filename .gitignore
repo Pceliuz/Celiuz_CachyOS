@@ -25,6 +25,12 @@ waybar/dock.jsonc
 waybar/dock-icons.css
 hypr/conf/local.conf
 
+# El fondo de la pantalla de inicio de sesion. `instalar.sh --sddm` lo genera con
+# ffmpeg a partir del tuyo y lo copia a /usr/share/sddm/themes/celiuz, no aqui —
+# pero si algun dia se prueba a mano dentro del repo, que no se cuele: es un
+# video de alguien, del tamano de su pantalla, y no tiene nada que hacer en git.
+sddm/celiuz/fondo.*
+
 # Credenciales: NO deben estar aqui, y si alguna vez alguien copia una por error,
 # que git se niegue a subirla. Las de verdad viven fuera del repo a proposito:
 #   ~/.config/gcal-panel/credentials.json    (client_id y secret de Google)

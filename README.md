@@ -24,6 +24,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 | `celiuzpaper/` | App propia para cambiar el fondo de pantalla. |
 | `mako/` | Notificaciones. `config` a mano, `colores` generado. |
 | `mpvpaper/` | Lista de programas que pausan el fondo en vídeo. |
+| `sddm/celiuz/` | Tema de la pantalla de inicio de sesión, en QML. Opcional: se instala aparte con `--sddm` porque es lo único que pide root. |
 | `tests/` | Pruebas automáticas. `./tests/run.sh` y listo — no hacen falta ni Hyprland corriendo ni nada instalado. |
 
 ### Las piezas a medida
@@ -714,6 +715,101 @@ buscando un fotograma a los 3 segundos (ahí no hay nada que buscar, y saldría
 vacía), y su ficha dice «imagen fija» en vez de inventarse una duración —
 `ffprobe` le adjudica 0,04 s a un jpg, que no significa nada.
 
+## La pantalla de inicio de sesión (SDDM)
+
+La que sale al encender el equipo, antes de que exista tu escritorio. Es la
+hermana de la pantalla de bloqueo: misma tarjeta violeta, mismo título, mismo
+reloj y tu fondo en vídeo detrás. Vive en `sddm/celiuz/` y está escrita en QML.
+
+**Es opcional y es lo único de este repo que pide `sudo`.** Un tema de SDDM no
+tiene equivalente por usuario: tiene que copiarse a `/usr/share/sddm/themes`. Por
+eso no se instala con el resto y hay que pedirlo:
+
+```sh
+./instalar.sh --sddm            # instalar (pide contraseña)
+./instalar.sh --sddm --revisar  # ver qué haría, sin tocar nada ni pedirla
+./instalar.sh --sddm-quitar     # quitarla y volver a la de siempre
+```
+
+Sin ejecutarlo, el escritorio funciona igual; solo te falta esa pantalla.
+
+### Pruébala sin reiniciar
+
+```sh
+sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/celiuz
+```
+
+Abre una ventana normal, sin cerrar tu sesión ni tocar el arranque. **Hazlo antes
+de reiniciar**: un tema roto deja el arranque sin pantalla de inicio de sesión.
+
+> **Si algo saliera mal**, no estás encerrado: `Ctrl+Alt+F2` te da una consola,
+> entras con tu usuario y `sudo rm /etc/sddm.conf.d/10-celiuz.conf` deja SDDM
+> como estaba. Al reiniciar vuelve su pantalla de fábrica.
+
+### Nunca se queda en negro
+
+Un tema que da por hecho que el vídeo existe deja al que clona el repo mirando
+una pantalla negra sin campo de contraseña, o sea fuera de su propio sistema. Por
+eso el fondo baja tres escalones solo:
+
+| Hay | Se ve |
+|---|---|
+| `fondo.mp4` | el vídeo, como en tu escritorio |
+| solo `fondo.jpg` | un fotograma quieto |
+| nada | un degradado sacado de `colores.conf` |
+
+El último no depende de ningún fichero, de ningún códec ni de ninguna GPU. **Un
+clon recién bajado no trae vídeo** —los vídeos no se versionan, pesan— y aun así
+la pantalla se dibuja entera y te deja entrar.
+
+Lo mismo con el resto: si `qt6-multimedia` no está instalado, se pierde el vídeo
+y nada más; si el sistema no ofrece apagar, ese botón no aparece en vez de fallar
+al pulsarlo; si nunca ha entrado nadie y SDDM no recuerda ninguna cuenta, se coge
+la primera de la lista; y si no hay ninguna, sale un campo para escribirla.
+
+### El fondo del arranque no se actualiza solo
+
+Es la pega real y conviene saberla: el greeter corre como el usuario `sddm`, que
+**no puede leer tu carpeta personal** (está a 700). Por eso el vídeo no se lee de
+`~`, se copia dentro del tema — y copiar ahí pide root.
+
+Consecuencia: **cambias de fondo con CeliuzPaper y el del arranque sigue siendo
+el anterior** hasta que vuelvas a pasar `./instalar.sh --sddm`. Podría hacerse
+automático, pero sería una app gráfica pidiéndote la contraseña de sudo cada vez
+que eliges un fondo. Mejor un comando explícito que magia que falla en silencio.
+
+Al copiarlo se reescala a **tu** pantalla y se recorta a 30 segundos, que es
+tiempo de sobra para lo que dura un arranque:
+
+```sh
+SDDM_SEGUNDOS=60 ./instalar.sh --sddm   # si quieres más
+```
+
+En esta laptop, un fondo de 78 MB a 4K quedó en **1,4 MB** y tardó 11 segundos en
+convertirse. En `/usr/share` no tiene sentido dejar 700 MB de vídeo para una
+pantalla que se ve diez segundos.
+
+### Ajustes
+
+En `theme.conf`, sin tocar QML: el título (`彼岸花` es el del autor, pon el tuyo),
+las fuentes, el formato de la fecha, cuánto oscurece el velo y si quieres ver la
+lista de cuentas aunque solo haya una. Borrar una línea no rompe nada: cada
+opción lleva su valor de fábrica dentro del QML.
+
+Los nombres de día y mes **salen en el idioma del sistema**, el de
+`/etc/locale.conf` —que es el que ve el greeter, no el tuyo—. Aquí no hay ningún
+idioma cableado, por la misma razón que no lo hay en el reloj de la barra.
+
+### Requisitos
+
+`qt6-multimedia` y `qt6-multimedia-ffmpeg`, los dos en los repos oficiales. El
+instalador comprueba que estén, que SDDM esté instalado **y habilitado**, y que no
+tengas ya un `Current=` en `/etc/sddm.conf` que ganaría sobre el nuestro. Lo dice
+todo antes de tocar nada.
+
+La configuración se escribe en `/etc/sddm.conf.d/10-celiuz.conf`, un fichero
+propio: **no se toca tu `/etc/sddm.conf`**, que puede tener cosas tuyas.
+
 ---
 
 ## Pruebas
@@ -810,14 +906,18 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` |
 | `waybar/colores.css` | `hypr/scripts/gen-colores.py` |
 | `mako/colores` | `hypr/scripts/gen-colores.py` |
+| `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` |
+| `/usr/share/sddm/themes/celiuz/fondo.{mp4,jpg}` | `instalar.sh --sddm` (con ffmpeg) |
+| `/etc/sddm.conf.d/10-celiuz.conf` | `instalar.sh --sddm` |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
 | `hypr/conf/local.conf` | `instalar.sh` |
 
-**`colores.css` y `mako/colores` sí se versionan**: salen de la paleta y son
-iguales en cualquier equipo. Los del dock y `local.conf` **no**, porque dependen
-de la máquina — los crea `instalar.sh`. Los dos de `~/.cache` tampoco: se
-rehacen en cada bloqueo.
+**`colores.css`, `mako/colores` y `Colores.qml` sí se versionan**: salen de la
+paleta y son iguales en cualquier equipo. Los del dock y `local.conf` **no**,
+porque dependen de la máquina — los crea `instalar.sh`. Los dos de `~/.cache`
+tampoco: se rehacen en cada bloqueo. Y los tres de fuera del repo (el fondo del
+arranque y el drop-in de SDDM) los pone `--sddm`, que es lo único que pide root.
 
 Además, fuera del repo a propósito:
 
@@ -834,9 +934,9 @@ Es de tu equipo, no del repo: en otra máquina esas rutas no existirían.
 **Hecho:** monitores, teclado (dos distribuciones), barra y dock con
 auto-ocultado, lanzador, cambiador de escritorios (`SUPER+TAB`), fondo en vídeo o
 imagen con su selector propio, capturas, calendario, monitores del sistema,
-pantalla de bloqueo y auto-bloqueo, el aspecto (paleta, decoración y
-animaciones), adaptación a la pantalla que haya, portabilidad a cualquier ruta de
-clonado, y pruebas automáticas.
+pantalla de bloqueo y auto-bloqueo, pantalla de inicio de sesión, el aspecto
+(paleta, decoración y animaciones), adaptación a la pantalla que haya,
+portabilidad a cualquier ruta de clonado, y pruebas automáticas.
 
 **Pendiente, por orden de valor:**
 

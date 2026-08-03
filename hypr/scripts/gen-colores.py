@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""gen-colores.py — pasa la paleta de hyprlang a CSS de GTK.
+"""gen-colores.py — reparte la paleta a los que no saben leer hyprlang.
 
 POR QUE EXISTE. La paleta vive en hypr/conf/colores.conf como variables de
 hyprlang. Hyprland y hyprlock las leen directamente (los dos hablan el mismo
-idioma y hyprlock admite `source`), pero waybar se estiliza con CSS de GTK, que
-no tiene forma de leer un .conf. Sin esto, el violeta estaria escrito a mano en
-dos sitios y tarde o temprano dejarian de coincidir.
+idioma y hyprlock admite `source`), pero los demas no: waybar se estiliza con
+CSS de GTK, mako no tiene variables y el tema de SDDM es QML. Sin esto, el
+violeta estaria escrito a mano en cuatro sitios y tarde o temprano dejarian de
+coincidir.
 
-Genera waybar/colores.css con un `@define-color` por variable. style.css lo
-carga con @import y no vuelve a escribir un color literal nunca.
+Tres destinos, una sola fuente:
 
-Los alfas NO se generan: el CSS de GTK sabe derivarlos solo con
-`alpha(@amatista, 0.35)`, asi que no hace falta una variable por transparencia.
+    waybar/colores.css    un `@define-color` por variable, que style.css importa
+    mako/colores          los colores ya resueltos, que mako incluye al final
+    sddm/celiuz/Colores.qml   un QtObject que Main.qml instancia
+
+Los alfas NO se generan para waybar: el CSS de GTK sabe derivarlos solo con
+`alpha(@amatista, 0.35)`. QML tambien, con Qt.alpha().
 
 Uso:
-    gen-colores.py            genera waybar/colores.css
-    gen-colores.py --check    no escribe; sale con 1 si el archivo esta viejo
+    gen-colores.py            genera los tres destinos
+    gen-colores.py --check    no escribe; sale con 1 si alguno esta viejo
 """
 import re
 import sys
@@ -25,6 +29,7 @@ RAIZ = Path(__file__).resolve().parent.parent.parent
 ORIGEN = RAIZ / "hypr" / "conf" / "colores.conf"
 DESTINO = RAIZ / "waybar" / "colores.css"
 DESTINO_MAKO = RAIZ / "mako" / "colores"
+DESTINO_SDDM = RAIZ / "sddm" / "celiuz" / "Colores.qml"
 
 # Que tono le toca a cada parte de una notificacion.
 #
@@ -164,6 +169,47 @@ def render_mako(paleta) -> str:
     return "\n".join(filas) + "\n"
 
 
+def render_sddm(paleta) -> str:
+    """La paleta para el tema de SDDM, que es QML.
+
+    OJO CON EL ORDEN DEL ALFA, que aqui esta AL REVES que en todo lo demas de
+    este repo. En los .conf de hyprlang el color se escribe RRGGBBAA (el alfa al
+    final) y en mako igual, pero **QML lee #AARRGGBB, con el alfa DELANTE**. Los
+    dos son ocho digitos hexadecimales y ninguno de los dos se queja del otro:
+    darle a QML un RRGGBBAA no da error, pinta otro color con otra
+    transparencia. $amatista (b16cffff) sobreviviria por casualidad —es opaco—,
+    pero $halo (6a00f4aa) saldria como un morado casi transparente en vez del
+    resplandor. Por eso los opacos se emiten en #RRGGBB, que no tiene ambiguedad
+    posible, y solo los translucidos llevan los ocho digitos.
+
+    No es un fichero de ajustes: es un QtObject que Main.qml instancia con
+    `Colores { id: paleta }`. Se hace asi y no como singleton para no arrastrar
+    un qmldir, que es una pieza mas que puede faltar en el equipo de otro.
+    """
+    filas = []
+    for nombre, _, hexa, nota in paleta:
+        rr, gg, bb, aa = hexa[0:2], hexa[2:4], hexa[4:6], hexa[6:8]
+        valor = f"#{rr}{gg}{bb}" if aa == "ff" else f"#{aa}{rr}{gg}{bb}"
+        fila = f'    readonly property color {nombre}: "{valor}"'
+        if nota:
+            fila = f"{fila:<56}// {nota[:60]}"
+        filas.append(fila)
+    return (
+        "// GENERADO POR hypr/scripts/gen-colores.py — NO EDITAR A MANO.\n"
+        "//\n"
+        "// La fuente de verdad es hypr/conf/colores.conf, la misma que usan\n"
+        "// Hyprland, hyprlock, la barra y las notificaciones. Si cambias un\n"
+        "// color ahi, vuelve a lanzar el generador y reinstala el tema con\n"
+        "//     ./instalar.sh --sddm\n"
+        "// porque el tema que se ve al arrancar es una COPIA en /usr/share.\n"
+        "//\n"
+        "// El alfa va DELANTE (#AARRGGBB): QML no usa el mismo orden que los\n"
+        "// .conf de hyprlang. Los colores opacos salen sin alfa a proposito.\n"
+        "import QtQuick\n\n"
+        "QtObject {\n" + "\n".join(filas) + "\n}\n"
+    )
+
+
 def main() -> int:
     if not ORIGEN.exists():
         print(f"no encuentro la paleta: {ORIGEN}", file=sys.stderr)
@@ -174,7 +220,9 @@ def main() -> int:
         print(f"{ORIGEN} no tiene ninguna variable de color", file=sys.stderr)
         return 1
 
-    salidas = [(DESTINO, render(paleta)), (DESTINO_MAKO, render_mako(paleta))]
+    salidas = [(DESTINO, render(paleta)),
+               (DESTINO_MAKO, render_mako(paleta)),
+               (DESTINO_SDDM, render_sddm(paleta))]
 
     if "--check" in sys.argv:
         viejos = [d for d, nuevo in salidas

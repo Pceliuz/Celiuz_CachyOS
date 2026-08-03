@@ -1,0 +1,17 @@
+[SddmGreeterTheme]
+Name=celiuz
+Description=La pantalla de inicio de sesion de Celiuz_CachyOS: tarjeta violeta sobre tu fondo en video, a juego con la pantalla de bloqueo
+Author=Pceliuz
+Copyright=(c) 2026, Pceliuz
+License=MIT
+Type=sddm-theme
+Version=1.0
+Website=https://github.com/Pceliuz/Celiuz_CachyOS
+Screenshot=
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=
+Email=
+Theme-Id=celiuz
+Theme-API=2.0
+QtVersion=6
