@@ -87,6 +87,13 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   env -u HYPRLAND_INSTANCE_SIGNATURE WLR_BACKENDS=headless Hyprland &
   hyprctl -i "$(ls -t /run/user/1000/hypr/ | head -1)" configerrors
   ```
+- **En hyprlock, un `shape` más grande que la pantalla no se recorta: se
+  reescala.** El velo del bloqueo tenía `size = 1920, 1080` escrito a mano y en
+  la laptop (1366x768) salía un rectángulo de 1089x612 pegado a la esquina
+  superior izquierda —el 63% de la pantalla— con un escalón visible entre la
+  parte oscurecida y la clara. En el sobremesa no se notaba porque allí el
+  número coincidía con la resolución. Lo que va a pantalla completa se pone en
+  **porcentaje** (`size = 100%, 100%`), que hyprlock mide contra la salida.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
 - **`uwsm app -- inexistente` sale con 1 y notifica**, no falla en silencio. Si lo
