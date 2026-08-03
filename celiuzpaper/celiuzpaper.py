@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CeliuzPaper — el selector de fondos de pantalla.
+CeliuzPaper — el selector de fondos de pantalla (video o imagen).
 
     celiuzpaper                 abre el selector
     celiuzpaper --list          lista los fondos en la terminal, por modulos
@@ -27,6 +27,9 @@ De varias fuentes, y cada una es un MODULO en la fila de arriba: los del Worksho
 de Wallpaper Engine, los de tu carpeta de videos (la que diga el sistema, en el
 idioma que sea) y las carpetas que anadas tu con el boton ＋. TAB cambia de
 modulo, las flechas se mueven dentro.
+
+Valen videos y tambien IMAGENES fijas (jpg, png, webp...), que es en lo que viene
+casi todo lo que se descarga por ahi.
 
 Ninguna se configura: la app mira que hay en la maquina cada vez que se abre. Sin
 Steam no sale el modulo de Wallpaper Engine, y ya esta. Por eso clonar el repo en
@@ -753,7 +756,7 @@ class Selector(Gtk.Window):
         self.hide()
 
         dialogo = Gtk.FileChooserDialog(
-            title="Elige una carpeta con tus videos",
+            title="Elige una carpeta con tus fondos",
             action=Gtk.FileChooserAction.SELECT_FOLDER)
         dialogo.add_buttons("Cancelar", Gtk.ResponseType.CANCEL,
                             "Anadir", Gtk.ResponseType.ACCEPT)
@@ -843,7 +846,7 @@ class Selector(Gtk.Window):
             # Un modulo puede estar vacio: una carpeta recien anadida sin videos,
             # o un equipo sin Steam ni carpeta de videos. Se dice que pasa, en vez
             # de dejar la ventana muda o reventar por un indice.
-            self.titulo.set_text("aqui no hay videos")
+            self.titulo.set_text("aqui no hay fondos")
             self.datos.set_text("elige otro modulo, o anade una carpeta con ＋")
             self.contador.set_text("0")
             self.queue_draw()

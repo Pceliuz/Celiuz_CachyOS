@@ -24,6 +24,10 @@ Los fondos salen de varias FUENTES, y cada una es un modulo en el selector:
 Nada de esto se configura al instalar: si no hay Steam, el modulo de Wallpaper
 Engine no aparece; si no hay carpeta de videos, tampoco. Clonar el repo en otra
 maquina y abrir la app es todo lo que hay que hacer.
+
+UN FONDO PUEDE SER UN VIDEO O UNA IMAGEN FIJA. Los dos los pinta el mismo
+mpvpaper. Por historia, la ruta del fichero se guarda en la clave "video" aunque
+sea un jpg; lo que distingue a los dos es la clave "imagen".
 """
 
 import json
@@ -53,7 +57,23 @@ WE_APPID = 431960
 # Carpeta del repo para dejar videos propios. Es la unica ruta fija que queda, y
 # esta dentro del propio repo, asi que vale igual en cualquier equipo.
 CARPETA_REPO = os.path.join(WALLDIR, "propios")
-EXTENSIONES = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")
+
+# Un fondo puede ser un video o una imagen fija. Las dos las pinta el mismo
+# mpvpaper: mpv es un reproductor, pero muestra imagenes igual de bien, y con
+# `--image-display-duration=inf` se queda quieta en pantalla para siempre
+# (comprobado; ver wallpaper.sh).
+#
+# Importa poder usar imagenes porque casi todas las colecciones de fondos que
+# circulan —wallhaven.cc y los repos de wallpapers de GitHub— son imagenes. Sin
+# esto, la mitad de lo que existe quedaba fuera.
+EXTENSIONES_VIDEO = (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")
+EXTENSIONES_IMAGEN = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".avif", ".jxl")
+EXTENSIONES = EXTENSIONES_VIDEO + EXTENSIONES_IMAGEN
+
+
+def es_imagen(ruta):
+    """True si este fondo es una imagen fija y no un video."""
+    return str(ruta).lower().endswith(EXTENSIONES_IMAGEN)
 
 # Las carpetas que anade el usuario se guardan AQUI y no en el repo: son de esta
 # maquina y solo de esta (la regla de oro del CLAUDE.md). Un clon en otro equipo
@@ -119,6 +139,7 @@ def _leer_item(carpeta):
         # Solo sirve si es video Y el archivo existe: algunos "video" apuntan a un
         # .pkg empaquetado que no es reproducible.
         "usable": tipo == "video" and bool(video) and os.path.isfile(video),
+        "imagen": False,
     }
 
 
@@ -276,6 +297,10 @@ def _leer_propio(ruta, fuente="repo"):
         "etiquetas": ["propio"],
         "usable": True,
         "fuente": fuente,
+        # Un fondo fijo se trata distinto en tres sitios: la miniatura (no hay
+        # fotograma que buscar), la ficha (no tiene duracion) y las banderas con
+        # las que se lanza mpvpaper.
+        "imagen": es_imagen(ruta),
     }
 
 
@@ -559,16 +584,20 @@ def miniatura(fondo, generar=True):
     if not generar:
         return fondo.get("vista") or None
 
-    info = datos(fondo)
-    duracion = info.get("duracion") or 0
-    momento = 3.0 if duracion > 6 else max(0.0, duracion * 0.1)
+    # En un video se busca un fotograma con contenido (a los 3 s, o al 10% si
+    # dura menos); una imagen NO tiene donde buscar, y pedirle un `-ss 3` a
+    # ffmpeg sobre un jpg lo deja sin nada que escribir y la miniatura sale vacia.
+    orden = ["ffmpeg", "-nostdin", "-v", "error"]
+    if not fondo.get("imagen"):
+        info = datos(fondo)
+        duracion = info.get("duracion") or 0
+        momento = 3.0 if duracion > 6 else max(0.0, duracion * 0.1)
+        orden += ["-ss", f"{momento:.2f}"]
+    orden += ["-i", fondo["video"], "-frames:v", "1",
+              "-vf", f"scale={ANCHO_MINIATURA}:-2", "-y", destino]
     try:
         os.makedirs(CACHE_MINIATURAS, exist_ok=True)
-        subprocess.run(
-            ["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{momento:.2f}",
-             "-i", fondo["video"], "-frames:v", "1",
-             "-vf", f"scale={ANCHO_MINIATURA}:-2", "-y", destino],
-            capture_output=True, timeout=30)
+        subprocess.run(orden, capture_output=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return fondo.get("vista") or None
     return destino if os.path.exists(destino) else (fondo.get("vista") or None)
@@ -599,7 +628,11 @@ def describir(fondo, info=None):
     trozos = []
     if info.get("ancho"):
         trozos.append(f"{info['ancho']}x{info['alto']}")
-    if info.get("duracion"):
+    if fondo.get("imagen"):
+        # ffprobe le da 0,04 s a un jpg, que no significa nada. En su sitio se
+        # dice lo unico util: que es fija.
+        trozos.append("imagen fija")
+    elif info.get("duracion"):
         trozos.append(f"{info['duracion']:.0f} s")
     if info.get("peso"):
         trozos.append(f"{info['peso'] / 1_048_576:.1f} MB")

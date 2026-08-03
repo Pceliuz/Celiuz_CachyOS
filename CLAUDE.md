@@ -34,6 +34,20 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadió el usuario |
 | `~/.cache/celiuzpaper/lock-*.conf` | fondo y medidas del bloqueo, rehechos en cada bloqueo |
 
+**No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio
+fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: con
+un `$HOME` de mentira, `gen-dock.py` acabó escribiendo en el repo **de verdad**
+porque resolvía `~/dotfiles/waybar`.
+
+**Estado real de esto, sin adornos:** solo `lock.sh`, `wallpaper.sh` y
+`gen-dock.py` averiguan su ruta. Quedan **~82 apariciones** de `$HOME/dotfiles`
+repartidas entre los `.conf` (42), otros scripts de shell (15) y de Python (25),
+así que **hoy el repo sigue obligando a clonar en `~/dotfiles`**. Los `.conf` son
+el hueso duro: hyprlang no sabe dónde está su propio fichero, y `hyprland.conf`,
+`hyprlock.conf`, `hypridle.conf`, `keybinds.conf` y `autostart.conf` los
+necesitan. Mientras eso siga así, el README debe seguir diciendo que la ruta no
+es opcional — no lo "arregles" a medias en la documentación.
+
 **Ni se te ocurra "arreglar" esto detectando la máquina al instalar y escribiendo
 un fichero.** Lo que depende del equipo se pregunta EN CALIENTE: la pantalla con
 `lib/pantalla.py`, la terminal y el navegador con `lib/apps.py`, la carpeta de
@@ -176,15 +190,47 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   cada segundo; para diagnosticarlo,
   `ls -l /proc/<pid>/fd` marca `(deleted)` el descriptor huérfano.
 
+## Las pruebas
+
+```sh
+./tests/run.sh              # todas
+./tests/run.sh bloqueo      # solo las que lleven ese texto en el nombre
+```
+
+No necesitan Hyprland corriendo, ni Steam, ni un monitor concreto: cada una se
+monta un `$HOME` de mentira. Valen desde un TTY o en integración continua.
+
+**Las dos reglas al escribir una prueba nueva:**
+
+1. **Nada de tocar la sesión ni la config reales.** `preparar_entorno` (en
+   `tests/lib/comun.sh`) crea un HOME desechable y redirige los `XDG_*`. Termina
+   siempre con `afirmar_intacta_la_casa_real`, que compara una huella de
+   `~/.cache/celiuzpaper` antes y después.
+2. **Lo peligroso se sustituye por un binario falso**, con `binario_falso`. Deja
+   en el `PATH` un ejecutable que solo apunta sus argumentos, y después se
+   comprueba que se le llamó bien. Así `tests/e2e/bloqueo.sh` verifica la
+   secuencia entera de la pantalla de bloqueo **sin bloquear nunca**, y
+   `tests/e2e/fondo.sh` prueba `wallpaper.sh` con un `pkill` falso — ese script
+   empieza matando mpvpaper, y ejecutarlo de verdad en una prueba te dejaría sin
+   fondo.
+
+Lo que **no** cubren: el aspecto. Que una capa GTK se dibuje donde toca o que un
+icono salga centrado sigue necesitando un Hyprland anidado y una captura.
+
+Cuidado con lo que ya mordió: los generadores sacan su destino de la ruta de su
+propio `.py`, así que una prueba que los ejecute reescribe el repo de verdad. Usa
+`copiar_repo`, que deja una copia entera en el temporal.
+
 ## Antes de dar algo por terminado
 
-1. `./instalar.sh --revisar` no debe sacar avisos inesperados.
-2. `hyprctl configerrors` vacío.
-3. Si tocaste el dock: `hypr/scripts/gen-dock.py list` — ninguna app debe salir
+1. `./tests/run.sh` en verde.
+2. `./instalar.sh --revisar` no debe sacar avisos inesperados.
+3. `hyprctl configerrors` vacío.
+4. Si tocaste el dock: `hypr/scripts/gen-dock.py list` — ninguna app debe salir
    `[NO INSTALADA]`.
-4. Si tocaste el fondo: comprueba que el demonio está vivo y que `pause` sigue a
+5. Si tocaste el fondo: comprueba que el demonio está vivo y que `pause` sigue a
    `True` con ventanas abiertas.
-5. Prueba pensando en **la otra máquina**, no solo en esta.
+6. Prueba pensando en **la otra máquina**, no solo en esta.
 
 ## Cómo subir cambios
 

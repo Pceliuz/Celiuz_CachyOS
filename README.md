@@ -41,7 +41,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`calendar-panel.py`** — al pulsar el reloj se abre un calendario con los
   feriados peruanos (`lib/pe_fechas.py`) y los eventos de Google Calendar
   (`lib/gcal.py`).
-- **`celiuzpaper`** — cambia el fondo de pantalla en vídeo. Al moverte por la tira
+- **`celiuzpaper`** — cambia el fondo de pantalla, en vídeo o en imagen fija. Al moverte por la tira
   el fondo cambia **de verdad** a pantalla completa; Enter lo fija, Escape
   restaura. Los fondos vienen de varios sitios y cada uno es un **módulo** en la
   fila de arriba: el Workshop de Wallpaper Engine, tu carpeta de vídeos y las
@@ -670,6 +670,71 @@ navegador), y eso es justo lo que se quiere.
 > Y solo el input **real** de hardware reinicia el contador de inactividad:
 > `movecursor`, `sendshortcut`, `cyclenext` y `workspace` no cuentan, así que no
 > sirven para probar el despertar desde un script.
+
+---
+
+## Los fondos pueden ser vídeo o imagen
+
+Los dos los pinta el mismo mpvpaper. La diferencia es **una sola bandera**:
+`--image-display-duration=inf`. Sin ella mpv enseña una imagen 5 segundos y luego
+se queda en negro — el síntoma sería «puse un fondo y desapareció solo», que
+cuesta relacionar con su causa. `wallpaper.sh` la añade mirando la extensión del
+fichero al que apunta el enlace `current` (no la del enlace, que no tiene).
+
+Importa porque casi todo lo que se descarga por ahí son imágenes: wallhaven.cc y
+los repos de colecciones de fondos de GitHub no tienen vídeo. Con esto, cualquier
+carpeta de imágenes vale como fuente — se añade con el botón `＋` de CeliuzPaper.
+
+Extensiones que se reconocen:
+
+| | |
+|---|---|
+| Vídeo | `.mp4` `.mkv` `.webm` `.mov` `.avi` `.m4v` |
+| Imagen | `.jpg` `.jpeg` `.png` `.webp` `.bmp` `.avif` `.jxl` |
+
+Dos detalles que se notan al usarlo: la miniatura de una imagen **no** se saca
+buscando un fotograma a los 3 segundos (ahí no hay nada que buscar, y saldría
+vacía), y su ficha dice «imagen fija» en vez de inventarse una duración —
+`ffprobe` le adjudica 0,04 s a un jpg, que no significa nada.
+
+---
+
+## Pruebas
+
+```sh
+./tests/run.sh              # todas
+./tests/run.sh bloqueo      # solo las que lleven ese texto en el nombre
+```
+
+**No hacen falta ni Hyprland corriendo, ni Steam, ni un monitor concreto.** Cada
+prueba se monta un `$HOME` desechable, así que dan el mismo resultado en el
+equipo del autor que en uno recién clonado. Sirven desde un TTY o por SSH.
+
+| Prueba | Qué cubre |
+|---|---|
+| `e2e/bloqueo` | la secuencia entera de la pantalla de bloqueo |
+| `e2e/fondo` | con qué banderas se lanza el fondo (vídeo vs. imagen) |
+| `unidad/pantalla` | detección de pantalla y medidas derivadas |
+| `unidad/fondos` | de dónde salen los fondos y qué se reconoce |
+| `unidad/generados` | dock y paleta: que lo generado cuadre |
+
+### Cómo se prueba algo que te puede echar de tu sesión
+
+La pantalla de bloqueo no se ejecuta **ni una vez**. Se pone en el `PATH` un
+ejecutable falso con su mismo nombre que solo apunta cómo se le llamó y sale con
+el código que le digamos. Con eso se comprueba que mide la pantalla, que guarda y
+restaura tu escritorio, que enciende el xray y **lo devuelve**, que relanza el
+bloqueo si se cae, y que aunque se agoten los intentos el `trap` lo deshace todo.
+
+Lo mismo con `wallpaper.sh`, que empieza matando mpvpaper: ahí los falsos son
+`pkill`, `pgrep` y `setsid`, y la prueba comprueba además que **tu** mpvpaper
+sigue siendo el mismo proceso al terminar.
+
+Cada prueba acaba comparando una huella de `~/.cache/celiuzpaper` de antes y de
+después: si algo se escapara del corralito, lo canta.
+
+**Lo que no cubren: el aspecto.** Que una capa GTK se dibuje donde toca o que un
+icono salga centrado sigue necesitando un Hyprland anidado y una captura.
 
 ---
 

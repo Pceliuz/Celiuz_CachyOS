@@ -14,7 +14,10 @@
 
 set -uo pipefail
 
-CURRENT="$HOME/dotfiles/hypr/wallpapers/current"
+# Sacados de donde esta este fichero, no de "$HOME/dotfiles/...": asi el repo
+# vale clonado en cualquier ruta, y no solo en ~/dotfiles.
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT="$SCRIPTS/../wallpapers/current"
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 SOLO_MPV=0
@@ -46,12 +49,12 @@ sleep 0.3
 # preguntar por el seria una carrera: si tarda en morir, el pgrep lo ve todavia,
 # no se lanza a nadie, y la sesion se queda sin demonio.
 if [ "$SOLO_MPV" -eq 0 ] || ! pgrep -f 'wallpaper-paus[e].py' >/dev/null 2>&1; then
-    setsid "$HOME/dotfiles/hypr/scripts/wallpaper-pause.py" >/dev/null 2>&1 &
+    setsid "$SCRIPTS/wallpaper-pause.py" >/dev/null 2>&1 &
 fi
 
 if [ ! -e "$CURRENT" ]; then
     echo "wallpaper: no hay fondo elegido todavia." >&2
-    echo "           Usa: ~/dotfiles/hypr/scripts/set-wallpaper.sh <ruta-al-video>" >&2
+    echo "           Usa: $SCRIPTS/set-wallpaper.sh <ruta-al-video>" >&2
     exit 0
 fi
 
@@ -89,6 +92,22 @@ fi
 #                  negras cuando el video no es 16:9.
 #  --input-ipc-server  abre el socket por el que wallpaper-pause.py pone y quita
 #                  la pausa. Sin esto el demonio no tiene por donde hablarle.
+# --- Video o imagen fija ---
+# Un fondo puede ser cualquiera de las dos cosas, y mpv sirve para ambas. La
+# diferencia es una sola bandera: sin ella, mpv ensena una imagen 5 segundos
+# (--image-display-duration por defecto) y luego se queda en negro, que es
+# exactamente el sintoma de "puse un fondo y a los pocos segundos desaparecio".
+# Con `inf` se queda fija para siempre.
+#
+# Se mira la extension del fichero al que APUNTA el enlace, no la del enlace.
+EXTRA=""
+DESTINO="$(readlink -f "$CURRENT" 2>/dev/null || echo "$CURRENT")"
+case "${DESTINO,,}" in
+    *.jpg|*.jpeg|*.png|*.webp|*.bmp|*.avif|*.jxl)
+        EXTRA="--image-display-duration=inf"
+        ;;
+esac
+
 mpvpaper -f \
-    -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 --input-ipc-server=$RUNTIME/mpvpaper.sock" \
+    -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 $EXTRA --input-ipc-server=$RUNTIME/mpvpaper.sock" \
     ALL "$CURRENT"
