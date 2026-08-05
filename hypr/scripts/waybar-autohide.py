@@ -35,6 +35,12 @@ El estado se consulta por el socket de control de Hyprland en vez de lanzar
 `hyprctl` cada vez: son ~0.03 ms por consulta, asi que sondear a 10 Hz es
 practicamente gratis (nada de procesos nuevos ni de hilos).
 
+ADEMAS ES UN SUPERVISOR: si una waybar se cae —se cuelga, la mata alguien, o
+revienta al leer su config—, se la vuelve a levantar (ver Bar.supervisar()). Es
+la razon de ser del demonio y no un extra: durante un tiempo hizo lo contrario,
+apagarse entero en cuanto una de las cuatro caia, y eso dejaba el escritorio sin
+barras hasta cerrar sesion.
+
 Ordenes por el FIFO ($XDG_RUNTIME_DIR/waybar-autohide.fifo):
     show | hide | toggle | hold | release | reload | lock | unlock
                                                     -> barra de arriba
@@ -89,6 +95,14 @@ GEO_REFRESH = 2.0
 
 # Segundos que espera tras salir el puntero antes de volver a ocultarse.
 HIDE_DELAY = 1.5
+
+# Cuantas veces se relanza una barra que se muere sola, y en cuanto tiempo. Si
+# se pasa de ahi es que no es un cuelgue suelto sino algo que la mata siempre
+# (una config rota, un modulo que revienta al arrancar), y reintentar sin fin
+# seria un bucle de procesos. Se avisa por notificacion y esa barra se deja
+# quieta; la OTRA sigue funcionando, y el demonio no se apaga.
+REINTENTOS_MAX = 5
+REINTENTOS_VENTANA = 60.0
 # Periodo del bucle. 0.1 s da una reaccion inmediata a ojo y no cuesta nada.
 TICK = 0.1
 
@@ -247,6 +261,24 @@ def launch(config):
     )
 
 
+def avisar(cuerpo):
+    """Notificacion de que algo va mal con las barras.
+
+    Es el unico canal que queda: waybar sale a /dev/null (su stderr es ruido
+    constante) y este demonio lo lanza `exec-once`, asi que nadie esta mirando
+    una terminal. Sin esto, "me faltan las barras" no tiene ni un rastro que
+    seguir. Que no haya servidor de notificaciones no es un error: se ignora.
+    """
+    try:
+        subprocess.Popen(
+            ["notify-send", "-a", "waybar-autohide", "-u", "critical",
+             "Las barras", cuerpo],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        pass
+
+
 class Bar:
     """Una barra y su linea-tirador: siempre visibles la una o la otra."""
 
@@ -260,10 +292,17 @@ class Bar:
         self.trigger_namespace = trigger_namespace
         self.proc = launch(config)
         self.trigger = launch(trigger_config)
-        self.manual = False   # el usuario la saco con click en la linea
+        # Nace "sacada a mano", igual que tras un relanzar(). Importa en el
+        # reinicio (SUPER+SHIFT+C): sin esto, con apps abiertas las barras
+        # nuevas se escondian en el primer ciclo y el atajo parecia servir para
+        # hacerlas desaparecer. Al arrancar la sesion no cambia nada, porque el
+        # escritorio esta vacio y update() manda visible de todas formas.
+        self.manual = True    # el usuario la saco con click en la linea
         self.held = False     # algo la esta reteniendo (el panel de calendario)
         self.locked = False   # la pantalla esta bloqueada: oculta pase lo que pase
-        self.left_at = 0.0    # momento en que el puntero salio de la barra
+        self.left_at = time.monotonic()   # cuando salio el puntero de la barra
+        self.caidas = []      # momentos en que se la encontro muerta sin querer
+        self.rendida = False  # se dejo de reintentar, y ya se aviso
 
     def toggle(self):
         """SIGUSR1 = toggle (el valor por defecto de waybar).
@@ -406,12 +445,48 @@ class Bar:
         if want_visible != visible:
             self.toggle()
 
-    def alive(self):
-        # Con la pantalla bloqueada las matamos nosotros a proposito, asi que
-        # verlas muertas es lo normal y no es motivo para apagar el demonio.
+    def supervisar(self):
+        """Si una de las dos instancias se murio sola, levantarlas otra vez.
+
+        ANTES ESTO APAGABA EL DEMONIO ENTERO, y era el fallo de "las barras se
+        van y no vuelven hasta cerrar sesion". El bucle hacia
+        `if not all(bar.alive()): cleanup()`, o sea que UNA waybar caida mataba
+        a las otras tres y al demonio, y ya no quedaba nadie que las levantara:
+        ni el atajo de reinicio servia, porque lo primero que hace es hablar con
+        un demonio que ya no existe. Medido el 2026-08-05 en anidado: matando
+        una sola de las cuatro, a los 4 s no quedaba ninguna capa waybar viva.
+        La unica salida era cerrar sesion, que es cuando `exec-once` vuelve a
+        correr.
+
+        Un demonio cuyo trabajo es tener barras en pie no puede reaccionar a una
+        barra caida quitando las demas. Se relanza y ya.
+
+        Las dos van en pareja —barra y linea-tirador se alternan juntas—, asi
+        que se relanzan las dos aunque solo se haya caido una: dejar viva la que
+        quedaba las descuadraria, y `visible_real()` exige las dos superficies.
+        """
         if self.locked:
-            return True
-        return self.proc.poll() is None and self.trigger.poll() is None
+            # Con la pantalla bloqueada las matamos NOSOTROS a proposito (ver
+            # command("lock")): verlas muertas es lo normal, y relanzarlas aqui
+            # las pondria por encima del bloqueo, que es justo lo que se
+            # buscaba evitar.
+            return
+        if self.rendida:
+            return
+        if self.proc.poll() is None and self.trigger.poll() is None:
+            return
+
+        ahora = time.monotonic()
+        self.caidas = [t for t in self.caidas if ahora - t < REINTENTOS_VENTANA]
+        self.caidas.append(ahora)
+        if len(self.caidas) > REINTENTOS_MAX:
+            self.rendida = True
+            avisar(f"«{self.config}» se cae nada mas arrancar; dejo de "
+                   f"reintentarlo. Mira: waybar -c {self.config}")
+            return
+
+        self.kill()        # la que siguiera viva, que se vaya: van en pareja
+        self.relanzar()
 
     def kill(self):
         for proc in (self.proc, self.trigger):
@@ -555,14 +630,16 @@ def main():
                 if bar:
                     bar.command(cmd)
 
+        # Antes de decidir nada, que esten en pie. Si alguna se cayo, esto la
+        # relanza; sus superficies tardaran un momento en existir y update() se
+        # abstiene solo mientras tanto (visible_real() devuelve None).
+        for bar in bars.values():
+            bar.supervisar()
+
         windows, cursor_x, cursor_y = read_state()
         capas = layer_levels()
         for bar in bars.values():
             bar.update(windows, cursor_x, cursor_y, capas)
-
-        # Si alguna barra muere (crash, kill manual), no seguimos a ciegas.
-        if not all(bar.alive() for bar in bars.values()):
-            cleanup()
 
 
 if __name__ == "__main__":
