@@ -16,7 +16,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 | Carpeta | Qué es |
 |---|---|
 | `hypr/` | Hyprland. `hyprland.conf` solo hace `source` de los módulos de `conf/`. |
-| `hypr/conf/` | Un módulo por asunto: monitores, teclado, atajos, reglas de ventana… `colores.conf` va el primero, porque define la paleta que usan los demás. |
+| `hypr/conf/` | Un módulo por asunto: monitores, teclado, atajos, reglas de ventana… `colores.conf` va el primero, porque define la paleta que usan los demás, y `teclado-laptop.conf` el último, y solo si estás en un portátil. |
 | `hypr/scripts/` | Todo lo hecho a medida (ver abajo). |
 | `hypr/scripts/lib/` | Bibliotecas compartidas por los scripts y por la CLI. |
 | `waybar/` | Barra de arriba y dock de abajo. Cuatro instancias de waybar. |
@@ -80,6 +80,13 @@ sudo pacman -S hyprland waybar fuzzel kitty hyprlock hypridle mpvpaper mako \
                python-google-api-python-client python-google-auth-oauthlib
 ```
 
+Y para las teclas de función, que van aparte porque el escritorio arranca igual
+sin ellas:
+
+```sh
+sudo pacman -S wireplumber playerctl brightnessctl
+```
+
 Notas:
 
 - **`ttf-meslo-nerd`** no es opcional: las barras usan la variante
@@ -89,6 +96,11 @@ Notas:
   pantalla de bloqueo usa sus ~13.500 reglas `"type": "Game"` como base de datos
   de juegos, para saber qué no debe congelar.
 - **`uwsm`** es imprescindible para lo mismo (ver abajo).
+- **`wireplumber`, `playerctl` y `brightnessctl`** son los que mueven las teclas
+  de volumen, de multimedia y de brillo. Si falta alguno, la tecla no hace nada
+  **y no avisa de nada**: un `exec` que no existe no da error en Hyprland. Por
+  eso el instalador los comprueba y lo dice. `brightnessctl` solo se pide en un
+  portátil.
 
 ## Instalación
 
@@ -331,6 +343,78 @@ Dos detalles que no son adorno:
 
 `teclado.py estado` imprime la activa en una línea, para la barra o para el
 asistente.
+
+---
+
+## Portátil o sobremesa: el repo se entera solo
+
+Todo lo de arriba está escrito para el X820, y **en un portátil sobra**. El
+teclado interno de cualquier laptop sí tiene AltGr y sí tiene la tecla `<>`, así
+que `lv3:switch` no le arregla nada: solo le quita el Ctrl derecho.
+
+Y el problema no era teórico. El bloque `input {}` de Hyprland es **global**: se
+lo aplica a todo teclado conectado. Se ve en `hyprctl devices`, donde hasta el
+`power-button` sale con `o "lv3:switch"`. O sea que cualquiera que clonara este
+repo se quedaba sin Ctrl derecho por un teclado que no ha visto en su vida.
+
+Ahora `instalar.sh` pregunta en qué clase de equipo está y **solo en un portátil**
+carga `conf/teclado-laptop.conf`, que corrige lo que haga falta.
+
+| | Sobremesa | Portátil |
+|---|---|---|
+| Ctrl derecho | hace de AltGr (lo necesita el X820) | vuelve a ser Ctrl |
+| Touchpad | — | tap, arrastre, y se calla mientras escribes |
+| Brillo | — | `Fn` + las teclas de brillo |
+| Tapa | — | al cerrarla, bloquea |
+
+El volumen y las teclas de multimedia **no** están ahí: viven en `keybinds.conf`
+y funcionan en las dos máquinas. No son de portátil — cualquier teclado con
+teclas de medios las emite, y en uno que no las tenga esas líneas sencillamente
+no disparan.
+
+### Cómo lo sabe
+
+```sh
+hypr/scripts/lib/maquina.py          # resumen
+hypr/scripts/lib/maquina.py tipo     # laptop | escritorio
+```
+
+Se lo pregunta al **DMI de la BIOS** (`/sys/class/dmi/id/chassis_type`), que es
+lo que grabó el fabricante y es la respuesta buena cuando existe. Si el DMI dice
+`Other` o `Unknown` —máquinas virtuales, placas que no rellenan el campo— pasa a
+mirar batería y tapa. Si tampoco hay nada, responde **sobremesa**, que es la
+config de siempre: equivocarse por ahí no cambia nada de lo que ya funcionaba.
+
+**Una batería sola no basta**, y por eso se pide también que haya tapa: un
+sobremesa con un SAI conectado por USB enseña una batería en
+`/sys/class/power_supply/`, y si eso decidiera, una torre acabaría con ajustes de
+touchpad. Un SAI no tiene tapa.
+
+`maquina.py` dice siempre **por qué** ha decidido lo que ha decidido, y ese
+motivo queda escrito dentro del `local.conf` generado. Cuando alguien reporte
+«me detectó mal», es lo primero que hay que mirar.
+
+### Por qué se decide al instalar y no al arrancar
+
+Al revés que `pantalla.py`, que se mide en caliente. La diferencia: los monitores
+cambian —conectas un proyector, giras la pantalla—, pero **la caja no**. Un
+portátil no amanece siendo un sobremesa.
+
+Y encima hyprlang **no tiene condicionales**: no hay forma de escribir «carga
+esto solo si...» dentro de un `.conf`. Lo que sí se puede es que el `source` del
+final apunte a una variable. Así que `instalar.sh` escribe en `local.conf` a
+dónde apunta `$conf_maquina`, y en un sobremesa apunta a `conf/nada.conf`, que
+está **vacío a propósito**: «no cargar nada» hay que escribirlo como «cargar un
+fichero que no tiene nada dentro».
+
+Ese `source` va **el último de todos** en `hyprland.conf`, y ahí está el detalle
+que se puede romper sin querer: son *correcciones* sobre `input.conf` y
+`keybinds.conf`, y en hyprlang gana el último que habla. Cargarlo antes lo
+dejaría pisado, y el síntoma sería «puse el fichero y no hace nada». Hay una
+prueba que lo vigila.
+
+> **Si mueves el disco de un equipo a otro**, vuelve a pasar `./instalar.sh`. Es
+> el mismo trato que ya tiene el dock.
 
 ---
 
@@ -830,6 +914,7 @@ equipo del autor que en uno recién clonado. Sirven desde un TTY o por SSH.
 | `unidad/pantalla` | detección de pantalla y medidas derivadas |
 | `unidad/fondos` | de dónde salen los fondos y qué se reconoce |
 | `unidad/generados` | dock y paleta: que lo generado cuadre |
+| `unidad/maquina` | portátil vs. sobremesa, y que el orden de carga no se rompa |
 
 ### Cómo se prueba algo que te puede echar de tu sesión
 

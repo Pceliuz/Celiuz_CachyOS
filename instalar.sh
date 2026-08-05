@@ -93,6 +93,31 @@ comprobar_dependencias() {
         gris "    sudo pacman -S ${faltan[*]}"
     fi
 
+    # Los de las teclas de funcion van APARTE de los imprescindibles: sin ellos
+    # el escritorio arranca igual y no se rompe nada. Pero hay que decirlo, y por
+    # eso no basta con no listarlos: un bind cuyo `exec` no existe NO da error ni
+    # avisa por ninguna parte — pulsas la tecla de volumen y no pasa nada, sin
+    # una sola pista de por que. Es exactamente el fallo en silencio que este
+    # repo evita en todo lo demas.
+    local -A teclas=(
+        [wpctl]="wireplumber"        # volumen, mute y micro-mute
+        [playerctl]="playerctl"      # play/pausa, siguiente, anterior
+    )
+    # brightnessctl solo hace falta en un portatil: es quien mueve el brillo en
+    # conf/teclado-laptop.conf, y ese fichero un sobremesa no lo lee.
+    if "$REPO/hypr/scripts/lib/maquina.py" --es-laptop 2>/dev/null; then
+        teclas[brightnessctl]="brightnessctl"
+    fi
+
+    local sin_teclas=()
+    for binario in "${!teclas[@]}"; do
+        command -v "$binario" >/dev/null 2>&1 || sin_teclas+=("${teclas[$binario]}")
+    done
+    if [ ${#sin_teclas[@]} -gt 0 ]; then
+        aviso "las teclas de funcion no haran nada sin: ${sin_teclas[*]}"
+        gris "    sudo pacman -S ${sin_teclas[*]}"
+    fi
+
     # La fuente no es un capricho: sin ella los glifos del dock salen como
     # cuadrados vacios. Se comprueba aparte porque no es un ejecutable.
     #
@@ -207,10 +232,15 @@ dock() {
     fi
 }
 
-# --- 5. Terminal para los atajos ---------------------------------------------
+# --- 5. Lo de esta maquina ----------------------------------------------------
+#
+# Un solo escritor para local.conf, a proposito: si la terminal y el tipo de
+# equipo lo escribieran dos funciones distintas, la segunda borraria lo de la
+# primera y el sintoma seria "se me olvida la terminal cada vez que instalo".
 
-terminal_local() {
-    titulo "5. Terminal de los atajos"
+maquina_local() {
+    titulo "5. Lo de esta maquina"
+
     local term
     term="$("$REPO/hypr/scripts/lib/apps.py" terminal 2>/dev/null)"
     if [ -z "$term" ]; then
@@ -218,6 +248,25 @@ terminal_local() {
         term="kitty"
     fi
     echo "  SUPER+RETURN abrira: $term"
+
+    # Portatil o sobremesa. Lo decide el DMI de la BIOS; ver lib/maquina.py para
+    # el porque de cada fuente y por que la bateria sola no basta.
+    local tipo motivo conf_maquina
+    tipo="$("$REPO/hypr/scripts/lib/maquina.py" tipo 2>/dev/null || echo escritorio)"
+    motivo="$("$REPO/hypr/scripts/lib/maquina.py" --json 2>/dev/null \
+              | sed -n 's/.*"motivo": "\(.*\)",/\1/p')"
+
+    if [ "$tipo" = "laptop" ]; then
+        conf_maquina='$HOME/.config/hypr/conf/teclado-laptop.conf'
+        echo "  equipo: portatil  ($motivo)"
+        gris "    se carga conf/teclado-laptop.conf: touchpad, tapa, brillo y el"
+        gris "    Ctrl derecho de vuelta en el teclado interno"
+    else
+        conf_maquina='$HOME/.config/hypr/conf/nada.conf'
+        echo "  equipo: sobremesa  ($motivo)"
+        gris "    no se carga nada de portatil"
+    fi
+
     if [ "$SOLO_REVISAR" -eq 0 ]; then
         cat > "$REPO/hypr/conf/local.conf" <<EOF
 # hypr/conf/local.conf — GENERADO por instalar.sh. NO se versiona.
@@ -228,6 +277,16 @@ terminal_local() {
 #
 # Para cambiar de terminal: edita la linea y recarga con SUPER+SHIFT+R.
 \$terminal = $term
+
+# Portatil o sobremesa, segun el DMI de la BIOS (scripts/lib/maquina.py).
+# Este fichero lo carga hyprland.conf EL ULTIMO, para que corrija a input.conf y
+# a keybinds.conf en vez de que ellos lo pisen a el.
+#
+# Detectado aqui: $tipo — $motivo
+#
+# Si se detecto mal, cambia esta linea a mano y recarga con SUPER+SHIFT+R; el
+# siguiente ./instalar.sh la volvera a calcular.
+\$conf_maquina = $conf_maquina
 EOF
         hecho "  escrito hypr/conf/local.conf"
     fi
@@ -470,7 +529,7 @@ else
     desplegar
     celiuzpaper
     dock
-    terminal_local
+    maquina_local
     fondo
     pantalla
     sddm_estado

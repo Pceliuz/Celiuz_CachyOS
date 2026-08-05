@@ -58,6 +58,34 @@ vídeos con `wallpapers.carpeta_videos()`. Un valor detectado en la instalación
 queda viejo en cuanto cambias de monitor o de predeterminado, y encima falla en
 silencio.
 
+### La única excepción: portátil o sobremesa (`lib/maquina.py`)
+
+Y conviene entender por qué es excepción, para no usarla de coartada.
+
+La regla de arriba se sostiene en **que el dato cambia**: enchufas un proyector,
+cambias de terminal por defecto, mueves la carpeta de vídeos. **El chasis no
+cambia.** Un portátil no amanece siendo un sobremesa, así que preguntarlo en cada
+arranque no compra nada.
+
+Y encima no había alternativa: hyprlang **no tiene condicionales**. No se puede
+escribir «carga esto solo si...» dentro de un `.conf`, y la decisión de qué
+`source` se lee tiene que tomarla alguien de fuera.
+
+Lo que sí se respeta del espíritu de la regla:
+
+- `lib/maquina.py` se puede preguntar en caliente, y dice **por qué** ha decidido
+  lo que ha decidido. Lo generado es solo el cableado, no el conocimiento.
+- El motivo queda escrito dentro del `local.conf` generado, así que un fallo de
+  detección se diagnostica leyendo el fichero.
+- No falla en silencio: `./instalar.sh --revisar` dice siempre qué equipo ve.
+
+El único modo de fallo real es **mover el disco de un equipo a otro sin volver a
+pasar el instalador**. Es el mismo trato que ya tiene el dock, y está escrito en
+el README.
+
+Si alguna vez necesitas algo parecido, la pregunta que decide es: *¿este dato
+puede cambiar sin que se reinstale?* Si puede, va en caliente y no se discute.
+
 ## Generado vs. escrito a mano
 
 Varios ficheros llevan `GENERADO — NO EDITAR` en su cabecera. Va en serio: al
@@ -67,7 +95,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 |---|---|---|
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
 | `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
-| `hypr/conf/local.conf` | `instalar.sh` | detección en la máquina |
+| `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
 
 Ese último es la excepción que confirma la regla: `hyprlock.conf` trae **también**
@@ -292,7 +320,10 @@ propio `.py`, así que una prueba que los ejecute reescribe el repo de verdad. U
 6. Si tocaste el tema de SDDM: `sddm-greeter-qt6 --test-mode --theme <ruta>` y
    míralo de verdad. Y pruébalo **también sin `fondo.mp4` y sin `fondo.jpg`**,
    que es como llega a quien clona el repo.
-7. Prueba pensando en **la otra máquina**, no solo en esta.
+7. Si tocaste el teclado o `conf/teclado-laptop.conf`: `Hyprland --verify-config`
+   con `$conf_maquina` apuntando **a los dos sitios**, no solo al de esta caja.
+   Es lo único que prueba el camino de la máquina que no tienes delante.
+8. Prueba pensando en **la otra máquina**, no solo en esta.
 
 ## Cómo subir cambios
 
