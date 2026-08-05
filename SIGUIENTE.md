@@ -71,14 +71,28 @@ que no distinguen de qué sesión es cada proceso. Al cerrar el anidado, su demo
 contestaba que sí y nadie levantaba uno bueno. Resultado: el vídeo corriendo con
 ventanas encima y quieto en el bloqueo.
 
-De ahí salieron dos cosas que ya están puestas: el demonio **se va solo** si pasa
-`ABANDONO` (60 s) sin poder hablar con su Hyprland, y `tests/unidad/fondo-huerfano.sh`
-lo vigila por los dos lados. Las dos trampas están escritas en el `CLAUDE.md`.
+De ahí salieron tres cosas, y **las tres están puestas**: el demonio **se va
+solo** si pasa `ABANDONO` (60 s) sin poder hablar con su Hyprland,
+`tests/unidad/fondo-huerfano.sh` lo vigila por los dos lados, y el anidado ya no
+se levanta a pelo:
 
-**Lo que queda por hacer aquí**: el anidado sigue sin ser un cajón de arena.
-Arrancarlo con un `$HOME` desechable, o con un `autostart.conf` recortado, se
-puede automatizar en un script de `tests/` y quitaría el pie del que resbala.
-No está hecho.
+```sh
+./tests/anidado.sh hyprctl configerrors   # levanta, ejecuta y recoge
+./tests/anidado.sh                        # se queda abierto; Ctrl+C lo tumba
+```
+
+`tests/anidado.sh` monta `$HOME` desechable, una copia del repo enlazada como la
+enlaza `instalar.sh`, `autostart.conf` vaciado y `$XDG_RUNTIME_DIR` propio; al
+salir barre los procesos que quedaran con la firma de esa instancia y borra la
+casa. Comprobado: con él, el `mpvpaper` y el demonio de la sesión real siguen
+con el mismo PID después de usarlo, y un proceso lanzado con `setsid` dentro
+queda recogido al cerrar.
+
+**Lo que sigue sin cubrir**, y conviene tenerlo presente: `pkill` mata por
+NOMBRE, y eso no lo aísla ningún `$HOME`. Si dentro del anidado lanzas a mano
+algo que mate por nombre —`wallpaper.sh`, sin ir más lejos—, se llevará por
+delante lo de la sesión de fuera igual. Allí no arranca nada solo; a partir de
+ahí, ojo con lo que lanzas.
 
 ## Lo siguiente, por orden de valor
 

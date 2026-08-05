@@ -212,29 +212,38 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
 - **`hyprctl reload` no basta** para probar cambios de `exec-once`: solo corren al
   arrancar la sesión. Y si la sesión arrancó desde un `.lua`, `reload` no cae de
   vuelta al `.conf`.
-- **Para validar config sin arriesgar la sesión viva**, instancia anidada:
+- **Para validar config sin arriesgar la sesión viva**, `tests/anidado.sh`:
   ```sh
-  env -u HYPRLAND_INSTANCE_SIGNATURE AQ_BACKENDS=headless AQ_NO_MODIFIERS=1 Hyprland &
-  INST=$(ls -t /run/user/1000/hypr/ | head -1)
-  hyprctl -i "$INST" configerrors
+  ./tests/anidado.sh hyprctl configerrors   # levanta, ejecuta y recoge
+  ./tests/anidado.sh                        # se queda abierto; Ctrl+C lo tumba
   ```
+  **No levantes Hyprland a pelo para esto.** Un anidado suelto NO es un cajón de
+  arena: usa TU `$HOME`, así que corre TU `autostart.conf`, y ahí hay
+  `exec-once` que muerden a la sesión de fuera. El peor es `wallpaper.sh`, que
+  empieza con `pkill -x mpvpaper` y `pkill -f wallpaper-paus[e].py` —matan por
+  NOMBRE, sin mirar de qué sesión es cada proceso—, así que te deja el
+  escritorio real **sin fondo y sin el demonio que lo pausa**; y los
+  `systemctl --user` de hypridle y mako manosean las unidades de verdad. Pasó el
+  2026-08-04 y el síntoma no apareció hasta horas después.
+  El script aísla lo que se puede aislar: `$HOME` desechable (que es lo que
+  redirige el árbol entero, porque el repo se referencia por
+  `$HOME/.config/hypr/...`), una copia del repo enlazada igual que la enlaza
+  `instalar.sh`, `autostart.conf` vaciado, `$XDG_RUNTIME_DIR` propio, y al salir
+  barre los procesos que se quedaron con la firma de esa instancia y borra la
+  casa. Lo que **no** puede aislar es un `pkill` por nombre que lances tú a mano
+  ahí dentro.
+  Si ya levantaste uno a pelo: mira `pgrep -af mpvpaper` y el demonio, y
+  levántalos otra vez con `hypr/scripts/wallpaper.sh`.
   `AQ_BACKENDS`, no `WLR_BACKENDS`: desde 0.5x el backend es aquamarine y la
   variable de wlroots la ignora en silencio. Sobre esta NVIDIA hace falta además
   `AQ_NO_MODIFIERS=1` o se queda en `bo null` sin monitor.
-- **El anidado NO es un cajón de arena: corre TU `autostart.conf` con TU `$HOME`,
-  y hay `exec-once` que empiezan matando lo de la sesión de verdad.** El peor es
-  `wallpaper.sh`: sus dos primeras órdenes son `pkill -x mpvpaper` y
-  `pkill -f wallpaper-paus[e].py`, que no distinguen de qué sesión es cada
-  proceso. Levantar un anidado te deja el escritorio real **sin fondo y sin el
-  demonio que lo pausa**, y no se nota hasta que abres una ventana y el vídeo
-  sigue corriendo. Pasó el 2026-08-04.
-  Si solo vas a mirar `configerrors` o a probar una config, arranca el anidado
-  con un `$HOME` desechable (como hacen las pruebas) o con `autostart.conf`
-  fuera. Y si ya lo has hecho: `pgrep -af mpvpaper` y el demonio, que hay que
-  levantarlos otra vez con `hypr/scripts/wallpaper.sh`.
-  El `setsid` con el que nace el demonio es lo que lo salva de morir con el
-  compositor — y por eso mismo sobrevive al anidado (ver la trampa del zombi,
-  más abajo).
+- **libwayland se APROPIA de un socket que no tenga su `.lock` al lado**: lo
+  borra y se pone en su sitio. Se descubrió montando el anidado: el enlace al
+  socket del padre se llamaba `wayland-1`, igual que fuera, y el compositor
+  anidado lo hizo desaparecer y llamó `wayland-1` a su propio display — o sea
+  que el nombre de dentro y el de fuera pasaban a ser el mismo, que es la mejor
+  manera de creer que apuntas a un sitio mientras apuntas al otro. Por eso el
+  enlace se llama `wayland-padre`.
 - **`HYPRLAND_INSTANCE_SIGNATURE` NO mete un programa gráfico en el anidado.** Esa
   variable solo le dice a `hyprctl` con quién hablar; un cliente Wayland elige
   compositor por **`WAYLAND_DISPLAY`** y por nada más. Lanzar algo con solo la
@@ -318,6 +327,12 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
 No necesitan Hyprland corriendo, ni Steam, ni un monitor concreto: cada una se
 monta un `$HOME` de mentira. Valen desde un TTY o en integración continua.
 
+`tests/anidado.sh` es la excepción y **no es una prueba, es una herramienta**:
+levanta un Hyprland de verdad, así que pide una sesión Wayland de fuera donde
+dibujarse y por eso `run.sh` no lo recoge (solo mira `tests/unidad` y
+`tests/e2e`). Es lo que hay que usar para todo lo que necesite un compositor
+—`configerrors`, aspecto, capturas—, y el porqué está arriba, en las trampas.
+
 **Las dos reglas al escribir una prueba nueva:**
 
 1. **Nada de tocar la sesión ni la config reales.** `preparar_entorno` (en
@@ -346,8 +361,9 @@ propio `.py`, así que una prueba que los ejecute reescribe el repo de verdad. U
 3. `hyprctl configerrors` vacío.
 4. Si tocaste el dock: `hypr/scripts/gen-dock.py list` — ninguna app debe salir
    `[NO INSTALADA]`.
-5. Si tocaste el fondo: comprueba que el demonio está vivo y que `pause` sigue a
-   `True` con ventanas abiertas.
+5. Si tocaste el fondo: comprueba que el demonio está vivo, que es **de esta
+   sesión** (`tr '\0' '\n' < /proc/<pid>/environ | grep HYPRLAND_INSTANCE_SIG`)
+   y que `pause` sigue a `True` con ventanas abiertas.
 6. Si tocaste el tema de SDDM: `sddm-greeter-qt6 --test-mode --theme <ruta>` y
    míralo de verdad. Y pruébalo **también sin `fondo.mp4` y sin `fondo.jpg`**,
    que es como llega a quien clona el repo.

@@ -25,7 +25,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 | `mako/` | Notificaciones. `config` a mano, `colores` generado. |
 | `mpvpaper/` | Lista de programas que pausan el fondo en vídeo. |
 | `sddm/celiuz/` | Tema de la pantalla de inicio de sesión, en QML. Opcional: se instala aparte con `--sddm` porque es lo único que pide root. |
-| `tests/` | Pruebas automáticas. `./tests/run.sh` y listo — no hacen falta ni Hyprland corriendo ni nada instalado. |
+| `tests/` | Pruebas automáticas. `./tests/run.sh` y listo — no hacen falta ni Hyprland corriendo ni nada instalado. Y `anidado.sh`, para lo que sí necesita un compositor. |
 
 ### Las piezas a medida
 
@@ -956,7 +956,25 @@ Cada prueba acaba comparando una huella de `~/.cache/celiuzpaper` de antes y de
 después: si algo se escapara del corralito, lo canta.
 
 **Lo que no cubren: el aspecto.** Que una capa GTK se dibuje donde toca o que un
-icono salga centrado sigue necesitando un Hyprland anidado y una captura.
+icono salga centrado sigue necesitando un Hyprland anidado y una captura. Para
+eso está `tests/anidado.sh`, que no es una prueba sino una herramienta:
+
+```sh
+./tests/anidado.sh hyprctl configerrors   # lo levanta, ejecuta eso y recoge
+./tests/anidado.sh                        # se queda abierto; Ctrl+C lo tumba
+```
+
+Levanta un Hyprland **anidado que no puede tocar tu sesión**: `$HOME`
+desechable, una copia del repo enlazada igual que la enlaza `instalar.sh`,
+`autostart.conf` vaciado y su propio `$XDG_RUNTIME_DIR`. Al salir barre lo que
+quedara vivo con la firma de esa instancia y borra la casa.
+
+Lo de vaciar `autostart.conf` no es exceso de celo: los `exec-once` de verdad
+matan por **nombre de proceso** (`pkill -x mpvpaper`) y arrancan unidades del
+usuario (`systemctl --user start hypridle`), y ni el nombre ni las unidades
+entienden de `$HOME`. Un anidado levantado a pelo te deja el escritorio real sin
+fondo. Ese es también el límite del corralito: si ahí dentro lanzas tú algo que
+mate por nombre, se llevará lo de fuera igual.
 
 ---
 
