@@ -54,6 +54,7 @@ tiene tapa.
 USO DESDE LA TERMINAL
     maquina.py                  resumen de lo que hay
     maquina.py tipo             imprime `laptop` o `escritorio`
+    maquina.py teclado          imprime `completo` o `sin-altgr`
     maquina.py --json           todo, para otro script
     maquina.py --es-laptop      sin imprimir nada; sale 0 si es portatil
 
@@ -61,6 +62,7 @@ USO DESDE PYTHON
     import maquina
     maquina.es_laptop()         True / False
     maquina.detalle()           {'tipo', 'motivo', 'chasis', 'bateria', 'tapa'}
+    maquina.perfil_teclado()    {'perfil', 'motivo', 'kb_options', 'conf'}
 """
 
 import glob
@@ -186,6 +188,61 @@ def es_laptop():
     return detalle()["tipo"] == "laptop"
 
 
+# --- Que trato necesita el teclado -------------------------------------------
+#
+# El perfil «completo» es el de un teclado que trae TODAS sus teclas: AltGr y la
+# `<>` de la izquierda. Con eso no hay que inventarse un tercer nivel en ningun
+# sitio, y el Ctrl derecho se queda siendo Ctrl.
+#
+# El perfil «sin-altgr» es el del teclado del autor (Attack Shark X820, ANSI de
+# 75%): no tiene AltGr, asi que el tercer nivel hay que sacarlo de donde se
+# pueda, y de ahi `kb_options = lv3:switch` en conf/input.conf. El coste es real
+# —el Ctrl derecho deja de ser Ctrl— y solo compensa si te falta la tecla.
+PERFIL_COMPLETO = "completo"
+PERFIL_SIN_ALTGR = "sin-altgr"
+
+
+def perfil_teclado():
+    """Que perfil de teclado le toca a esta caja, y por que.
+
+    POR QUE SE DECIDE POR LA CAJA Y NO MIRANDO EL TECLADO. Lo honesto seria
+    preguntar si hay alguna tecla AltGr conectada; se puede, leyendo las
+    capacidades en /sys/class/input. Pero `kb_options` vive en el bloque
+    `input {}` de hyprlang, que es texto en un fichero y se lee al arrancar: un
+    dato que cambia al enchufar o desenchufar un teclado NO se puede cablear
+    ahi, y es justo lo que prohibe la regla del CLAUDE.md. La caja, en cambio,
+    no cambia. Asi que se decide por el chasis, igual que el resto de este
+    modulo, y quien enchufe un teclado raro tiene la linea a mano y comentada.
+
+    EL LIMITE, dicho claro: un SOBREMESA con un teclado normal de 105 teclas
+    tampoco necesita el apaño, y aun asi se lo lleva, porque el sobremesa es el
+    caso por defecto y ahi el repo conserva la config del autor. Si te pasa,
+    la solucion es una linea: `kb_options =` en conf/input.conf.
+
+    Devuelve un diccionario con:
+      perfil      «completo» o «sin-altgr»
+      motivo      por que se ha decidido eso (para diagnosticar sin adivinar)
+      kb_options  lo que deberia valer `kb_options` en esta caja
+      conf        el fichero que lo aplica, o None si no hace falta ninguno
+    """
+    d = detalle()
+    if d["tipo"] == "laptop":
+        return {
+            "perfil": PERFIL_COMPLETO,
+            "motivo": ("es un portatil (" + d["motivo"] + "), y el teclado "
+                       "interno de un portatil tiene AltGr y tecla «<>»"),
+            "kb_options": "",
+            "conf": "conf/teclado-laptop.conf",
+        }
+    return {
+        "perfil": PERFIL_SIN_ALTGR,
+        "motivo": ("es un sobremesa (" + d["motivo"] + "), asi que se deja la "
+                   "config del autor: teclado ANSI de 75% sin AltGr"),
+        "kb_options": "lv3:switch",
+        "conf": None,
+    }
+
+
 def _resumen():
     d = detalle()
     print()
@@ -199,6 +256,11 @@ def _resumen():
     else:
         print("      no se cargara nada de portatil")
     print()
+    t = perfil_teclado()
+    print(f"    TECLADO  ·  perfil «{t['perfil']}»")
+    print(f"      kb_options = {t['kb_options'] or '(vacio: el Ctrl derecho sigue siendo Ctrl)'}")
+    print(f"      {t['motivo']}")
+    print()
 
 
 def main():
@@ -208,11 +270,16 @@ def main():
     if orden in ("-h", "--help"):
         return print(__doc__.strip())
     if orden == "--json":
-        return print(json.dumps(detalle(), indent=2, ensure_ascii=False))
+        todo = dict(detalle(), teclado=perfil_teclado())
+        return print(json.dumps(todo, indent=2, ensure_ascii=False))
     if orden == "--es-laptop":
         sys.exit(0 if es_laptop() else 1)
     if orden == "tipo":
         return print(detalle()["tipo"])
+    if orden == "motivo":
+        return print(detalle()["motivo"])
+    if orden == "teclado":
+        return print(perfil_teclado()["perfil"])
     if orden:
         sys.exit(f"maquina: no entiendo «{orden}». Prueba --help")
     _resumen()

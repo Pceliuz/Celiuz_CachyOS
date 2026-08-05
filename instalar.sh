@@ -253,18 +253,32 @@ maquina_local() {
     # el porque de cada fuente y por que la bateria sola no basta.
     local tipo motivo conf_maquina
     tipo="$("$REPO/hypr/scripts/lib/maquina.py" tipo 2>/dev/null || echo escritorio)"
-    motivo="$("$REPO/hypr/scripts/lib/maquina.py" --json 2>/dev/null \
-              | sed -n 's/.*"motivo": "\(.*\)",/\1/p')"
+    # Se le PREGUNTA el motivo, no se le saca del --json con un sed. Lo de antes
+    # era `sed -n 's/.*"motivo": ...'`, y en cuanto el --json crecio con el
+    # perfil de teclado —que tambien trae su "motivo"— el patron empezo a casar
+    # DOS veces y la linea salia partida en dos. Raspar JSON con sed se rompe
+    # solo con anadir un campo.
+    motivo="$("$REPO/hypr/scripts/lib/maquina.py" motivo 2>/dev/null)"
 
     if [ "$tipo" = "laptop" ]; then
         conf_maquina='$HOME/.config/hypr/conf/teclado-laptop.conf'
         echo "  equipo: portatil  ($motivo)"
         gris "    se carga conf/teclado-laptop.conf: touchpad, tapa, brillo y el"
-        gris "    Ctrl derecho de vuelta en el teclado interno"
+        gris "    perfil de teclado «completo» (kb_options vacio, o sea que el"
+        gris "    Ctrl derecho sigue siendo Ctrl en TODOS los teclados)"
     else
         conf_maquina='$HOME/.config/hypr/conf/nada.conf'
         echo "  equipo: sobremesa  ($motivo)"
         gris "    no se carga nada de portatil"
+        # Un sobremesa se queda con el perfil «sin-altgr», que es el teclado del
+        # autor (ANSI de 75%, sin AltGr). A quien clone el repo con un teclado
+        # completo eso le quita el Ctrl derecho a cambio de nada, y sin decirlo
+        # en ningun sitio se pasa media hora buscando el fallo. No se detecta
+        # sola —un teclado se enchufa y se desenchufa, y kb_options se lee al
+        # arrancar—, asi que lo que toca es AVISAR.
+        gris "    perfil de teclado «sin-altgr»: el Ctrl derecho hace de AltGr"
+        gris "    (si tu teclado ya tiene AltGr no te hace falta: pon"
+        gris "    kb_options = vacio en conf/input.conf)"
     fi
 
     if [ "$SOLO_REVISAR" -eq 0 ]; then
