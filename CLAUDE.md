@@ -212,6 +212,33 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
 - **`hyprctl reload` no basta** para probar cambios de `exec-once`: solo corren al
   arrancar la sesión. Y si la sesión arrancó desde un `.lua`, `reload` no cae de
   vuelta al `.conf`.
+- **Un `bindr` sobre una tecla modificadora LLEVA ESE MODIFICADOR DELANTE.** En
+  el instante en que sueltas `SUPER_L`, Hyprland todavía cuenta SUPER dentro del
+  modmask, así que `bindr = , SUPER_L` (modmask 0) **no coincide jamás**. Y no
+  avisa nadie: se carga sin error y sale en `hyprctl binds` como cualquier otro,
+  solo que nunca dispara. Lo bueno es `bindr = SUPER, SUPER_L`. Medido el
+  2026-08-04 con tres binds a la vez, uno por forma: de diez pulsaciones, las
+  diez las cogió la forma con modificador y cero la forma sin él. El modmask
+  tiene que coincidir **exacto**, así que soltar SUPER con SHIFT aún pulsado es
+  un caso distinto y necesita su propia línea.
+- **Y aun así, un `bindr` sobre `SUPER` casi no dispara si SUPER venía en un
+  combo.** En el diario de la sesión real disparó 2 de 10 veces, y las dos
+  pulsando SUPER sola; con `SUPER+TAB` no dispara. O sea que **no se puede
+  construir un gesto de "suelta el modificador" solo con `bindr`**.
+- **El evento de soltar una tecla se PIERDE del todo mientras una capa
+  `EXCLUSIVE` está cogiendo el teclado.** Ni lo ve el cliente por GTK (aún no
+  tiene el teclado) ni lo ve el `bindr`. Son ~185 ms en los que no se entera
+  nadie. Si necesitas saber si una tecla sigue pulsada, **pregúntaselo al
+  kernel** con `hypr/scripts/lib/teclas.py` (`EVIOCGKEY`: es estado, no una cola
+  de eventos), que cuesta 0,11 ms y no depende del foco. Requiere estar en el
+  grupo `input`, y por eso devuelve `None` —no `False`— cuando no puede mirar:
+  en otra máquina, confundir "no lo sé" con "no está pulsada" rompe el gesto
+  entero. Mirar todos los `/dev/input/event*` cuesta 170 ms porque los que no son
+  teclados tardan 4-11 ms en abrirse; hay que filtrarlos.
+- **A GTK no le preguntes por los modificadores**:
+  `Gdk.Keymap.get_modifier_state()` devuelve siempre `0x4000040` en esta sesión,
+  con el bit de SUPER puesto aunque no la toque nadie. No es el estado en vivo,
+  es el mapa de qué bit le corresponde.
 - **Para validar config sin arriesgar la sesión viva**, `tests/anidado.sh`:
   ```sh
   ./tests/anidado.sh hyprctl configerrors   # levanta, ejecuta y recoge

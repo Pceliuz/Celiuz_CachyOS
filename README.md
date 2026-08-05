@@ -254,32 +254,57 @@ Hyprland devuelve el foco a la ventana que lo tenía, y esa ventana se trae
 consigo su escritorio. Por eso el destino se guarda y el salto **se repite
 después** de cerrar.
 
-### Las redes de seguridad
+### Cómo se detecta que sueltas `SUPER`
 
-**No se le puede preguntar al sistema si `SUPER` sigue pulsada**: en esta sesión
-`Gdk.Keymap.get_modifier_state()` devuelve **siempre `0x4000040`**, con el bit de
-SUPER puesto aunque no la toque nadie — no es el estado en vivo, es el mapa de
-qué bit le corresponde. Está medido. Por eso el "soltar" se detecta por dos
-avisos y no preguntando: el evento de teclado de la propia ventana, y el `bindr`
-de Hyprland para cuando la ventana aún no existía.
+Esta es la parte que más ha costado, y la que más veces se dio por entendida sin
+serlo. **El evento de soltar no es fiable**, así que hay tres caminos y ninguno
+sobra — cada uno falla en un sitio distinto. Todo lo que sigue está medido el
+2026-08-04 con el diario del propio script:
 
-Coge el teclado en exclusiva, así que lleva tres redes:
+| | Camino | Cuándo sirve | Cuándo NO |
+|---|---|---|---|
+| 1 | `bindr` de Hyprland → `SIGWINCH` | Es el más rápido cuando llega | **Casi nunca llega**: disparó 2 de 10 veces, y las dos pulsando `SUPER` sola. Con `SUPER` en combo con `TAB` —o sea, en el gesto de verdad— no dispara |
+| 2 | El evento de teclado de GTK | Con la capa ya en pantalla y con el teclado | Antes de eso no ve nada |
+| 3 | Preguntarle al kernel (`lib/teclas.py`) | Siempre. No depende de quién tenga el foco ni de que llegue ningún evento | Solo si no se puede leer `/dev/input` |
+
+El caso que se quedaba colgado era **el toque rápido**: la ventana tarda ~185 ms
+en estar en pantalla (≈15 ms de arrancar Python y ≈120 ms de importar GTK), y si
+sueltas dentro de ese rato el evento **se pierde entre dos sillas** — ni GTK, que
+aún no tiene el teclado, ni el `bindr`, que en combo no dispara. La ventana se
+quedaba puesta y había que rematar con `Enter`.
+
+Lo arregla el camino 3: se le pregunta al kernel por el mapa de teclas pulsadas
+(`EVIOCGKEY`), que es estado y no una cola de eventos. Y se le pregunta **antes
+de enseñar la ventana**: si ya habías soltado, es que querías el siguiente
+escritorio y lo querías ya, así que no se dibuja nada y el salto ya está hecho.
+Cuesta 0,11 ms.
+
+> **Lo que NO se puede hacer es preguntárselo a GTK.**
+> `Gdk.Keymap.get_modifier_state()` devuelve **siempre `0x4000040`** en esta
+> sesión, con el bit de SUPER puesto aunque no la toque nadie: no es el estado en
+> vivo, es el mapa de qué bit le corresponde. Medido.
+
+Y como la capa coge el teclado en exclusiva, lleva además dos salidas de
+emergencia:
 
 - **`Escape`**, que además te devuelve de donde saliste.
 - **Cierre automático a los 20 s** sin tocar nada, que se rearma con cada tecla:
   no te echa mientras decides, solo si te fuiste y la dejaste puesta. Una capa
   así colgada te dejaría sin teclado en todo el escritorio, y eso no puede
   depender de que el código no falle nunca.
-- **El toque rápido**, que es el caso que se quedaba colgado. Si pulsas y
-  sueltas antes de que la ventana exista, el aviso de "solté SUPER" llega
-  cuando todavía no hay nadie escuchando. Se arregla con dos cosas: el aviso lo
-  manda **Hyprland** (`bindr` en `keybinds.conf` → `SIGWINCH`), y el script
-  deja el pidfile puesto **antes de cargar GTK**, que cuesta 100 ms medidos.
-  Si aun así llega antes de tiempo, queda apuntado y se atiende en cuanto hay
-  ventana.
 
-Con `VISTA_DEBUG=1` escribe cada tecla y cada cambio de modificadores en
-`$XDG_RUNTIME_DIR/vista-escritorios.log`.
+Para diagnosticar, el diario va a `$XDG_RUNTIME_DIR/vista-escritorios.log` y se
+enciende de dos formas:
+
+```sh
+VISTA_DEBUG=1 hypr/scripts/vista-escritorios.py   # lanzándolo tú a mano
+touch $XDG_RUNTIME_DIR/vista-escritorios.debug    # cuando lo lanza HYPRLAND
+```
+
+La segunda es la que sirve para medir carreras: un bind no tiene dónde ponerle un
+entorno sin duplicarlo, y duplicarlo cambia justo lo que se está midiendo. Las
+marcas van con **milisegundos y PID**, porque lo que se diagnostica aquí son
+carreras de ~15 ms.
 
 Los colores no están escritos en el script: lee `conf/colores.conf` en caliente y
 arma su CSS con la paleta, así que si cambia el amatista, esta pantalla cambia
@@ -939,6 +964,8 @@ equipo del autor que en uno recién clonado. Sirven desde un TTY o por SSH.
 | `unidad/fondos` | de dónde salen los fondos y qué se reconoce |
 | `unidad/generados` | dock y paleta: que lo generado cuadre |
 | `unidad/maquina` | portátil vs. sobremesa, y que el orden de carga no se rompa |
+| `unidad/portabilidad` | que no vuelva a colarse la ruta `~/dotfiles` en el código |
+| `unidad/teclas` | que «no puedo saber si SUPER está pulsada» no se confunda con «no lo está» |
 
 ### Cómo se prueba algo que te puede echar de tu sesión
 

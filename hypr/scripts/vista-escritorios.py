@@ -69,14 +69,30 @@ SEGUNDOS_MAXIMOS = 20   # cierre de seguridad, se rearma con cada tecla
 # senal enganchada a GLib.
 MS_MIRAR_SOLTAR = 30
 
-DEPURAR = os.environ.get("VISTA_DEBUG") == "1"
+# El diario se puede encender de dos formas. La variable de entorno vale cuando
+# lo lanzas tu a mano; el FICHERO vale cuando lo lanza HYPRLAND, que es el unico
+# caso en el que se pueden medir las carreras de verdad — un bind no tiene donde
+# ponerle un entorno sin duplicar el bind, y duplicarlo cambia justo lo que se
+# esta midiendo (saldrian dos procesos peleandose por el pidfile).
+#
+#     touch $XDG_RUNTIME_DIR/vista-escritorios.debug   # encender
+#     rm    $XDG_RUNTIME_DIR/vista-escritorios.debug   # apagar
+BANDERA_DEPURAR = os.path.join(EJECUCION, "vista-escritorios.debug")
+DEPURAR = (os.environ.get("VISTA_DEBUG") == "1"
+           or os.path.exists(BANDERA_DEPURAR))
 
 
 def apuntar(texto):
+    """Con MILISEGUNDOS: lo que se diagnostica aqui son carreras de ~15 ms.
+
+    Con la marca al segundo que habia antes, todo el arranque caia en la misma
+    linea de tiempo y no habia forma de ver que iba antes de que.
+    """
     if not DEPURAR:
         return
     with open(DIARIO, "a") as fh:
-        fh.write(f"{time.strftime('%H:%M:%S')} {texto}\n")
+        fh.write(f"{time.strftime('%H:%M:%S')}.{int(time.time() % 1 * 1000):03d}"
+                 f"  [{os.getpid()}] {texto}\n")
 
 
 def despertar(senal):
@@ -146,14 +162,21 @@ def _apunta_que_soltaron(*_):
 
 
 if __name__ == "__main__":
+    apuntar(f"--- arranco {'(atras)' if ATRAS else ''}")
     if despertar(signal.SIGUSR2 if ATRAS else signal.SIGUSR1):
+        apuntar("ya habia una abierta: la despierto y me voy")
         sys.exit(0)
     signal.signal(signal.SIGWINCH, _apunta_que_soltaron)
     with open(PIDFILE, "w") as fh:
         fh.write(str(os.getpid()))
+    apuntar("pidfile puesto: ya se me puede avisar")
 
 import re                                                        # noqa: E402
 import subprocess                                                # noqa: E402
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "lib"))
+import teclas                                                    # noqa: E402
 
 import gi                                                        # noqa: E402
 
@@ -388,6 +411,7 @@ class Vista(Gtk.Window):
         self.datos = datos
         self.origen = origen           # donde estabas al abrir; lo devuelve Escape
         self.destino = None            # a donde ir al cerrar; lo ejecuta main()
+        self.abortada = False          # toque rapido: ni se llego a enseñar
         self.tarjetas = []
         self.iconos = Iconos()
         self.reloj = None
@@ -414,12 +438,40 @@ class Vista(Gtk.Window):
         self.connect("key-release-event", self._soltar)
 
         self._construir()
-        self.show_all()
 
         # Igual que el Alt+Tab de Windows: la combinacion ya te deja mirando el
         # SIGUIENTE, no donde estabas. Asi un toque rapido de SUPER+TAB te lleva
         # al otro escritorio sin tener que pulsar nada mas.
+        #
+        # Va ANTES de enseñar la ventana, y eso importa: el salto de verdad ya
+        # esta hecho aunque la ventana no llegue a aparecer nunca, que es justo
+        # lo que pasa en el caso de aqui abajo.
         self._mover(paso_inicial)
+
+        # EL TOQUE RAPIDO SE RESUELVE AQUI, SIN ENSEÑAR NADA.
+        #
+        # Enseñar la ventana cuesta ~185 ms desde que Hyprland lanza el script
+        # (medido: ~15 ms de arrancar Python y ~120 ms de importar GTK). Si has
+        # soltado SUPER dentro de ese rato, ya has elegido: querias el siguiente
+        # escritorio y lo querias ya. Sacar la tarjeta para quitarla al
+        # instante seria un parpadeo feo, asi que no se saca.
+        #
+        # Y hace falta preguntarselo AL KERNEL (lib/teclas.py) porque el evento
+        # de soltar NO LLEGA en este caso: ni a GTK, que aun no tiene el
+        # teclado, ni al `bindr` de Hyprland, que con SUPER en combo no dispara.
+        # Esta medido en el diario de la sesion del 2026-08-04 — era el fallo de
+        # "si lo pulso rapido, la ventana se queda ahi puesta".
+        #
+        # `is False` y no `not ...`: None significa que no se pudo mirar (sin
+        # acceso a /dev/input, otra maquina), y entonces NO se aborta nada — se
+        # sigue por el camino de siempre.
+        if teclas.super_pulsada() is False:
+            apuntar("toque rapido: ya habias soltado SUPER, no enseño la ventana")
+            self.destino = self.datos[self.elegido]["id"]
+            self.abortada = True
+            return
+
+        self.show_all()
 
         # Avanzar y retroceder LLEGAN POR SENAL, no por teclado. Ver el
         # comentario de main(): Hyprland se queda la combinacion antes de que
@@ -441,6 +493,7 @@ class Vista(Gtk.Window):
         # arrancaba, la bandera ya viene levantada de antes y se cierra en la
         # primera vuelta.
         GLib.timeout_add(MS_MIRAR_SOLTAR, self._mirar_si_soltaron)
+        apuntar(f"ventana lista y en pantalla (soltaron={SOLTARON_SUPER})")
 
     def _montar_capa(self):
         GtkLayerShell.init_for_window(self)
@@ -616,9 +669,8 @@ class Vista(Gtk.Window):
     def _soltar(self, _w, ev):
         """Soltaste SUPER con la ventana ya puesta y con el foco: te quedas.
 
-        Este es el camino normal y esta comprobado que llega (en el diario de la
-        sesion real aparece "suelto Super_L"). El otro camino, para cuando la
-        ventana aun no existia, es la senal del bindr — ver soltaron_super().
+        Llega SOLO si la capa ya tenia el teclado; en un toque rapido no llega
+        nunca. Es el camino 2 de los tres que explica _mirar_si_soltaron().
         """
         tecla = Gdk.keyval_name(ev.keyval)
         apuntar(f"suelto {tecla}")
@@ -627,25 +679,40 @@ class Vista(Gtk.Window):
         return True
 
     def _mirar_si_soltaron(self):
-        """Aviso de Hyprland de que SUPER se solto (bindr -> SIGWINCH).
+        """Cada 30 ms: ¿sigues aguantando SUPER? Si no, te quedas donde miras.
 
-        ESTE ES EL CAMINO BUENO, y no un respaldo del evento de teclado: desde
-        que existe el `bindr` sobre SUPER_L, **Hyprland se queda esa tecla y ya
-        no se la pasa a la ventana**. Comprobado en la sesion real: en el diario
-        no aparece ni un solo "suelto", y si aparecen las pulsaciones normales
-        (un Return). O sea que el evento de soltar de GTK esta muerto por
-        diseno, y quien avisa es el compositor.
+        LO IMPORTANTE ES QUE HAY TRES CAMINOS Y NINGUNO SOBRA, porque cada uno
+        falla en un sitio distinto (todo esto esta MEDIDO el 2026-08-04, con el
+        diario de esta misma clase — no lo deduzcas otra vez):
 
-        Tampoco se puede adivinar preguntando: `Gdk.Keymap.get_modifier_state()`
-        en esta sesion devuelve SIEMPRE 0x4000040 (con el bit de SUPER puesto)
-        aunque no la toque nadie — no es el estado en vivo, es el mapa de que
-        bit le corresponde. Medido.
+        1. `SOLTARON_SUPER`, que levanta el `bindr` de Hyprland por SIGWINCH.
+           Es el mas rapido cuando llega, pero **casi nunca llega**: disparo 2
+           de 10 veces, y las dos pulsando SUPER sola. Con SUPER en combo con
+           TAB — o sea, en el gesto de verdad — no dispara.
+        2. El evento de teclado de GTK (`_soltar`). Ese SI llega, al reves de lo
+           que decia el comentario que habia aqui, pero solo cuando la capa ya
+           tiene el teclado: antes de eso no ve nada.
+        3. Preguntarle al kernel (`lib/teclas.py`). No depende de quien tenga el
+           foco ni de que haya llegado ningun evento, asi que es el unico que
+           cubre el hueco de los otros dos. Cuesta 0,11 ms.
+
+        Lo que NO se puede hacer es preguntarselo a GTK:
+        `Gdk.Keymap.get_modifier_state()` devuelve SIEMPRE 0x4000040 en esta
+        sesion, con el bit de SUPER puesto aunque no la toque nadie. No es el
+        estado en vivo, es el mapa de que bit le corresponde. Medido.
         """
-        if not SOLTARON_SUPER:
-            return True
-        apuntar("me quedo donde estoy: soltaron SUPER")
-        self._quedarse()
-        return False
+        if SOLTARON_SUPER:
+            apuntar("me quedo donde estoy: aviso de Hyprland (bindr)")
+            self._quedarse()
+            return False
+        # `is False` a proposito: None es "no he podido mirar" (sin acceso a
+        # /dev/input), y ahi hay que seguir esperando a los otros dos caminos en
+        # vez de cerrar la ventana en la cara del usuario.
+        if teclas.super_pulsada() is False:
+            apuntar("me quedo donde estoy: SUPER ya no esta pulsada")
+            self._quedarse()
+            return False
+        return True
 
     # --- Salidas ---
 
@@ -692,12 +759,15 @@ def main():
 
     origen = escritorio_actual()
     vista = Vista(datos, origen, -1 if ATRAS else 1)
-    for sen in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-        # Que un kill no te deje tirado en otro escritorio: se vuelve al de
-        # partida, igual que con Escape.
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sen, vista._volver)
     try:
-        Gtk.main()
+        # Si fue un toque rapido, la ventana ni se enseño y el destino ya esta
+        # decidido: no hay bucle de GTK en el que entrar ni nada que vigilar.
+        if not vista.abortada:
+            for sen in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+                # Que un kill no te deje tirado en otro escritorio: se vuelve al
+                # de partida, igual que con Escape.
+                GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sen, vista._volver)
+            Gtk.main()
     finally:
         try:
             os.unlink(PIDFILE)
