@@ -9,7 +9,7 @@ que sale solo en los portátiles.
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 7 pruebas. Deben salir todas
+./tests/run.sh          # 8 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -47,7 +47,7 @@ batería) por un `include`, y `instalar.sh` genera `waybar/local.jsonc` metiénd
 
 Está comprobado, en esta máquina y para la otra:
 
-- Las 7 pruebas, `./instalar.sh --revisar` y `hyprctl configerrors`, limpios.
+- Las pruebas, `./instalar.sh --revisar` y `hyprctl configerrors`, limpios.
 - El módulo, vivo en la barra y con su color (captura con `grim`).
 - El camino del **sobremesa**: el generador con `BATERIA=no` saca la lista sin
   batería.
@@ -59,6 +59,26 @@ Está comprobado, en esta máquina y para la otra:
 carga: `full` (100 %), `not-charging` (el corte al 80 % de algunos portátiles) y
 la alarma roja de `critico` (≤10 % **sin** cable). Si alguno se ve raro, el sitio
 es el bloque `#battery` de `style.css`; están escritos, no probados.
+
+## El susto del fondo (2026-08-04), y lo que dejó
+
+Levantar un Hyprland **anidado** con el `$HOME` de verdad dejó el escritorio real
+sin fondo y sin el demonio que lo pausa: el anidado corre tu `autostart.conf`, y
+`wallpaper.sh` empieza con `pkill -x mpvpaper` y `pkill -f wallpaper-paus[e].py`,
+que no distinguen de qué sesión es cada proceso. Al cerrar el anidado, su demonio
+—que nace con `setsid`— sobrevivió apuntando a un compositor muerto, y como
+`wallpaper.sh` pregunta si hay demonio con un `pgrep` por nombre, el zombi
+contestaba que sí y nadie levantaba uno bueno. Resultado: el vídeo corriendo con
+ventanas encima y quieto en el bloqueo.
+
+De ahí salieron dos cosas que ya están puestas: el demonio **se va solo** si pasa
+`ABANDONO` (60 s) sin poder hablar con su Hyprland, y `tests/unidad/fondo-huerfano.sh`
+lo vigila por los dos lados. Las dos trampas están escritas en el `CLAUDE.md`.
+
+**Lo que queda por hacer aquí**: el anidado sigue sin ser un cajón de arena.
+Arrancarlo con un `$HOME` desechable, o con un `autostart.conf` recortado, se
+puede automatizar en un script de `tests/` y quitaría el pie del que resbala.
+No está hecho.
 
 ## Lo siguiente, por orden de valor
 

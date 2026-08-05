@@ -84,6 +84,11 @@ FIFO_PATH = os.path.join(RUNTIME, "wallpaper-pause.fifo")
 # select, o sea el latido del bucle cuando no pasa nada en Hyprland.
 PERIODO = 5.0
 
+# Cuanto se insiste en hablar con Hyprland antes de rendirse y salir. El porque
+# esta en el bucle de reconexion de main(). Se puede forzar desde el entorno
+# para probarlo sin esperar un minuto (lo usa tests/unidad/fondo-huerfano.sh).
+ABANDONO = float(os.environ.get("WALLPAPER_PAUSE_ABANDONO", "60"))
+
 # Eventos de Hyprland tras los que merece la pena recontar ventanas. El resto
 # (cambios de foco, de titulo, de submap...) no altera lo que tapa el fondo.
 EVENTOS = (
@@ -239,15 +244,43 @@ def main():
     parado_por_juego = False
     retenido = False     # alguien pidio `hold`: no se toca la pausa
     revividos = 0        # intentos seguidos de resucitar mpvpaper (ver 1b)
+    sin_hyprland = None  # desde cuando no se consigue hablar con el compositor
 
     while True:
         try:
             eventos = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             eventos.connect(os.path.join(HYPR_DIR, ".socket2.sock"))
         except OSError:
-            time.sleep(2)   # Hyprland todavia no esta listo (arranque en frio)
+            # No hay compositor al otro lado. Son dos situaciones distintas y
+            # hay que separarlas:
+            #
+            #   - Arranque en frio: Hyprland aun no ha abierto el socket. Se
+            #     espera y se vuelve a intentar, que es lo de siempre.
+            #   - Nuestro Hyprland ya NO ESTA. Aqui quedarse esperando es peor
+            #     que morirse, y no es una hipotesis: paso el 2026-08-04. Este
+            #     demonio se lanza con `setsid`, asi que NO muere con el
+            #     compositor que lo arranco; y HYPR_DIR se fija al empezar, o
+            #     sea que un Hyprland nuevo tampoco lo recupera — se queda
+            #     reintentando contra una instancia muerta, para siempre.
+            #
+            #     Y estorba, porque wallpaper.sh decide si hace falta lanzar un
+            #     demonio con un `pgrep` POR NOMBRE: el zombi contesta que si,
+            #     y la sesion viva se queda sin nadie que pause el fondo. El
+            #     sintoma es justo el contrario de lo que parece un fallo del
+            #     demonio — el video corriendo con ventanas encima, y ademas
+            #     ningun `hold` ni `release` llega, porque el FIFO tambien es
+            #     suyo. Asi que tras ABANDONO segundos sin conseguir hablar con
+            #     nadie, este proceso se aparta y deja el sitio libre.
+            if sin_hyprland is None:
+                sin_hyprland = time.monotonic()
+            elif time.monotonic() - sin_hyprland >= ABANDONO:
+                print("wallpaper-pause: mi Hyprland ya no esta; dejo el sitio",
+                      file=sys.stderr)
+                sys.exit(0)
+            time.sleep(2)
             continue
 
+        sin_hyprland = None
         pausado = None
         buffer = b""
         try:

@@ -221,6 +221,20 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   `AQ_BACKENDS`, no `WLR_BACKENDS`: desde 0.5x el backend es aquamarine y la
   variable de wlroots la ignora en silencio. Sobre esta NVIDIA hace falta además
   `AQ_NO_MODIFIERS=1` o se queda en `bo null` sin monitor.
+- **El anidado NO es un cajón de arena: corre TU `autostart.conf` con TU `$HOME`,
+  y hay `exec-once` que empiezan matando lo de la sesión de verdad.** El peor es
+  `wallpaper.sh`: sus dos primeras órdenes son `pkill -x mpvpaper` y
+  `pkill -f wallpaper-paus[e].py`, que no distinguen de qué sesión es cada
+  proceso. Levantar un anidado te deja el escritorio real **sin fondo y sin el
+  demonio que lo pausa**, y no se nota hasta que abres una ventana y el vídeo
+  sigue corriendo. Pasó el 2026-08-04.
+  Si solo vas a mirar `configerrors` o a probar una config, arranca el anidado
+  con un `$HOME` desechable (como hacen las pruebas) o con `autostart.conf`
+  fuera. Y si ya lo has hecho: `pgrep -af mpvpaper` y el demonio, que hay que
+  levantarlos otra vez con `hypr/scripts/wallpaper.sh`.
+  El `setsid` con el que nace el demonio es lo que lo salva de morir con el
+  compositor — y por eso mismo sobrevive al anidado (ver la trampa del zombi,
+  más abajo).
 - **`HYPRLAND_INSTANCE_SIGNATURE` NO mete un programa gráfico en el anidado.** Esa
   variable solo le dice a `hyprctl` con quién hablar; un cliente Wayland elige
   compositor por **`WAYLAND_DISPLAY`** y por nada más. Lanzar algo con solo la
@@ -278,6 +292,21 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   sale con 0**, así que todas fallan calladas. El demonio ahora lo rehace solo
   cada segundo; para diagnosticarlo,
   `ls -l /proc/<pid>/fd` marca `(deleted)` el descriptor huérfano.
+- **Un demonio que sobrevive a SU Hyprland es peor que no tener ninguno**, y el
+  síntoma no se parece en nada a la causa. `wallpaper-pause.py` nace con
+  `setsid` y fija su instancia al arrancar, así que un compositor muerto lo deja
+  girando contra un socket que ya no contesta. Y estorba: `wallpaper.sh`
+  pregunta «¿hay demonio?» con un `pgrep` **por nombre**, el zombi contesta que
+  sí, y la sesión viva se queda sin nadie que pause el fondo — encima el FIFO de
+  órdenes también es suyo, así que los `hold` y `release` del bloqueo y de
+  CeliuzPaper se los traga sin leerlos. Lo que se ve es un demonio que parece ir
+  al revés: el vídeo corriendo con ventanas encima, y quieto en el bloqueo.
+  Ya no puede pasar —tras `ABANDONO` segundos sin poder hablar con Hyprland el
+  demonio se va solo, y `tests/unidad/fondo-huerfano.sh` lo vigila—, pero el
+  diagnóstico vale para cualquier otro: mira
+  `tr '\0' '\n' < /proc/<pid>/environ | grep HYPRLAND_INSTANCE_SIGNATURE` y
+  compáralo con el de tu sesión. **«Existe la carpeta de la instancia» NO sirve
+  para saber si vive**: Hyprland no siempre la limpia al irse.
 
 ## Las pruebas
 
