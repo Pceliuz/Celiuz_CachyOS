@@ -305,7 +305,27 @@ EOF
         hecho "  escrito hypr/conf/local.conf"
     fi
 
-    # --- El lado derecho de la barra ---
+    # --- El lado derecho de la barra, y el sensor de temperatura ---
+    #
+    # Las dos cosas van al mismo fichero generado (waybar/local.jsonc) porque las
+    # dos son de esta caja y de ninguna otra, y porque waybar solo mira el PRIMER
+    # sitio donde aparece cada clave: si esto se repartiera en dos generados
+    # habria que vigilar el orden de los include.
+    #
+    # El sensor: la ruta del hwmon de la CPU depende del procesador (k10temp en
+    # AMD, coretemp en Intel) y no se puede versionar. La averigua sensores.py.
+    # Si no reconoce ninguno se deja la clave fuera a proposito y waybar cae a
+    # su thermal_zone0: mejor su valor por defecto que una ruta inventada.
+    local sensor_ruta sensor_entrada
+    sensor_ruta="$("$REPO/hypr/scripts/lib/sensores.py" ruta 2>/dev/null || true)"
+    sensor_entrada="$("$REPO/hypr/scripts/lib/sensores.py" entrada 2>/dev/null || true)"
+    if [ -n "$sensor_ruta" ]; then
+        gris "    sensor de CPU: $(basename "$(dirname "$sensor_ruta")") ($sensor_ruta)"
+    else
+        aviso "no reconozco el sensor de temperatura de esta CPU"
+        gris "    la barra usara el thermal_zone0 de waybar, que puede no ser la CPU"
+        gris "    mira que hay con: hypr/scripts/lib/sensores.py"
+    fi
     #
     # La bateria solo tiene sentido en un portatil, y en un sobremesa no basta
     # con que "no se vea": el modulo dejaria un hueco vacio en la barra, porque
@@ -319,18 +339,26 @@ EOF
     # sin tocar este script.
     if [ "$SOLO_REVISAR" -eq 0 ]; then
         if BATERIA="$( [ "$tipo" = "laptop" ] && echo si || echo no )" \
-           python3 - "$REPO/waybar/derecha.jsonc" "$REPO/waybar/local.jsonc" <<'PY'
+           SENSOR_RUTA="$sensor_ruta" SENSOR_ENTRADA="$sensor_entrada" \
+           python3 - "$REPO/waybar/derecha.jsonc" "$REPO/waybar/local.jsonc" \
+                     "$REPO/waybar/sensores.jsonc" <<'PY'
 import json, os, re, sys
 
-origen, destino = sys.argv[1], sys.argv[2]
+origen, destino, origen_sensores = sys.argv[1], sys.argv[2], sys.argv[3]
 con_bateria = os.environ.get("BATERIA") == "si"
 
-# json no entiende los comentarios de un .jsonc. Se quitan solo los que ocupan
-# la linea entera: quitarlos en cualquier posicion se llevaria por delante
-# cualquier "//" que apareciera dentro de una cadena.
-crudo = open(origen, encoding="utf-8").read()
-limpio = "\n".join(l for l in crudo.splitlines() if not l.lstrip().startswith("//"))
-modulos = json.loads(limpio)["modules-right"]
+def leer_jsonc(ruta):
+    """Un .jsonc del repo, ya sin comentarios.
+
+    json no entiende los comentarios de un .jsonc. Se quitan solo los que ocupan
+    la linea entera: quitarlos en cualquier posicion se llevaria por delante
+    cualquier "//" que apareciera dentro de una cadena.
+    """
+    crudo = open(ruta, encoding="utf-8").read()
+    limpio = "\n".join(l for l in crudo.splitlines() if not l.lstrip().startswith("//"))
+    return json.loads(limpio)
+
+modulos = leer_jsonc(origen)["modules-right"]
 
 if con_bateria and "battery" not in modulos:
     # Junto a los otros indicadores de estado y antes de las notificaciones. Si
@@ -338,19 +366,38 @@ if con_bateria and "battery" not in modulos:
     pos = modulos.index("custom/notificaciones") if "custom/notificaciones" in modulos else len(modulos)
     modulos.insert(pos, "battery")
 
+# El modulo de temperatura sale del versionado y solo se le anade la ruta del
+# sensor de esta caja. Asi lo que se ve (formato, iconos, umbral) se toca en un
+# solo sitio —waybar/sensores.jsonc— y llega aqui en el siguiente ./instalar.sh.
+salida = {"modules-right": modulos}
+ruta_sensor = os.environ.get("SENSOR_RUTA", "").strip()
+entrada_sensor = os.environ.get("SENSOR_ENTRADA", "").strip()
+if ruta_sensor and entrada_sensor:
+    temperatura = leer_jsonc(origen_sensores)["temperature"]
+    # Delante, para que se lean antes que el resto al abrir el fichero: son lo
+    # unico de aqui que no vale en otra maquina.
+    salida["temperature"] = dict(
+        {"hwmon-path-abs": ruta_sensor, "input-filename": entrada_sensor},
+        **temperatura)
+
 cabecera = (
     "// waybar/local.jsonc — GENERADO por instalar.sh. NO se versiona.\n"
     "//\n"
-    "// El lado derecho de la barra en ESTA maquina. Lo carga config.jsonc por\n"
-    "// \"include\", y va el primero: en waybar gana el primero que define una\n"
-    "// clave, asi que esto manda sobre waybar/derecha.jsonc.\n"
+    "// Lo de ESTA maquina: el lado derecho de la barra y la ruta del sensor de\n"
+    "// temperatura de la CPU. Lo carga config.jsonc por \"include\", y va el\n"
+    "// primero: en waybar gana el primero que define una clave, asi que esto\n"
+    "// manda sobre waybar/derecha.jsonc y waybar/sensores.jsonc.\n"
     "//\n"
-    "// Equipo detectado: %s. Si te lo detecto mal, mira el motivo en\n"
-    "// hypr/conf/local.conf y vuelve a pasar ./instalar.sh.\n"
-    % ("portatil (lleva bateria)" if con_bateria else "sobremesa (sin bateria)")
+    "// Equipo detectado: %s.\n"
+    "// Sensor de CPU: %s.\n"
+    "// Si te lo detecto mal, mira el motivo en hypr/conf/local.conf (el equipo)\n"
+    "// o pasa hypr/scripts/lib/sensores.py (el sensor), y repite ./instalar.sh.\n"
+    % ("portatil (lleva bateria)" if con_bateria else "sobremesa (sin bateria)",
+       ("%s (%s)" % (ruta_sensor, entrada_sensor)) if ruta_sensor
+       else "ninguno reconocido; waybar caera a thermal_zone0")
 )
 with open(destino, "w", encoding="utf-8") as f:
-    f.write(cabecera + json.dumps({"modules-right": modulos}, indent=4, ensure_ascii=False) + "\n")
+    f.write(cabecera + json.dumps(salida, indent=4, ensure_ascii=False) + "\n")
 PY
         then
             hecho "  escrito waybar/local.jsonc"

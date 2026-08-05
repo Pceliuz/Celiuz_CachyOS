@@ -1,0 +1,43 @@
+// ~/dotfiles/waybar/sensores.jsonc
+// El modulo de temperatura de la CPU, SIN la ruta del sensor.
+//
+// POR QUE ESTE FICHERO EXISTE
+// ---------------------------
+// Es el mismo trato que derecha.jsonc: aqui vive todo lo que se ve (formato,
+// iconos, umbral, click) y NO vive lo que cambia de una maquina a otra, que es
+// la ruta del sensor. Esa la mete `instalar.sh` en local.jsonc, preguntandole a
+// scripts/lib/sensores.py que driver mide la CPU de esta caja.
+//
+// Antes la ruta estaba escrita a mano en config.jsonc:
+//
+//     "hwmon-path-abs": "/sys/devices/pci0000:00/0000:00:18.3/hwmon"
+//
+// que es el k10temp de un Ryzen 5 5500 — el sobremesa del autor. En el portatil
+// (Intel, sensor "coretemp") esa ruta NO EXISTE, y en la maquina de quien clone
+// el repo tampoco. Cada familia de CPU nombra su sensor de otra forma.
+//
+// Y ademas es la RED DE SEGURIDAD: si falta local.jsonc —un clon recien hecho,
+// antes de pasar el instalador— la barra sigue teniendo su modulo de
+// temperatura. Sin `hwmon-path-abs` waybar cae a /sys/class/thermal/
+// thermal_zone0, que no siempre es la CPU pero existe en todas partes.
+//
+// En waybar gana el PRIMERO que define una clave, y config.jsonc carga
+// local.jsonc antes que este fichero. Por eso "temperature" no puede estar en
+// config.jsonc: si estuviera, ganaria siempre y lo generado no pintaria nada.
+//
+// CUIDADO AL EDITARLO: instalar.sh lo lee con python3, que no entiende
+// comentarios de JSON. Se los quita antes, pero solo los que ocupan una linea
+// entera. Un `// ...` al final de una linea con datos rompe la lectura.
+{
+    "temperature": {
+        "critical-threshold": 85,
+        // Los <span size='130%'> agrandan solo el glifo, no las cifras. Waybar
+        // interpreta markup de Pango en los "format" de los modulos.
+        "format": "<span size='130%'>{icon}</span> {temperatureC}°C",
+        "format-critical": "<span size='130%'>{icon}</span> {temperatureC}°C",
+        "format-icons": ["󱃂", "󰔏", "󰸁"],
+        "interval": 2,
+        "tooltip-format": "CPU: {temperatureC}°C",
+        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui btop"
+    }
+}

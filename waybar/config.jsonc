@@ -42,18 +42,25 @@
     // esta clave no puede estar aqui — si estuviera, ganaria siempre y el
     // generado no pintaria nada.
     //
-    //   local.jsonc    lo escribe instalar.sh segun scripts/lib/maquina.py.
+    // Lo mismo vale para "temperature", que tampoco se define aqui: la ruta del
+    // sensor de la CPU depende del procesador de la caja.
+    //
+    //   local.jsonc    lo escribe instalar.sh segun scripts/lib/maquina.py (la
+    //                  bateria) y scripts/lib/sensores.py (la ruta del sensor).
     //                  No se versiona: es de esta maquina y de ninguna otra.
     //   derecha.jsonc  la lista sin bateria, versionada. Es la de un sobremesa
     //                  y ademas la red de seguridad de quien clone el repo y
     //                  arranque waybar antes de pasar el instalador.
+    //   sensores.jsonc el modulo de temperatura sin la ruta del sensor. Misma
+    //                  red de seguridad: sin ella waybar cae a thermal_zone0.
     //
     // Que falte un include NO es fatal: waybar avisa y sigue (comprobado; ojo,
-    // que fuzzel en este mismo repo hace lo contrario y sale con 1). Por eso el
-    // segundo fichero basta para que la barra nunca se quede sin lado derecho.
+    // que fuzzel en este mismo repo hace lo contrario y sale con 1). Por eso los
+    // dos versionados bastan para que la barra nunca se quede coja.
     "include": [
         "~/.config/waybar/local.jsonc",
-        "~/.config/waybar/derecha.jsonc"
+        "~/.config/waybar/derecha.jsonc",
+        "~/.config/waybar/sensores.jsonc"
     ],
     // El `~` se expande, pero `$HOME` NO: waybar buscaria un directorio llamado
     // literalmente "$HOME" y solo dejaria un aviso en el log. Comprobado.
@@ -79,21 +86,16 @@
 
     // --- IZQUIERDA: sensores ---
 
-    "temperature": {
-        // Ruta absoluta del sensor: el numero de /sys/class/hwmon/hwmonN cambia
-        // entre reinicios, esta ruta por PCI no. Tctl del k10temp (Ryzen 5 5500).
-        "hwmon-path-abs": "/sys/devices/pci0000:00/0000:00:18.3/hwmon",
-        "input-filename": "temp1_input",
-        "critical-threshold": 85,
-        // Los <span size='130%'> agrandan solo el glifo, no las cifras. Waybar
-        // interpreta markup de Pango en los "format" de los modulos.
-        "format": "<span size='130%'>{icon}</span> {temperatureC}°C",
-        "format-critical": "<span size='130%'>{icon}</span> {temperatureC}°C",
-        "format-icons": ["󱃂", "󰔏", "󰸁"],
-        "interval": 2,
-        "tooltip-format": "CPU (Tctl): {temperatureC}°C",
-        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui btop"
-    },
+    // "temperature" NO se define aqui, igual que "modules-right": sale de los
+    // ficheros del "include" de arriba. La razon es que la RUTA DEL SENSOR
+    // cambia con el procesador —k10temp en AMD, coretemp en Intel, y colgando
+    // cada uno de un sitio distinto del /sys—, asi que la pone instalar.sh en
+    // local.jsonc preguntandole a scripts/lib/sensores.py. Lo que se ve
+    // (formato, iconos, umbral) esta en waybar/sensores.jsonc, versionado.
+    //
+    // Aqui estuvo escrita a mano la del Ryzen del autor, y en cualquier otra
+    // maquina —incluido su propio portatil— no existia y el modulo se quedaba
+    // sin poder leer nada.
 
     "cpu": {
         // {usage} ES el uso total del procesador: la media de los 12 hilos del
@@ -102,14 +104,14 @@
         "format": "<span size='130%'>󰻠</span> {usage}%",
         "interval": 2,
         "tooltip-format": "Uso total: {usage}%\nCarga (1/5/15 min): {load}\nFrecuencia media: {avg_frequency} GHz",
-        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui btop"
+        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui btop"
     },
 
     "memory": {
         "format": "<span size='130%'>󰍛</span> {percentage}%",
         "interval": 2,
         "tooltip-format": "RAM: {used:0.1f}G / {total:0.1f}G",
-        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui btop"
+        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui btop"
     },
 
 
@@ -154,7 +156,7 @@
         // Los campos bandwidth* YA traen la unidad por segundo ("252.9kB/s"), asi
         // que anadir "/s" aqui daria "kB/s/s".
         "tooltip-format": "{ifname}\nBajada: {bandwidthDownBytes}\nSubida: {bandwidthUpBytes}\nTotal: {bandwidthTotalBytes}",
-        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui nmtui"
+        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui nmtui"
     },
 
     "network": {
@@ -166,7 +168,7 @@
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} — IP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
         "interval": 5,
         // nmtui viene con networkmanager, no hace falta instalar nada extra.
-        "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui nmtui"
+        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui nmtui"
     },
 
     // --- DERECHA: bateria (solo en portatiles) ---
@@ -226,7 +228,7 @@
         // El script devuelve texto, tooltip y CLASE. El color de cada estado se
         // decide en style.css a partir de esa clase, no aqui: asi los colores
         // siguen viniendo todos de la paleta y no hay ninguno escrito en bash.
-        "exec": "$HOME/dotfiles/waybar/scripts/notificaciones.sh",
+        "exec": "$HOME/.config/waybar/scripts/notificaciones.sh",
         "return-type": "json",
         // Cada 2 s. Es un grep sobre la salida de makoctl, no cuesta nada, y
         // mako no avisa por ninguna senal cuando cambia la cuenta.
@@ -266,6 +268,6 @@
         // Google, y aparece con solo rozar el reloj. Lo reemplaza el panel de
         // scripts/calendar-panel.py, que se abre con click y se cierra con otro.
         "tooltip": false,
-        "on-click": "$HOME/dotfiles/hypr/scripts/calendar-panel.py"
+        "on-click": "$HOME/.config/hypr/scripts/calendar-panel.py"
     }
 }
