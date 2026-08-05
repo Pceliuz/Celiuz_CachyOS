@@ -459,6 +459,48 @@ Que falte `local.jsonc` **no** rompe nada: waybar avisa en el log y sigue con
 `derecha.jsonc`, así que quien clone el repo y arranque waybar antes de pasar el
 instalador tiene barra igual, solo que sin batería.
 
+### La temperatura de la barra
+
+Por el mismo camino, y por el mismo motivo. La ruta del sensor de la CPU **no se
+puede versionar**: cada familia de procesador nombra el suyo de otra forma y lo
+cuelga de otro sitio del `/sys` — `k10temp` en AMD, `coretemp` en Intel,
+`cpu_thermal` en las ARM.
+
+```
+waybar/sensores.jsonc  versionado: formato, iconos, umbral. Sin la ruta.
+waybar/local.jsonc     generado: la ruta del sensor de ESTA caja.
+```
+
+Quién lo averigua es `hypr/scripts/lib/sensores.py`, y se le puede preguntar:
+
+```sh
+hypr/scripts/lib/sensores.py         # el resumen: driver, ruta y grados de ahora
+hypr/scripts/lib/sensores.py ruta    # lo que va en "hwmon-path-abs"
+```
+
+Busca por el `name` que publica cada driver en `/sys/class/hwmon`, y de dentro
+coge la entrada del **encapsulado entero** (`Tctl`, `Tdie`, `Package id 0`) y no
+la de un núcleo suelto, que salta 20 grados según qué hilo esté trabajando.
+
+> **El número de `hwmonN` no sirve como ruta.** Es lo primero que apetece usar y
+> está mal: ese número se reparte por orden de arranque de los módulos del
+> kernel y **cambia entre reinicios**, así que la barra podría pasar a enseñar la
+> temperatura de la batería sin avisar. Lo estable es la ruta del dispositivo, a
+> donde apunta ese enlace: `/sys/class/hwmon/hwmon3` →
+> `/sys/devices/platform/coretemp.0/hwmon/hwmon3`. Se guarda la carpeta padre,
+> que es lo que espera `hwmon-path-abs`.
+
+Si no reconoce ningún sensor **no se inventa una ruta**: se deja la clave fuera y
+waybar cae a su `thermal_zone0`. Un número de procedencia desconocida en la barra
+es peor que el valor por defecto, porque parece bueno.
+
+> Aquí estuvo escrita a mano la ruta del **Ryzen 5 5500** del autor
+> (`/sys/devices/pci0000:00/0000:00:18.3/hwmon`), dentro de `config.jsonc`, que
+> sí se versiona. En su propio portátil —Intel, sensor `coretemp`— esa ruta no
+> existe, así que el módulo no podía leer nada; y en la máquina de quien clonara
+> el repo, tampoco. Lo vigila `tests/unidad/sensores.sh`, que además falla si
+> alguien vuelve a escribir la ruta de un sensor en un `.jsonc` versionado.
+
 ### Cómo lo sabe
 
 ```sh

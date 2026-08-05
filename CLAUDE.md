@@ -52,6 +52,23 @@ repo.
 escribir `$HOME/dotfiles` en código, y dice fichero y línea. Los comentarios sí
 pueden mencionarlo.
 
+**Y el cerrojo tuvo el mismo punto ciego que el código que vigila** (2026-08-05).
+Escaneaba solo `.conf`, `.sh` y `.py`, así que no vio **siete** rutas cableadas
+en `waybar/config.jsonc` —los `on-click` de btop y nmtui, el `exec` del módulo de
+notificaciones y el del panel de calendario— ni el `include=` de `mako/config`,
+que no tiene extensión. Quien clonara el repo fuera de `~/dotfiles` se quedaba
+sin esos clicks, sin el módulo de notificaciones y sin los colores de mako, **en
+silencio y con las pruebas en verde**. Ahora mira todo fichero de texto menos la
+documentación, y la lista es de lo que se EXCLUYE, para que un tipo de fichero
+nuevo entre solo. La lección general: **una lista blanca de extensiones en un
+cerrojo es una lista de sitios donde el fallo puede vivir tranquilo.**
+
+Para waybar y mako la ruta buena es `$HOME/.config/waybar/...` y
+`~/.config/mako/...` — los enlaces que crea `instalar.sh`—, igual que los `.conf`
+usan `$HOME/.config/hypr/...`. Ojo con la asimetría: en los `include` de waybar
+**`$HOME` NO se expande y `~` sí**, mientras que en un `on-click` o un `exec`
+—que pasan por un shell— se expanden los dos.
+
 **Ni se te ocurra "arreglar" esto detectando la máquina al instalar y escribiendo
 un fichero.** Lo que depende del equipo se pregunta EN CALIENTE: la pantalla con
 `lib/pantalla.py`, la terminal y el navegador con `lib/apps.py`, la carpeta de
@@ -97,7 +114,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
 | `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
-| `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py` |
+| `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py`, y `waybar/sensores.jsonc` + `lib/sensores.py` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
 
 Ese último es la excepción que confirma la regla: `hyprlock.conf` trae **también**
@@ -303,6 +320,29 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   waybar viva. Lo bueno es relanzar (`Bar.supervisar()`), con freno: 5 intentos
   en 60 s y luego rendirse **avisando**, que si no es un bucle de procesos a 10
   Hz. Lo vigila `tests/unidad/barras-supervisor.sh`.
+- **`waybar-autohide.py --reiniciar` NO es un comando que termina: SE CONVIERTE
+  en el demonio.** Mata al que hubiera (`matar_otros()`) y sigue con el bucle
+  principal en primer plano, o sea que está pensado para un `exec` de un bind y
+  no para un shell que espera a que acabe. Lanzarlo y esperar deja el terminal
+  colgado, y cuando algo lo mata por tiempo, su `cleanup()` **se lleva las cuatro
+  waybar y borra el FIFO**: escritorio sin barra y sin dock, exactamente el
+  estado que el supervisor existe para evitar. Pasó el 2026-08-05. Para
+  recuperarlo, como lo levanta `autostart.conf`:
+  `setsid nohup hypr/scripts/waybar-autohide.py >/dev/null 2>&1 </dev/null &`.
+  Y para probar un cambio de config sin esto, el camino es el bind `SUPER+SHIFT+C`
+  o mandarle `reload` por el FIFO.
+- **La ruta de un sensor hwmon NO se versiona, y su `hwmonN` no vale como ruta.**
+  Dos trampas en una. La primera: `waybar/config.jsonc` llevaba escrita a mano
+  `"hwmon-path-abs": "/sys/devices/pci0000:00/0000:00:18.3/hwmon"`, que es el
+  k10temp del Ryzen del autor; en su propio portátil (Intel, `coretemp`) esa ruta
+  no existe y el módulo no leía nada. Cada familia de CPU nombra su sensor de
+  otra forma. Lo averigua `lib/sensores.py` y lo escribe `instalar.sh` en
+  `local.jsonc`, que no se versiona. La segunda: **el número de
+  `/sys/class/hwmon/hwmonN` se reparte por orden de arranque de los módulos del
+  kernel y cambia entre reinicios** — usarlo haría que un día la barra enseñara
+  la temperatura de la batería. Lo estable es la ruta del dispositivo a la que
+  apunta el enlace (`realpath`, y luego la carpeta padre). Y dentro, la entrada
+  del encapsulado (`Tctl`, `Tdie`, `Package id 0`), nunca la de un núcleo suelto.
 - **Un `device {}` de Hyprland arregla UN teclado, no «el teclado».** El perfil
   de portátil devolvía el Ctrl derecho con
   `device { name = at-translated-set-2-keyboard }`, y eso dejaba fuera a todo lo

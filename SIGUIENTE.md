@@ -3,15 +3,17 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-05**, en el **portátil**. Lo último fueron dos arreglos
-medidos en anidado —las barras ya no se van para siempre, y el perfil de teclado
-de portátil vale para todos los teclados— más la comprobación de que el fondo del
-login se rehace solo. Antes, el `SUPER+TAB` y el sonido de las notificaciones.
+Última sesión: **2026-08-05**, en el **portátil**. Lo último fue una auditoría de
+«¿esto vale para quien clone el repo?», que sacó dos cosas que la adaptación
+anterior no había cubierto: ocho rutas cableadas a `~/dotfiles` en ficheros que
+el cerrojo no miraba, y el sensor de temperatura de la barra, que seguía siendo
+el del Ryzen de la PC. Antes, el supervisor de las barras y el perfil de teclado
+de portátil para todos los teclados.
 
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 11 pruebas. Deben salir todas
+./tests/run.sh          # 12 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -34,7 +36,48 @@ Lo único que sigue igual son las dos cosas que se dejaron sin comprobar **a
 propósito**, y que siguen abajo, en «Lo siguiente»: el bind de modo avión y la
 perilla del X820.
 
-## Lo último: las barras que no volvían, y el teclado (2026-08-05, portátil)
+## Lo último: lo que la adaptación no había cubierto (2026-08-05, portátil)
+
+Se auditó el repo entero preguntando «¿esto vale para quien lo clone?», no solo
+el cambio de la sesión. Salieron dos cosas, las dos venidas de la PC.
+
+**1. Ocho rutas cableadas a `~/dotfiles`, en ficheros que el cerrojo no miraba.**
+`waybar/config.jsonc` tenía siete (los `on-click` de btop y nmtui, el `exec` del
+módulo de notificaciones y el del panel de calendario) y `mako/config` una (el
+`include=` de los colores). Clonar el repo en otra ruta dejaba esos clicks
+muertos, el módulo de notificaciones vacío y mako sin colores, **en silencio**.
+
+Se coló porque `tests/unidad/portabilidad.sh` **solo escaneaba `.conf`, `.sh` y
+`.py`**: los `.jsonc` y los ficheros sin extensión le eran invisibles. El
+vigilante tenía el mismo agujero que el código vigilado. Ahora mira todo fichero
+de texto menos la documentación, y se comprobó al revés: con el cerrojo nuevo y
+el código viejo, falla y lista las ocho. La ruta buena es `$HOME/.config/...`,
+el enlace que crea `instalar.sh`.
+
+**2. El sensor de temperatura era el de la PC.** `config.jsonc` llevaba a mano
+`"hwmon-path-abs": "/sys/devices/pci0000:00/0000:00:18.3/hwmon"` — el k10temp del
+Ryzen 5 5500. Este portátil es un Intel i5-8250U y esa ruta **no existe**, o sea
+que el módulo llevaba tiempo sin poder leer nada.
+
+Se arregló con el patrón que ya usaba la batería: `hypr/scripts/lib/sensores.py`
+lo averigua en caliente y `instalar.sh` escribe la ruta en `waybar/local.jsonc`,
+que no se versiona. Lo que se ve (formato, iconos, umbral) vive en
+`waybar/sensores.jsonc`, versionado, que además es la red de seguridad si falta
+el generado. **`temperature` ya no puede estar en `config.jsonc`**: en waybar
+gana el primero que define una clave, y el que incluye va antes que el incluido.
+
+Verificado con captura (`grim`): la barra marca **42 °C** leyendo el `coretemp`
+de esta caja. Y `tests/unidad/sensores.sh` prueba las dos familias de CPU con un
+`/sys` de mentira —contra el de verdad solo se vería la de esta máquina— y falla
+si alguien vuelve a escribir la ruta de un sensor en un `.jsonc` versionado.
+
+**Trampa que costó las barras, y está en el `CLAUDE.md`:**
+`waybar-autohide.py --reiniciar` no es un comando que termina, **se convierte en
+el demonio**. Lanzarlo desde un shell que espera y que algo lo mate por tiempo
+deja el escritorio sin barras y sin FIFO. Se levanta con
+`setsid nohup ... >/dev/null 2>&1 </dev/null &`.
+
+## Antes: las barras que no volvían, y el teclado (2026-08-05, portátil)
 
 **`SUPER+SHIFT+C` ya no deja el escritorio sin barras.** Eran dos fallos:
 
