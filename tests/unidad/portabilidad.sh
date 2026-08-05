@@ -26,6 +26,23 @@ import io, pathlib, re, sys, tokenize
 raiz = pathlib.Path(sys.argv[1])
 PATRON = re.compile(r'(\$HOME/dotfiles|~/dotfiles|["\']dotfiles/)')
 
+# SE MIRA TODO FICHERO DE TEXTO, no solo .conf, .sh y .py. Ese era el punto
+# ciego, y costo caro: mientras el cerrojo miraba tres extensiones, en
+# waybar/config.jsonc quedaron SIETE rutas `$HOME/dotfiles` vivas (los on-click
+# de btop y nmtui, el exec de las notificaciones y el del panel de calendario) y
+# en mako/config —que no tiene extension— el `include=` de los colores. O sea
+# que quien clonara el repo fuera de ~/dotfiles se quedaba sin esos clicks, sin
+# el modulo de notificaciones y sin los colores de mako, en silencio. El
+# vigilante tenia el mismo agujero que el codigo que vigila.
+#
+# La lista es de lo que se EXCLUYE, no de lo que se incluye: asi un fichero de
+# un tipo nuevo entra solo. La documentacion queda fuera porque ahi la ruta se
+# menciona para explicarse.
+SIN_MIRAR = {".md", ".svg", ".png", ".jpg", ".jpeg", ".mp4", ".ttf", ".otf"}
+# Como empieza un comentario en cada lenguaje que hay en el repo: shell,
+# hyprlang, ini y mako con `#`; jsonc con `//`; css y qml con `/*` o `*`.
+COMENTARIO = ("#", "//", "/*", "*")
+
 def lineas_de_documentacion(f, src):
     """Las lineas que son comentario o docstring, que no afectan a nada."""
     doc = set()
@@ -40,16 +57,22 @@ def lineas_de_documentacion(f, src):
     return doc
 
 for f in sorted(raiz.rglob("*")):
-    if f.suffix not in (".conf", ".sh", ".py") or ".git" in f.parts or "tests" in f.parts:
+    if not f.is_file() or f.suffix in SIN_MIRAR:
         continue
-    src = f.read_text(encoding="utf-8", errors="replace")
+    if ".git" in f.parts or "tests" in f.parts or "__pycache__" in f.parts:
+        continue
+    try:
+        src = f.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        continue   # binario: no es codigo que pueda cablear una ruta
     doc = lineas_de_documentacion(f, src)
     for n, linea in enumerate(src.splitlines(), 1):
         if not PATRON.search(linea):
             continue
         limpia = linea.strip()
-        # Comentarios de shell/hyprlang, y prosa dentro de docstrings de Python.
-        if limpia.startswith("#") or n in doc:
+        # Comentarios de cualquiera de los lenguajes, y prosa dentro de
+        # docstrings de Python.
+        if limpia.startswith(COMENTARIO) or n in doc:
             continue
         # Una linea de docstring suelta (la ruta del fichero en su cabecera).
         if f.suffix == ".py" and limpia.startswith("~/dotfiles"):

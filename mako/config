@@ -87,7 +87,7 @@ on-notify=exec $HOME/.config/hypr/scripts/sonido-notificacion.sh
 # TIENE QUE IR AL FINAL: el archivo incluido trae secciones [urgency=...], y
 # cualquier opcion global escrita despues de una seccion se leeria como parte
 # de esa seccion, sin dar ningun error.
-include=~/dotfiles/mako/colores
+include=~/.config/mako/colores
 
 
 # --- Secciones a mano (van DESPUES del include) -----------------------------
