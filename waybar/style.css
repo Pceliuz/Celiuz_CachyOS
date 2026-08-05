@@ -76,6 +76,7 @@ window#waybar.hidden {
 #memory,
 #pulseaudio,
 #network,
+#battery,
 #custom-notificaciones,
 #tray,
 #clock {
@@ -100,6 +101,7 @@ window#waybar.hidden {
 #memory:hover,
 #pulseaudio:hover,
 #network:hover,
+#battery:hover,
 #custom-notificaciones:hover,
 #tray:hover,
 #clock:hover {
@@ -209,6 +211,95 @@ window#waybar.hidden {
 
 #network.disconnected {
     color: @alerta;
+}
+
+/* --- Bateria (solo aparece en portatiles) --- */
+/* El modulo existe en config.jsonc siempre, pero solo entra en la barra si
+ * instalar.sh lo metio en la lista de la derecha. En un sobremesa nada de esto
+ * llega a usarse.
+ *
+ * Los estados vienen de waybar y son dos familias que se combinan:
+ *   por carga    .atencion (<=25%) y .critico (<=10%), los umbrales de config
+ *   por estado   .charging, .discharging, .full, .not-charging
+ *
+ * En reposo va en @amatista como el resto de la derecha: tener bateria no es
+ * una noticia. El color solo cambia cuando pasa algo que merece mirarse. */
+#battery {
+    color: @amatista;
+}
+
+/* Cargando: ambar, el mismo "en marcha, espera" que usan las notificaciones en
+ * modo no molestar. Y respira — sube y baja de brillo despacio, que es lo que
+ * distingue "esta cargando" de "esta enchufado y quieta" sin leer el numero.
+ *
+ * 2.5s y ease-in-out: mas rapido parecería una alarma, y la carga no es una
+ * urgencia. `alternate` hace que vuelva suave en vez de saltar al principio. */
+@keyframes bateria-respira {
+    from { color: @atencion; }
+    to   { color: @luz; }
+}
+
+#battery.charging {
+    color: @atencion;
+    animation: bateria-respira 2.5s ease-in-out infinite alternate;
+}
+
+/* Enchufada y SIN cargar: ambar, pero quieta. Y la quietud es justo lo que hay
+ * que mirar aqui, porque este estado no es raro: muchos portatiles cortan la
+ * carga sobre el 80% para cuidar la bateria y se quedan asi durante horas.
+ *
+ * Si respirara como `.charging` —que es lo que hacia al escribir esto— estaria
+ * anunciando una carga que no avanza ni un punto en toda la tarde: el mismo
+ * enganno que el comentario de `format-not-charging` en config.jsonc queria
+ * evitar, solo que corrido al CSS. `.full` tampoco lo cubre: ese solo entra al
+ * 100%, y con el corte al 80% no se llega nunca.
+ *
+ * Va ANTES de `.atencion` y `.critico` a proposito. Tienen la misma
+ * especificidad (una id y una clase), asi que manda el que va despues, y con
+ * poca carga queremos que gane el aviso: enchufada y sin cargar al 8% no se
+ * esta arreglando sola, y ahi la alarma se ha ganado el sitio. */
+#battery.not-charging {
+    color: @atencion;
+    animation: none;
+}
+
+/* Enchufada y llena: se acabo la espera, deja de moverse. Verde no hay en la
+ * paleta y no se va a inventar uno; @luz (el violeta claro) ya dice "todo
+ * bien" dentro de esta familia de colores. */
+#battery.full {
+    color: @luz;
+    animation: none;
+}
+
+/* Queda poca: ambar fijo, sin parpadeo todavia. Es un aviso, no una alarma —
+ * si parpadeara desde el 25% acabarias sin mirarlo. */
+#battery.atencion {
+    color: @atencion;
+}
+
+/* En las ultimas: aqui si canta, con el mismo fondo+borde que usa la
+ * temperatura critica, para que los dos avisos serios de la barra se parezcan.
+ *
+ * El parpadeo va sobre el FONDO y no sobre el texto: un numero que se apaga del
+ * todo es justo el que quieres leer en ese momento. 1s, que aqui si corre prisa. */
+@keyframes bateria-alarma {
+    from { background-color: alpha(@alerta, 0.28); }
+    to   { background-color: transparent; }
+}
+
+#battery.critico {
+    color: @alerta;
+    border-color: @alerta;
+    animation: bateria-alarma 1s ease-in-out infinite alternate;
+}
+
+/* Con el cable puesto no hay alarma que valga, aunque quede poca: ya se esta
+ * arreglando solo. Gana a las dos reglas de arriba por ir despues. */
+#battery.critico.charging,
+#battery.atencion.charging {
+    color: @atencion;
+    border-color: transparent;
+    animation: bateria-respira 2.5s ease-in-out infinite alternate;
 }
 
 #clock {

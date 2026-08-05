@@ -290,6 +290,61 @@ maquina_local() {
 EOF
         hecho "  escrito hypr/conf/local.conf"
     fi
+
+    # --- El lado derecho de la barra ---
+    #
+    # La bateria solo tiene sentido en un portatil, y en un sobremesa no basta
+    # con que "no se vea": el modulo dejaria un hueco vacio en la barra, porque
+    # waybar crea el widget igual aunque no encuentre ninguna bateria (solo deja
+    # un aviso "No batteries." en el log). Asi que se decide aqui, sacando el
+    # modulo de la lista.
+    #
+    # La lista NO se escribe a mano en dos sitios: se lee de waybar/derecha.jsonc
+    # —la versionada, la del sobremesa— y se le mete "battery" delante de las
+    # notificaciones. Quien anada un modulo alli lo tendra en las dos maquinas
+    # sin tocar este script.
+    if [ "$SOLO_REVISAR" -eq 0 ]; then
+        if BATERIA="$( [ "$tipo" = "laptop" ] && echo si || echo no )" \
+           python3 - "$REPO/waybar/derecha.jsonc" "$REPO/waybar/local.jsonc" <<'PY'
+import json, os, re, sys
+
+origen, destino = sys.argv[1], sys.argv[2]
+con_bateria = os.environ.get("BATERIA") == "si"
+
+# json no entiende los comentarios de un .jsonc. Se quitan solo los que ocupan
+# la linea entera: quitarlos en cualquier posicion se llevaria por delante
+# cualquier "//" que apareciera dentro de una cadena.
+crudo = open(origen, encoding="utf-8").read()
+limpio = "\n".join(l for l in crudo.splitlines() if not l.lstrip().startswith("//"))
+modulos = json.loads(limpio)["modules-right"]
+
+if con_bateria and "battery" not in modulos:
+    # Junto a los otros indicadores de estado y antes de las notificaciones. Si
+    # algun dia ese modulo no esta, va al final: nunca se pierde.
+    pos = modulos.index("custom/notificaciones") if "custom/notificaciones" in modulos else len(modulos)
+    modulos.insert(pos, "battery")
+
+cabecera = (
+    "// waybar/local.jsonc — GENERADO por instalar.sh. NO se versiona.\n"
+    "//\n"
+    "// El lado derecho de la barra en ESTA maquina. Lo carga config.jsonc por\n"
+    "// \"include\", y va el primero: en waybar gana el primero que define una\n"
+    "// clave, asi que esto manda sobre waybar/derecha.jsonc.\n"
+    "//\n"
+    "// Equipo detectado: %s. Si te lo detecto mal, mira el motivo en\n"
+    "// hypr/conf/local.conf y vuelve a pasar ./instalar.sh.\n"
+    % ("portatil (lleva bateria)" if con_bateria else "sobremesa (sin bateria)")
+)
+with open(destino, "w", encoding="utf-8") as f:
+    f.write(cabecera + json.dumps({"modules-right": modulos}, indent=4, ensure_ascii=False) + "\n")
+PY
+        then
+            hecho "  escrito waybar/local.jsonc"
+        else
+            aviso "no se pudo generar waybar/local.jsonc"
+            gris "    la barra se queda con waybar/derecha.jsonc, sin bateria"
+        fi
+    fi
 }
 
 # --- 6. Fondo de pantalla ----------------------------------------------------

@@ -366,11 +366,35 @@ carga `conf/teclado-laptop.conf`, que corrige lo que haga falta.
 | Touchpad | — | tap, arrastre, y se calla mientras escribes |
 | Brillo | — | `Fn` + las teclas de brillo |
 | Tapa | — | al cerrarla, bloquea |
+| Barra de arriba | — | enseña la batería, a la derecha |
 
 El volumen y las teclas de multimedia **no** están ahí: viven en `keybinds.conf`
 y funcionan en las dos máquinas. No son de portátil — cualquier teclado con
 teclas de medios las emite, y en uno que no las tenga esas líneas sencillamente
 no disparan.
+
+### La batería de la barra
+
+Va por otro camino que el teclado, porque waybar no lee `.conf` de hyprlang. Al
+instalar se escribe `waybar/local.jsonc` —el lado derecho de la barra de **esta**
+máquina— y `config.jsonc` lo carga con un `include`:
+
+```
+waybar/derecha.jsonc   versionado, sin batería. La lista de un sobremesa.
+waybar/local.jsonc     generado, con batería si la caja es un portátil.
+```
+
+La lista con batería **no está escrita a mano en ninguna parte**: `instalar.sh`
+lee la versionada y le mete `battery` delante de las notificaciones. Si añades un
+módulo a `derecha.jsonc`, aparece en las dos máquinas sin tocar nada más.
+
+No basta con que el módulo «no se vea» en un sobremesa: waybar crea el widget
+aunque no encuentre ninguna batería —solo deja un `No batteries.` en el log— y
+quedaría un hueco vacío en la barra. Por eso se decide sacándolo de la lista.
+
+Que falte `local.jsonc` **no** rompe nada: waybar avisa en el log y sigue con
+`derecha.jsonc`, así que quien clone el repo y arranque waybar antes de pasar el
+instalador tiene barra igual, solo que sin batería.
 
 ### Cómo lo sabe
 
@@ -997,10 +1021,11 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
 | `hypr/conf/local.conf` | `instalar.sh` |
+| `waybar/local.jsonc` | `instalar.sh` (desde `waybar/derecha.jsonc`) |
 
 **`colores.css`, `mako/colores` y `Colores.qml` sí se versionan**: salen de la
-paleta y son iguales en cualquier equipo. Los del dock y `local.conf` **no**,
-porque dependen de la máquina — los crea `instalar.sh`. Los dos de `~/.cache`
+paleta y son iguales en cualquier equipo. Los del dock, `local.conf` y
+`local.jsonc` **no**, porque dependen de la máquina — los crea `instalar.sh`. Los dos de `~/.cache`
 tampoco: se rehacen en cada bloqueo. Y los tres de fuera del repo (el fondo del
 arranque y el drop-in de SDDM) los pone `--sddm`, que es lo único que pide root.
 

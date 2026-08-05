@@ -33,7 +33,30 @@
     // El reloj va pegado a la izquierda de los workspaces, y el conjunto de los
     // dos es lo que queda centrado en la pantalla.
     "modules-center": ["clock", "hyprland/workspaces"],
-    "modules-right": ["pulseaudio", "network", "custom/notificaciones", "tray"],
+    // "modules-right" NO se define aqui, y es la unica lista que falta: vive en
+    // los dos ficheros del "include" de abajo, porque su contenido depende de si
+    // esto es un portatil (lleva bateria) o un sobremesa (no la lleva).
+    //
+    // En waybar gana el PRIMERO que define una clave: el fichero que incluye
+    // antes que el incluido, y el primer include antes que el segundo. Por eso
+    // esta clave no puede estar aqui — si estuviera, ganaria siempre y el
+    // generado no pintaria nada.
+    //
+    //   local.jsonc    lo escribe instalar.sh segun scripts/lib/maquina.py.
+    //                  No se versiona: es de esta maquina y de ninguna otra.
+    //   derecha.jsonc  la lista sin bateria, versionada. Es la de un sobremesa
+    //                  y ademas la red de seguridad de quien clone el repo y
+    //                  arranque waybar antes de pasar el instalador.
+    //
+    // Que falte un include NO es fatal: waybar avisa y sigue (comprobado; ojo,
+    // que fuzzel en este mismo repo hace lo contrario y sale con 1). Por eso el
+    // segundo fichero basta para que la barra nunca se quede sin lado derecho.
+    "include": [
+        "~/.config/waybar/local.jsonc",
+        "~/.config/waybar/derecha.jsonc"
+    ],
+    // El `~` se expande, pero `$HOME` NO: waybar buscaria un directorio llamado
+    // literalmente "$HOME" y solo dejaria un aviso en el log. Comprobado.
 
     // --- CENTRO --- (el bloque "clock" esta al final del archivo)
 
@@ -144,6 +167,57 @@
         "interval": 5,
         // nmtui viene con networkmanager, no hace falta instalar nada extra.
         "on-click": "$HOME/dotfiles/hypr/scripts/terminal.sh monitor-tui nmtui"
+    },
+
+    // --- DERECHA: bateria (solo en portatiles) ---
+    //
+    // El bloque se queda SIEMPRE aqui, tambien en un sobremesa, y no pasa nada:
+    // waybar solo instancia los modulos que aparecen en algun "modules-*". Lo
+    // que decide si existe o no es la lista del include, no esto. Asi la
+    // configuracion del modulo se versiona una sola vez y no hay que duplicarla
+    // dentro de un fichero generado.
+    //
+    // Si acabara colandose en un equipo sin bateria, tampoco seria grave:
+    // waybar deja un aviso ("No batteries.") y sigue — no se cae. Pero el hueco
+    // vacio se veria en la barra, y por eso se decide por fuera.
+    "battery": {
+        // Los umbrales dan clase CSS (#battery.atencion, #battery.critico) y es
+        // ahi donde style.css pone el color y el parpadeo. Aqui no va ni un
+        // color: la paleta manda desde colores.conf.
+        //
+        // 25 y 10 y no 30/15: por debajo de 30 todavia queda mas de una hora de
+        // trabajo y avisar tan pronto ensena a ignorar el aviso.
+        "states": { "atencion": 25, "critico": 10 },
+
+        "format": "<span size='130%'>{icon}</span> {capacity}%",
+
+        // Enchufado y subiendo. El rayo es el que se mueve en style.css.
+        "format-charging": "<span size='130%'>󰂄</span> {capacity}%",
+        // Enchufado y ya lleno: el rayo sobra, deja de cargar.
+        "format-full": "<span size='130%'>󰂅</span> {capacity}%",
+        // Enchufado pero sin cargar. Pasa de verdad: muchos portatiles paran
+        // sobre el 80% para cuidar la bateria, y sin este caso la barra diria
+        // "cargando" durante horas sin que suba ni un punto.
+        "format-not-charging": "<span size='130%'>󰂄</span> {capacity}%",
+        // Descargando y en las ultimas: el icono cambia a la alerta, para que se
+        // note aunque no se lea el numero.
+        "format-critico": "<span size='130%'>󰂃</span> {capacity}%",
+
+        // De vacia a llena. Waybar elige segun la carga, asi que el orden
+        // importa: de menos a mas.
+        "format-icons": ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"],
+
+        "format-time": "{H} h {M} min",
+
+        // 15 s y no los 60 de fabrica: al enchufar o desenchufar el cable, un
+        // minuto de retraso hace dudar de si el cargador esta bien puesto.
+        // Es leer cuatro ficheros de /sys, no cuesta nada.
+        "interval": 15,
+
+        // {time} lo calcula waybar con el consumo del ultimo refresco, no con
+        // una media: justo despues de abrir algo pesado da cifras raras. Por eso
+        // va en el tooltip y no en la barra.
+        "tooltip-format": "{capacity}% — quedan {time}\nConsumo ahora: {power} W\nSalud de la bateria: {health}%\nCiclos de carga: {cycles}"
     },
 
     // --- DERECHA: notificaciones (mako) ---

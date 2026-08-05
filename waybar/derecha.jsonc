@@ -1,0 +1,25 @@
+// ~/dotfiles/waybar/derecha.jsonc
+// El lado derecho de la barra de arriba, SIN bateria.
+//
+// POR QUE ESTE FICHERO EXISTE
+// ---------------------------
+// Es la lista de un sobremesa, y ademas la red de seguridad de quien clone el
+// repo y arranque waybar antes de pasar `./instalar.sh`: sin el, la barra se
+// quedaria sin lado derecho entero (volumen, red, notificaciones y tray).
+//
+// La lista con bateria no esta escrita en ninguna parte a mano: la calcula
+// `instalar.sh` a partir de ESTA, metiendo "battery" delante de las
+// notificaciones, y la deja en local.jsonc (que no se versiona). Asi el lado
+// derecho se toca en un solo sitio. Si anades un modulo aqui, aparece en las dos
+// maquinas sin tener que acordarte de nada mas.
+//
+// config.jsonc lo carga por "include" y NO define modules-right por su cuenta:
+// en waybar gana el primero que define una clave, y el fichero que incluye va
+// antes que el incluido. Si estuviera alli, esto no pintaria nada.
+//
+// CUIDADO AL EDITARLO: instalar.sh lo lee con python3, que no entiende
+// comentarios de JSON. Se los quita antes, pero solo los que ocupan una linea
+// entera. Un `// ...` al final de una linea con datos rompe la lectura.
+{
+    "modules-right": ["pulseaudio", "network", "custom/notificaciones", "tray"]
+}

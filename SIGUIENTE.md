@@ -3,8 +3,8 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-03**. Lo último fue la pantalla de inicio de sesión
-(SDDM) y la detección de portátil vs. sobremesa.
+Última sesión: **2026-08-04**. Lo último fue la batería en la barra de arriba,
+que sale solo en los portátiles.
 
 ## Lo primero al abrir el repo
 
@@ -20,101 +20,45 @@ Hyprland, de mpv o de waybar).
 
 ---
 
-## COMPROBAR TRAS EL REINICIO DEL 2026-08-03
+## El reinicio del 2026-08-03: cerrado
 
-Se reinició para estrenar tres cosas a la vez: la pantalla de SDDM, lo que vino
-de la PC (fondos como imagen, CeliuzPaper por módulos, pruebas) y la detección de
-portátil. Nada de esto se había visto funcionando en un arranque de verdad.
+Se reinició para estrenar de golpe la pantalla de SDDM, lo que vino de la PC y la
+detección de portátil. Salió, y está subido: `ee3b726` (SDDM) y `8709245`
+(teclado según la máquina) están en `origin/main`, que era el último paso de
+aquella lista. La lista se ha borrado de aquí; si hiciera falta, está en el
+historial de este fichero.
 
-Va en orden: si falla el paso 1, los demás no dicen nada.
+Lo único que sigue igual son las dos cosas que se dejaron sin comprobar **a
+propósito**, y que siguen abajo, en «Lo siguiente»: el bind de modo avión y la
+perilla del X820.
 
-### 0. ¿Se llegó a pasar el instalador completo?
+## Lo último: la batería de la barra (2026-08-04)
 
-```sh
-grep conf_maquina ~/dotfiles/hypr/conf/local.conf
-```
+En un portátil, la barra de arriba enseña la batería a la derecha; en un
+sobremesa, no. Cómo funciona está contado en el README («La batería de la
+barra»), y el porqué de cada umbral y cada color, en los comentarios de
+`waybar/config.jsonc` y `waybar/style.css`.
 
-Tiene que salir `$conf_maquina = ...teclado-laptop.conf`. **Si no sale nada**, es
-que solo se pasó `./instalar.sh --sddm`, que es exclusivo y no reescribe
-`local.conf`. Se arregla con `./instalar.sh` a secas y volviendo a entrar. Todo
-lo de teclado de abajo dependerá de esto.
+Lo que hay que saber para no romperlo: **el lado derecho de la barra ya no se
+escribe en `config.jsonc`**. Sale de `waybar/derecha.jsonc` (versionado, sin
+batería) por un `include`, y `instalar.sh` genera `waybar/local.jsonc` metiéndole
+`battery` si la caja es un portátil. Para añadir un módulo a la derecha, va en
+`derecha.jsonc` y en ningún otro sitio.
 
-### 1. La pantalla de inicio de sesión
+Está comprobado, en esta máquina y para la otra:
 
-Se ve al arrancar, antes del escritorio. Debe salir la tarjeta violeta con el
-reloj y **el vídeo detrás** (484 K, reescalado a 1366x768).
+- Las 7 pruebas, `./instalar.sh --revisar` y `hyprctl configerrors`, limpios.
+- El módulo, vivo en la barra y con su color (captura con `grim`).
+- El camino del **sobremesa**: el generador con `BATERIA=no` saca la lista sin
+  batería.
+- Que **falte `local.jsonc`** —un clon recién hecho, antes de pasar el
+  instalador— no deja sin barra: medido en un Hyprland anidado, waybar deja un
+  `[warning] Unable to find resource file` y sigue con `derecha.jsonc`.
 
-- **Si sale la de siempre de SDDM**: el tema no se aplicó. Mirar
-  `/etc/sddm.conf.d/10-celiuz.conf` y que no haya un `Current=` en
-  `/etc/sddm.conf` ganándole.
-- **Si sale negra pero se puede escribir la contraseña**: el degradado de reserva
-  hizo su trabajo; falló el vídeo. Falta `qt6-multimedia-ffmpeg`.
-- **Si no se puede entrar**: `Ctrl+Alt+F2`, consola, y
-  `sudo rm /etc/sddm.conf.d/10-celiuz.conf`.
-
-### 2. El Ctrl derecho volvió a ser Ctrl
-
-Es el motivo de todo el trabajo de detección. En una terminal, con algo
-corriendo (`ping 1.1.1.1`), pulsar **Ctrl DERECHO + C**: tiene que cortarlo.
-
-Antes no cortaba: hacía de AltGr, heredado de la config del Attack Shark X820.
-Si sigue sin cortar, mirar que `hyprctl devices` enseñe el
-`at-translated-set-2-keyboard` **sin** `o "lv3:switch"` — el resto de teclados sí
-lo llevan, y está bien que lo lleven.
-
-### 3. Las dos distribuciones siguen alternando
-
-`SUPER + DEL` tiene que seguir cambiando entre `us` y `latam`, avisando por
-notificación. Es el riesgo propio del bloque `device` nuevo: si se hubiera
-quedado sin `kb_layout`, este teclado tendría solo `us` y el atajo no tendría
-entre qué alternar.
-
-### 4. Teclas de función
-
-| Tecla | Qué debe pasar |
-|---|---|
-| Brillo arriba/abajo | cambia, y **manteniendo pulsado repite** |
-| Brillo al mínimo | se queda en 1, nunca en negro total |
-| Volumen y mute | cambian, y también con la pantalla bloqueada |
-| Play / siguiente / anterior | controlan lo que esté sonando |
-| Micro-mute | silencia el micrófono |
-
-Si el brillo no responde: `brightnessctl set 50%` a mano. Si eso sí funciona, el
-problema es el bind; si tampoco, es permisos (aquí escribía por logind, sin regla
-udev).
-
-**Modo avión (`XF86RFKill`) está SIN comprobar.** El riesgo es que funcione dos
-veces —si el kernel ya conmuta solo, el bind lo devuelve— y parezca muerta.
-Comprobar con `rfkill list` antes y después de pulsarla. Si conmuta sola, comentar
-la línea en `conf/teclado-laptop.conf`.
-
-### 5. Touchpad y tapa
-
-- Tocar hace clic; dos dedos, clic derecho.
-- Escribir un párrafo largo **sin que el cursor se vaya solo** (esa es la prueba
-  de `disable_while_typing`).
-- Cerrar la tapa y abrirla: debe pedir la contraseña, y la pantalla debe
-  **volver** al abrir. Que vuelva es lo que hay que mirar: si se queda negra, el
-  `dpms on` del `switch:off` no está haciendo su trabajo.
-- **No debe suspender.** Se dejó así a propósito.
-
-### 6. Lo que vino de la PC
-
-- El fondo en vídeo sigue puesto y se pausa con ventanas abiertas encima.
-- CeliuzPaper abre y enseña **la carpeta de imágenes como un módulo más**.
-- Poner una **imagen fija** de fondo: debe quedarse puesta, no desaparecer a los
-  5 segundos.
-
-### 7. Y entonces
-
-```sh
-./tests/run.sh
-hyprctl configerrors
-```
-
-Si todo lo de arriba está bien, **queda hacer commit**: el trabajo de la
-detección de máquina estaba sin commitear cuando se reinició, y el commit de SDDM
-(`ee3b726`) sigue sin subir a `origin/main`.
+**Lo que no se ha visto nunca en pantalla** son los estados que dependen de la
+carga: `full` (100 %), `not-charging` (el corte al 80 % de algunos portátiles) y
+la alarma roja de `critico` (≤10 % **sin** cable). Si alguno se ve raro, el sitio
+es el bloque `#battery` de `style.css`; están escritos, no probados.
 
 ## Lo siguiente, por orden de valor
 

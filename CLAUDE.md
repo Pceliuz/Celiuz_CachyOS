@@ -22,10 +22,11 @@ si su contenido sería correcto en el equipo de otra persona:
 | `waybar/dock-apps.json` | las apps del dock son de cada equipo |
 | `waybar/dock.jsonc` | generado de lo anterior |
 | `waybar/dock-icons.css` | generado, con rutas absolutas de iconos |
-| `hypr/conf/local.conf` | la terminal de cada equipo |
+| `hypr/conf/local.conf` | la terminal de cada equipo, y si es portátil |
+| `waybar/local.jsonc` | el lado derecho de la barra: batería solo si hay |
 | `hypr/wallpapers/*` | vídeos: pesan y no son redistribuibles |
 
-Los cuatro los crea `./instalar.sh`.
+Los cinco los crea `./instalar.sh`.
 
 Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 
@@ -96,6 +97,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
 | `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
+| `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
 
 Ese último es la excepción que confirma la regla: `hyprlock.conf` trae **también**

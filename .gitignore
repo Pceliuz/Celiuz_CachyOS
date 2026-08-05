@@ -19,10 +19,12 @@ __pycache__/
 #   dock-apps.json   tus apps del dock (arranca con tu terminal y tu navegador)
 #   dock.jsonc       generado de lo anterior por hypr/scripts/gen-dock.py
 #   dock-icons.css   idem, con las rutas de los iconos de TU tema
-#   local.conf       tu terminal, para los atajos
+#   local.conf       tu terminal, y si esta caja es un portatil o un sobremesa
+#   local.jsonc      el lado derecho de la barra: lleva bateria solo si hay
 waybar/dock-apps.json
 waybar/dock.jsonc
 waybar/dock-icons.css
+waybar/local.jsonc
 hypr/conf/local.conf
 
 # El fondo de la pantalla de inicio de sesion. `instalar.sh --sddm` lo genera con
