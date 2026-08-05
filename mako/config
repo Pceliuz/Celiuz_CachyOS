@@ -65,6 +65,24 @@ on-button-right=dismiss
 on-touch=dismiss
 
 
+# --- Sonido -----------------------------------------------------------------
+# Un "toc" corto al llegar una notificacion, porque una que solo se ve no sirve
+# de nada si estas jugando o mirando a otra pantalla.
+#
+# El comando va a un script y no al `mpv /usr/share/sounds/...` que sugiere el
+# manual de mako, porque esa linea cablea el reproductor Y el fichero, y este
+# repo no puede dar por hechos ninguno de los dos. Ademas, si fallara, mako NO
+# enseña el error por ningun sitio: te quedarias sin sonido sin enterarte.
+# Para saber que esta usando:  hypr/scripts/sonido-notificacion.sh --revisar
+#
+# `$HOME` se expande bien: mako ejecuta esto en un shell POSIX de verdad (la
+# unica variable que pone mako es `id`, con el numero de la notificacion).
+#
+# OJO: esto es una opcion GLOBAL, asi que tiene que quedar por encima del
+# include, como todo lo de arriba.
+on-notify=exec $HOME/.config/hypr/scripts/sonido-notificacion.sh
+
+
 # --- Los colores, desde la paleta comun -------------------------------------
 # TIENE QUE IR AL FINAL: el archivo incluido trae secciones [urgency=...], y
 # cualquier opcion global escrita despues de una seccion se leeria como parte
@@ -86,3 +104,11 @@ default-timeout=0
 # `makoctl restore`; solo dejan de mostrarse.
 [mode=no-molestar]
 invisible=1
+# Y MUDAS, que si no "no molestar" solo taparia los ojos.
+#
+# Hace falta decirlo aqui expresamente: COMPROBADO que `on-notify` se dispara
+# igual con `invisible=1`, o sea que sin esta linea el modo silencioso sonaria
+# en cada notificacion — lo peor de los dos mundos, porque ademas no verias que
+# ha llegado. Anular la opcion desde la seccion del modo si funciona (tambien
+# comprobado).
+on-notify=none

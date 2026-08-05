@@ -3,13 +3,14 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-04**. Lo último fue la batería en la barra de arriba,
-que sale solo en los portátiles.
+Última sesión: **2026-08-04**. Lo último fue el `SUPER+TAB`, que ya se cierra al
+soltar la tecla, y el sonido de las notificaciones. Antes de eso, la batería en la
+barra de arriba, que sale solo en los portátiles.
 
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 8 pruebas. Deben salir todas
+./tests/run.sh          # 9 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -32,7 +33,36 @@ Lo único que sigue igual son las dos cosas que se dejaron sin comprobar **a
 propósito**, y que siguen abajo, en «Lo siguiente»: el bind de modo avión y la
 perilla del X820.
 
-## Lo último: la batería de la barra (2026-08-04)
+## Lo último: el SUPER+TAB y el sonido (2026-08-04)
+
+**El `SUPER+TAB` ya se cierra al soltar SUPER, que era lo que faltaba.** Antes
+había que rematar con `Enter`. Dos fallos distintos, los dos medidos y no
+deducidos:
+
+1. **El `bindr` estaba escrito sin modificador** (`bindr = , SUPER_L`) y por eso
+   no disparaba **nunca**. Va con él delante: `bindr = SUPER, SUPER_L`. Y hacen
+   falta las dos combinaciones de cada tecla, porque el modmask coincide exacto y
+   soltar SUPER con SHIFT pulsado es otro caso.
+2. **El toque rápido** seguía dejando la ventana colgada: si sueltas antes de que
+   la capa tenga el teclado (~185 ms), el evento **no lo ve nadie**. Se resolvió
+   preguntándole al kernel con el módulo nuevo **`hypr/scripts/lib/teclas.py`**,
+   y preguntándoselo *antes* de dibujar la ventana: si ya soltaste, no se enseña
+   nada y saltas directo.
+
+Lo verificado en vivo: taps rápidos (sin ventana, salto directo), gesto lento,
+`SUPER+SHIFT+TAB` hacia atrás y `Escape`. El detalle técnico está en el README y
+las trampas en el `CLAUDE.md` — **no vuelvas a deducirlas**.
+
+Nuevo para diagnosticar: `touch $XDG_RUNTIME_DIR/vista-escritorios.debug` enciende
+el diario cuando el script lo lanza **Hyprland**, que es el único caso en el que
+se pueden medir estas carreras.
+
+**Y las notificaciones ya suenan** (`hypr/scripts/sonido-notificacion.sh`, sonido
+`message` del tema freedesktop). Queda mudo en «no molestar», que hubo que poner
+expresamente: `on-notify` se dispara igual con `invisible=1`. Para saber qué usa o
+por qué no suena, `sonido-notificacion.sh --revisar` — mako no enseña esos errores.
+
+## La batería de la barra (2026-08-04)
 
 En un portátil, la barra de arriba enseña la batería a la derecha; en un
 sobremesa, no. Cómo funciona está contado en el README («La batería de la

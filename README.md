@@ -52,10 +52,17 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`lib/pantalla.py`** — dice qué pantalla hay delante y **de ahí salen las
   medidas** del bloqueo y del selector de fondos, en vez de estar escritas para
   el monitor del autor. Ver su sección abajo.
+- **`lib/teclas.py`** — le pregunta **al kernel** qué teclas están pulsadas ahora
+  mismo (`EVIOCGKEY`), sin depender de quién tenga el foco. Existe porque el
+  evento de soltar `SUPER` no llega en un toque rápido; ver el cambiador de
+  escritorios. Devuelve `None`, y no `False`, cuando no puede mirar.
 - **`lock.sh` + `hyprlock.conf`** — la pantalla de bloqueo. Ver su sección abajo,
   porque hace bastante más que lanzar `hyprlock`.
 - **`gen-colores.py`** — pasa la paleta de `colores.conf` al CSS de waybar y a la
   config de mako. Es lo que hace que el violeta esté escrito en un solo sitio.
+- **`sonido-notificacion.sh`** — el «toc» de las notificaciones. Busca el
+  reproductor y el sonido que haya en la máquina, y se calla sin protestar si no
+  hay ninguno. `--revisar` dice qué usa, o por qué no suena.
 - **`recargar.sh`** — recarga la config avisando de verdad si falla, y comprueba
   incoherencias que son config válida pero no hacen nada.
 - **`wallpaper-pause.py`** — pausa el vídeo del fondo cuando queda tapado, y lo
@@ -712,6 +719,42 @@ layerrule = ignore_alpha 0.3, match:namespace notifications
 > son `ignore_alpha` **con guion bajo** (`ignorealpha` da *"invalid field type"*) y
 > `blur` **necesita valor** (`blur on`). Los dos fallos salen solo en
 > `hyprctl configerrors`.
+
+### El sonido
+
+Una notificación que solo se ve no sirve de nada si estás jugando o mirando a
+otra pantalla, así que mako suena al abrirla, con `on-notify=exec`. El sonido es
+`message` del tema **freedesktop**: un toc corto y neutro, elegido porque los más
+largos cansan cuando llegan tres seguidas.
+
+Lo reproduce `hypr/scripts/sonido-notificacion.sh`, **y no la línea de una sola
+orden que sugiere el manual de mako** (`on-notify=exec mpv /usr/share/...`). Esa
+línea cablea dos cosas que este repo no puede dar por hechas: el reproductor y el
+fichero, que viene del paquete `sound-theme-freedesktop` y no es obligatorio. El
+script busca lo que haya —`pw-play`, `paplay`, `ffplay`, `mpv`— y si no encuentra
+nada se calla sin protestar, porque el aviso visual sigue funcionando igual.
+
+```sh
+hypr/scripts/sonido-notificacion.sh --revisar   # qué está usando, o por qué no suena
+```
+
+Ese `--revisar` existe por una razón concreta: **mako se traga los errores de
+`on-notify`**. Si el comando falla, no aparece en el journal ni en ningún sitio —
+te quedas sin sonido y sin nada que mirar.
+
+> **`on-notify` se dispara igual en «no molestar».** Comprobado: `invisible=1`
+> oculta la notificación pero **no** impide que corra el comando, así que sin
+> hacer nada más el modo silencioso sonaría en cada aviso —lo peor de los dos
+> mundos, porque además no verías qué ha llegado—. Por eso la sección
+> `[mode=no-molestar]` lleva **`on-notify=none`** expresamente. Anular la opción
+> desde la sección del modo sí funciona (también comprobado).
+
+`pw-play` va el primero de la lista por ser el cliente nativo de PipeWire, que es
+el servidor de audio de esta distro. **`aplay` no está en la lista a propósito**,
+aunque casi siempre esté instalado: solo sabe WAV y estos ficheros son OGG.
+
+Y mako **no espera** a que termine el sonido: medido, `notify-send` tarda 7 ms con
+el sonido puesto, no los ~330 ms que dura el fichero.
 
 ### El módulo de la barra
 

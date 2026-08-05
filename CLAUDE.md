@@ -306,6 +306,15 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   recordado**, por barato que parezca.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
+- **mako se traga igual los errores de `on-notify`.** Si el comando del sonido
+  falla, no sale por ningún lado: te quedas sin sonido y sin nada que mirar. Por
+  eso `hypr/scripts/sonido-notificacion.sh` tiene `--revisar`, y por eso no se
+  cablea el reproductor ni el fichero como sugiere el manual de mako.
+- **`on-notify` SE DISPARA con `invisible=1`.** O sea que el modo «no molestar»
+  esconde la notificación pero **ejecuta el comando igual**: sin más, el modo
+  silencioso sonaría en cada aviso, que es lo peor de los dos mundos porque
+  además no ves qué llegó. La sección `[mode=no-molestar]` tiene que anularlo
+  con `on-notify=none` — eso sí funciona. Las dos cosas están comprobadas.
 - **`uwsm app -- inexistente` sale con 1 y notifica**, no falla en silencio. Si lo
   mides con `| head`, el `$?` que ves es el de `head`, no el de uwsm.
 - **`fc-list | grep -q` con `set -o pipefail` da falso negativo**: `grep -q` cierra
