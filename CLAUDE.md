@@ -293,6 +293,29 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   parte oscurecida y la clara. En el sobremesa no se notaba porque allí el
   número coincidía con la resolución. Lo que va a pantalla completa se pone en
   **porcentaje** (`size = 100%, 100%`), que hyprlock mide contra la salida.
+- **Un demonio que supervisa procesos NO puede apagarse porque uno se caiga.**
+  `waybar-autohide.py` terminaba su bucle con
+  `if not all(bar.alive()): cleanup()`, y eso convertía la caída de UNA de las
+  cuatro waybar en quedarse sin barra y sin dock **hasta cerrar sesión**: mataba
+  a las otras tres, se apagaba, y ya no quedaba nadie que las levantara — ni el
+  atajo de reinicio, que lo primero que hace es hablarle al demonio. Medido el
+  2026-08-05 en anidado: matando una sola, a los 4 s no quedaba ninguna capa
+  waybar viva. Lo bueno es relanzar (`Bar.supervisar()`), con freno: 5 intentos
+  en 60 s y luego rendirse **avisando**, que si no es un bucle de procesos a 10
+  Hz. Lo vigila `tests/unidad/barras-supervisor.sh`.
+- **Un `device {}` de Hyprland arregla UN teclado, no «el teclado».** El perfil
+  de portátil devolvía el Ctrl derecho con
+  `device { name = at-translated-set-2-keyboard }`, y eso dejaba fuera a todo lo
+  demás: cualquier teclado USB enchufado al portátil seguía con `lv3:switch`, y
+  también los pseudo-teclados `video-bus`, `power-button` e
+  `ideapad-extra-buttons` (se ven en `hyprctl devices`). Si lo que quieres vale
+  para todos, va en el bloque `input {}` global — y desde `$conf_maquina`, que
+  es el último `source`, se puede: en hyprlang gana el último que habla.
+- **No raspes JSON con `sed`.** `instalar.sh` sacaba el motivo de la detección
+  con `sed -n 's/.*"motivo": ...'`, y en cuanto `maquina.py --json` creció con
+  el perfil de teclado —que trae su propio `motivo`— el patrón casó DOS veces y
+  la línea del instalador salió partida en dos. Se añade un verbo a la CLI
+  (`maquina.py motivo`) y se pregunta.
 - **Un toggle perdido invierte las barras para siempre.** waybar solo ofrece
   SIGUSR1 (alternar), así que un estado *recordado* que se desvíe una vez deja
   las barras al revés: puestas con apps abiertas y escondidas con el escritorio

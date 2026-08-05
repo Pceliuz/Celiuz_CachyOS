@@ -395,13 +395,41 @@ repo se quedaba sin Ctrl derecho por un teclado que no ha visto en su vida.
 Ahora `instalar.sh` pregunta en qué clase de equipo está y **solo en un portátil**
 carga `conf/teclado-laptop.conf`, que corrige lo que haga falta.
 
+Quién decide qué es `hypr/scripts/lib/maquina.py`, y se le puede preguntar:
+
+```sh
+hypr/scripts/lib/maquina.py            # el resumen: equipo y perfil de teclado
+hypr/scripts/lib/maquina.py teclado    # «completo» o «sin-altgr»
+```
+
+El perfil **`completo`** es el de un teclado que trae todas sus teclas —AltGr y
+la `<>`—, o sea el de cualquier portátil: ahí `kb_options` se deja **vacío**.
+El perfil **`sin-altgr`** es el del X820 y conserva `lv3:switch`.
+
+> **Se vacía en el bloque `input {}` global, no en un `device`.** Durante un
+> tiempo esto era un `device { name = at-translated-set-2-keyboard }`, que solo
+> rescataba el teclado interno: cualquier **teclado USB que enchufaras al
+> portátil** seguía perdiendo su Ctrl derecho, y lo mismo los pseudo-teclados
+> `video-bus` y `power-button`. Medido en un Hyprland anidado: con la versión de
+> antes y perfil de portátil, un teclado que no fuera el interno salía con
+> `o "lv3:switch"`; ahora sale vacío.
+
 | | Sobremesa | Portátil |
 |---|---|---|
-| Ctrl derecho | hace de AltGr (lo necesita el X820) | vuelve a ser Ctrl |
+| Ctrl derecho | hace de AltGr (lo necesita el X820) | vuelve a ser Ctrl, **en todos los teclados** |
 | Touchpad | — | tap, arrastre, y se calla mientras escribes |
 | Brillo | — | `Fn` + las teclas de brillo |
 | Tapa | — | al cerrarla, bloquea |
 | Barra de arriba | — | enseña la batería, a la derecha |
+
+> **Si clonas esto en un sobremesa, lee esta línea.** El caso «sobremesa» se
+> queda con el teclado del autor, que es ANSI de 75% y no tiene AltGr — o sea
+> que **tu Ctrl derecho pasará a hacer de AltGr**. Con un teclado completo de
+> 105 teclas eso no te hace falta y solo te quita una tecla: la vuelta atrás es
+> poner `kb_options =` (vacío) en `hypr/conf/input.conf`. `./instalar.sh
+> --revisar` te lo recuerda al detectar un sobremesa. No se decide sola a
+> propósito: un teclado se enchufa y se desenchufa, y `kb_options` se lee al
+> arrancar la sesión (el porqué largo está en `lib/maquina.py`).
 
 El volumen y las teclas de multimedia **no** están ahí: viven en `keybinds.conf`
 y funcionan en las dos máquinas. No son de portátil — cualquier teclado con
@@ -652,6 +680,20 @@ Cuatro instancias de waybar: la barra de arriba, el dock de abajo y una
 línea-tirador para cada una. La barra en sí es **invisible** — solo flotan los
 iconos, y la pastilla violeta de cada módulo aparece al pasar el puntero. El
 auto-ocultado lo lleva `waybar-autohide.py`.
+
+Ese script además **vigila y relanza**: si una de las cuatro instancias se cae,
+la vuelve a levantar. Si se cae una y otra vez —una config rota, un módulo que
+revienta al arrancar—, se rinde después de cinco intentos en un minuto y **avisa
+por notificación**, en vez de quedarse lanzando procesos en bucle. La otra barra
+sigue funcionando y el demonio no se apaga.
+
+> Esto era el fallo de **«pulso `SUPER+SHIFT+C` y las barras se van para
+> siempre»**. El bucle terminaba en `if not all(bar.alive()): cleanup()`: una
+> waybar caída mataba a las otras tres y al propio demonio, y ya no quedaba
+> nadie que las levantara — ni el atajo de reinicio servía, porque lo primero
+> que hace es hablar con el demonio. La única salida era cerrar sesión, que es
+> cuando `exec-once` vuelve a correr. Lo cubre
+> `tests/unidad/barras-supervisor.sh`.
 
 Reparto: a la izquierda los sensores (velocidad, temperatura, CPU, memoria); en
 el centro el reloj y los siete escritorios; a la derecha volumen, red,

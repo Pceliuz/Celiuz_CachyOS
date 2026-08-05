@@ -3,14 +3,15 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-05**. Lo último fue dejar el fondo del login
-actualizándose solo. Antes, el `SUPER+TAB` (que ya se cierra al soltar la tecla)
-y el sonido de las notificaciones.
+Última sesión: **2026-08-05**, en el **portátil**. Lo último fueron dos arreglos
+medidos en anidado —las barras ya no se van para siempre, y el perfil de teclado
+de portátil vale para todos los teclados— más la comprobación de que el fondo del
+login se rehace solo. Antes, el `SUPER+TAB` y el sonido de las notificaciones.
 
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 10 pruebas. Deben salir todas
+./tests/run.sh          # 11 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -33,7 +34,58 @@ Lo único que sigue igual son las dos cosas que se dejaron sin comprobar **a
 propósito**, y que siguen abajo, en «Lo siguiente»: el bind de modo avión y la
 perilla del X820.
 
-## Lo último: el fondo del login, automático (2026-08-05)
+## Lo último: las barras que no volvían, y el teclado (2026-08-05, portátil)
+
+**`SUPER+SHIFT+C` ya no deja el escritorio sin barras.** Eran dos fallos:
+
+1. **El demonio se suicidaba.** El bucle acababa en
+   `if not all(bar.alive()): cleanup()`, así que **una** waybar caída mataba a
+   las otras tres y al propio demonio — y ya no quedaba nadie que las levantara,
+   ni el atajo de reinicio, que empieza hablando con él. Había que cerrar sesión.
+   Medido: matando una sola de las cuatro, a los 4 s no quedaba ninguna capa
+   waybar viva. Ahora `Bar.supervisar()` relanza la pareja caída; si se cae 5
+   veces en un minuto se rinde con una notificación, y la otra barra sigue.
+2. **Tras reiniciar quedaban escondidas.** `Bar.__init__` nacía con
+   `manual = False` mientras `relanzar()` lo ponía a `True`, así que con apps
+   abiertas las barras nuevas se escondían en el primer ciclo y el atajo parecía
+   servir sólo para hacerlas desaparecer. Ahora nacen «sacadas a mano»: se ven
+   ~1,5 s y luego se ocultan como siempre. Al arrancar la sesión no cambia nada,
+   porque el escritorio está vacío.
+
+Lo cubre `tests/unidad/barras-supervisor.sh`, y **la prueba se comprobó contra el
+código viejo**: fallan 4 de sus 11 afirmaciones.
+
+**Y el perfil de teclado de portátil ya vale para TODOS los teclados.** Estaba en
+un `device { name = at-translated-set-2-keyboard }`, que sólo rescataba el
+teclado interno: un teclado USB enchufado al portátil seguía perdiendo su Ctrl
+derecho, igual que `video-bus` y `power-button`. Ahora se vacía `kb_options` en
+el bloque `input {}` global de `conf/teclado-laptop.conf` — que es el último
+fichero que lee `hyprland.conf`, así que gana. Nuevo en el detector:
+`maquina.py teclado` (`completo` / `sin-altgr`) y `maquina.py motivo`.
+
+El **NumLock se dejó como estaba a propósito**: en un portátil con teclado
+numérico de verdad, `true` es lo que quiere cualquiera. El porqué está escrito en
+`conf/teclado-laptop.conf`.
+
+Comprobado, además de las pruebas: `hyprctl devices` dentro del anidado con los
+dos perfiles (portátil da `kb_options` vacío, sobremesa da `lv3:switch`), y
+`Hyprland --verify-config` limpio apuntando a los dos sitios.
+
+Y comprobado también **en la sesión viva del portátil**, que es la prueba que de
+verdad cierra el asunto: los **cinco** teclados de `hyprctl devices` salen con
+`o ""`, incluido `usb-optical-mouse--keyboard` —un teclado USB, justo el que el
+`device {}` de antes dejaba fuera— además de `ideapad-extra-buttons`,
+`video-bus` y `power-button`.
+
+**Y el sobremesa ajeno ya está avisado.** Quien clone el repo en un sobremesa se
+queda con el perfil `sin-altgr`, que es el teclado del autor, y perdía el Ctrl
+derecho sin que nada se lo dijera. No se detecta solo a propósito (un teclado se
+enchufa y se desenchufa; `kb_options` se lee al arrancar), así que se avisa por
+los tres sitios donde se mira: `./instalar.sh --revisar`, el README y el propio
+`conf/input.conf`. Comprobado forzando el camino del sobremesa sobre una copia
+del repo, que es la única forma de ver esa rama desde el portátil.
+
+## El fondo del login, automático (2026-08-05)
 
 **Cambiar de fondo ya actualiza también la pantalla de inicio de sesión, sin
 pedir contraseña.** Antes obligaba a pasar `./instalar.sh --sddm` a mano, que
@@ -49,9 +101,16 @@ como enlaces ahí. Después, `hypr/scripts/sddm-fondo.sh` lo rehace solo desde
 
 **Si vienes de una instalación anterior, hay que pasar `./instalar.sh --sddm` una
 vez más** (la última). El instalador lo detecta y lo saca como pendiente en rojo.
+**Ya está pasado en las dos máquinas** (el portátil, el 2026-08-05); hasta
+hacerlo, la pantalla de login se veía negra, que era el síntoma.
 
 Verificado de punta a punta en la PC: `aplicar()` vuelve al instante, el fondo se
 regeneró solo en 9 s, y los ficheros quedan con grupo `sddm` y modo 644.
+
+Y verificado también en el portátil (2026-08-05): el greeter dibuja el fondo, la
+tarjeta y el campo de contraseña a 1366x768 —`sddm-greeter-qt6 --test-mode`
+dentro del anidado—, y regenerar el fondo con otro vídeo tardó 18 s **sin pedir
+contraseña**, dejando los ficheros con grupo `sddm` y modo 644.
 
 ## El SUPER+TAB y el sonido (2026-08-04)
 
