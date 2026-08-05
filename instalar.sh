@@ -400,6 +400,9 @@ pantalla() {
 
 SDDM_TEMA="/usr/share/sddm/themes/celiuz"
 SDDM_DROPIN="/etc/sddm.conf.d/10-celiuz.conf"
+# La carpeta del fondo del login. Es tuya y la lee el grupo `sddm`; ver
+# preparar_fondo_sddm para por que existe y por que va con setgid.
+SDDM_COMPARTIDA="${SDDM_COMPARTIDA:-/var/lib/sddm-celiuz}"
 
 # Segundos del video que se copian. El greeter se ve unos segundos y el fichero
 # acaba en /usr/share, que no es sitio para los 700 MB de un fondo largo. Se
@@ -416,56 +419,57 @@ raiz() {
     if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
 }
 
-# El fondo del arranque: un video recortado y reescalado A ESTA pantalla, mas un
-# fotograma de reserva.
+# El fondo del arranque NO se copia a /usr/share, y esa es toda la gracia.
 #
-# Aqui SI se mide en la instalacion, al contrario que en todo lo demas del repo,
-# y es a proposito: copiar a /usr/share pide root, asi que no hay forma de
-# rehacerlo "en caliente" cada vez que arranca el greeter. La consecuencia hay
-# que decirla y esta en el README: si cambias de fondo o de monitor, vuelve a
-# pasar ./instalar.sh --sddm.
+# La primera version si lo copiaba, y salio mal en cuanto se uso de verdad:
+# /usr/share es de root, asi que cada cambio de fondo obligaba a volver a pasar
+# `--sddm` y teclear la contrasena. Quien cambia de fondo a menudo simplemente
+# se quedaba con el login enseñando un fondo viejo.
+#
+# Ahora se crea UNA VEZ una carpeta compartida —tuya, legible por el usuario
+# `sddm`— y los dos ficheros del tema pasan a ser ENLACES a ella. El QML los
+# carga por ruta relativa y no se entera. A partir de ese momento el fondo del
+# login lo rehace `hypr/scripts/sddm-fondo.sh` sin permisos de ninguna clase,
+# solo, cada vez que fijas un fondo.
+#
+# El 2750 es lo que hace que funcione: setgid + grupo `sddm`. Los ficheros que
+# crees dentro nacen con ese grupo y el greeter puede leerlos. Sin el setgid
+# nacerian con TU grupo y el greeter se encontraria un permiso denegado, que en
+# el arranque se ve como "el fondo no sale" y nada mas.
 preparar_fondo_sddm() {
-    local origen="$1" ancho alto tmp escalar
-    ancho=$("$REPO/hypr/scripts/lib/pantalla.py" ancho 2>/dev/null)
-    alto=$("$REPO/hypr/scripts/lib/pantalla.py" alto 2>/dev/null)
-    [ -n "$ancho" ] || ancho=1920
-    [ -n "$alto" ]  || alto=1080
+    local origen="$1"
 
-    echo "  fondo: $(basename "$origen")"
-    gris "    a ${ancho}x${alto}, ${SDDM_SEGUNDOS}s como mucho"
-
+    echo "  carpeta compartida -> $SDDM_COMPARTIDA"
     if [ "$SOLO_REVISAR" -eq 1 ]; then
-        gris "  (haria) reescalar el video con ffmpeg y copiarlo como root"
+        gris "  (haria, como root) install -d -m 2750 -o $USER -g sddm $SDDM_COMPARTIDA"
+        gris "  (haria, como root) enlazar fondo.jpg y fondo.mp4 del tema ahi"
+        gris "  (haria) generar el fondo con hypr/scripts/sddm-fondo.sh"
         return 0
     fi
 
-    # Llena la pantalla aunque la proporcion no cuadre, igual que --panscan=1.0
-    # en el escritorio: mejor recortar que dejar franjas negras.
-    escalar="scale=$ancho:$alto:force_original_aspect_ratio=increase,crop=$ancho:$alto"
-
-    tmp=$(mktemp -d) || { aviso "no pude crear un temporal para el fondo"; return 1; }
-
-    # El fotograma va PRIMERO a proposito: es la red de seguridad, pesa nada y
-    # sirve aunque el equipo no tenga con que decodificar video. Si solo se
-    # copiara el mp4 y el codec fallara, la pantalla se quedaria en el degradado.
-    if ffmpeg -v error -y -ss 1 -i "$origen" -frames:v 1 -vf "$escalar" \
-              -q:v 3 "$tmp/fondo.jpg" 2>/dev/null; then
-        raiz install -m 644 "$tmp/fondo.jpg" "$SDDM_TEMA/fondo.jpg"
-        hecho "  fotograma de reserva puesto"
-    else
-        aviso "no se pudo sacar el fotograma del fondo (ffmpeg)"
+    if ! getent group sddm >/dev/null 2>&1; then
+        aviso "no existe el grupo sddm: no puedo dejar el fondo automatico"
+        return 1
     fi
 
-    if ffmpeg -v error -y -i "$origen" -t "$SDDM_SEGUNDOS" -an \
-              -vf "$escalar" -c:v libx264 -preset veryfast -crf 26 \
-              -pix_fmt yuv420p "$tmp/fondo.mp4" 2>/dev/null; then
-        raiz install -m 644 "$tmp/fondo.mp4" "$SDDM_TEMA/fondo.mp4"
-        hecho "  video puesto ($(du -h "$tmp/fondo.mp4" | cut -f1))"
-    else
-        aviso "no se pudo reescalar el video (falta libx264 en ffmpeg?); queda el fotograma"
-    fi
+    raiz install -d -m 2750 -o "$USER" -g sddm "$SDDM_COMPARTIDA"
 
-    rm -rf "$tmp"
+    # Los enlaces. Se rehacen siempre: si una instalacion vieja dejo ficheros de
+    # verdad aqui, hay que sustituirlos o seguirian ganando ellos.
+    local f
+    for f in fondo.jpg fondo.mp4; do
+        raiz ln -sfn "$SDDM_COMPARTIDA/$f" "$SDDM_TEMA/$f"
+    done
+    hecho "  el tema apunta a la carpeta compartida"
+
+    echo "  fondo: $(basename "$origen")"
+    "$REPO/hypr/scripts/sddm-fondo.sh" --forzar
+    if [ -f "$SDDM_COMPARTIDA/fondo.jpg" ]; then
+        hecho "  fondo generado ($(du -sh "$SDDM_COMPARTIDA" | cut -f1))"
+    else
+        aviso "no se pudo generar el fondo del login (ffmpeg?)"
+    fi
+    gris "    a partir de ahora se rehace solo al cambiar de fondo"
 }
 
 sddm_instalar() {
@@ -551,6 +555,9 @@ sddm_quitar() {
     titulo "Quitar la pantalla de inicio de sesion"
     raiz rm -f "$SDDM_DROPIN"
     raiz rm -rf "$SDDM_TEMA"
+    # La compartida tambien: si no, quedaria una carpeta con tu fondo dentro de
+    # /var/lib que ya no usa nadie y que nadie relacionaria con esto.
+    raiz rm -rf "$SDDM_COMPARTIDA"
     hecho "  quitado: SDDM vuelve a su tema de siempre en el proximo arranque"
 }
 
@@ -560,7 +567,12 @@ sddm_estado() {
     titulo "8. Pantalla de inicio de sesion"
     if [ -f "$SDDM_TEMA/Main.qml" ]; then
         verde "  el tema celiuz esta puesto"
-        gris "    tras cambiar de fondo o de monitor:  ./instalar.sh --sddm"
+        if [ -d "$SDDM_COMPARTIDA" ]; then
+            gris "    el fondo se rehace solo al cambiar de fondo"
+        else
+            aviso "el fondo del login NO se actualiza solo (instalacion antigua)"
+            gris "    se arregla pasando una vez:  ./instalar.sh --sddm"
+        fi
     else
         echo "  no instalada (es opcional y es lo unico que pide sudo)"
         gris "    ./instalar.sh --sddm"

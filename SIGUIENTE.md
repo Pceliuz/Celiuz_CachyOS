@@ -3,14 +3,14 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-04**. Lo último fue el `SUPER+TAB`, que ya se cierra al
-soltar la tecla, y el sonido de las notificaciones. Antes de eso, la batería en la
-barra de arriba, que sale solo en los portátiles.
+Última sesión: **2026-08-05**. Lo último fue dejar el fondo del login
+actualizándose solo. Antes, el `SUPER+TAB` (que ya se cierra al soltar la tecla)
+y el sonido de las notificaciones.
 
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 9 pruebas. Deben salir todas
+./tests/run.sh          # 10 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -33,7 +33,27 @@ Lo único que sigue igual son las dos cosas que se dejaron sin comprobar **a
 propósito**, y que siguen abajo, en «Lo siguiente»: el bind de modo avión y la
 perilla del X820.
 
-## Lo último: el SUPER+TAB y el sonido (2026-08-04)
+## Lo último: el fondo del login, automático (2026-08-05)
+
+**Cambiar de fondo ya actualiza también la pantalla de inicio de sesión, sin
+pedir contraseña.** Antes obligaba a pasar `./instalar.sh --sddm` a mano, que
+para quien cambia de fondo a menudo es lo mismo que no funcionar.
+
+La clave: el greeter corre como el usuario `sddm` y no puede leer tu `$HOME`
+(está a 700), y `/usr/share` es de root. Se resolvió **sin** aflojar permisos de
+la casa y **sin** ninguna regla NOPASSWD: `--sddm` crea una vez
+`/var/lib/sddm-celiuz` (tuya, grupo `sddm`, modo **2750** — el setgid es lo que
+hace que el greeter pueda leer lo que escribas) y deja los dos ficheros del tema
+como enlaces ahí. Después, `hypr/scripts/sddm-fondo.sh` lo rehace solo desde
+`aplicar()`, en segundo plano.
+
+**Si vienes de una instalación anterior, hay que pasar `./instalar.sh --sddm` una
+vez más** (la última). El instalador lo detecta y lo saca como pendiente en rojo.
+
+Verificado de punta a punta en la PC: `aplicar()` vuelve al instante, el fondo se
+regeneró solo en 9 s, y los ficheros quedan con grupo `sddm` y modo 644.
+
+## El SUPER+TAB y el sonido (2026-08-04)
 
 **El `SUPER+TAB` ya se cierra al soltar SUPER, que era lo que faltaba.** Antes
 había que rematar con `Enter`. Dos fallos distintos, los dos medidos y no

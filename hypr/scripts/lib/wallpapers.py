@@ -45,6 +45,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.r
 WALLDIR = os.path.join(RAIZ, "hypr/wallpapers")
 CURRENT = os.path.join(WALLDIR, "current")
 LANZADOR = os.path.join(RAIZ, "hypr/scripts/wallpaper.sh")
+SDDM_FONDO = os.path.join(RAIZ, "hypr/scripts/sddm-fondo.sh")
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
@@ -438,7 +439,35 @@ def aplicar(video, relanzar=None):
     if relanzar:
         subprocess.Popen([LANZADOR, "--only-mpv"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    _pasar_el_fondo_al_login()
     return video
+
+
+def _pasar_el_fondo_al_login():
+    """Que la pantalla de inicio de sesion estrene el mismo fondo que acabas de
+    elegir. Sin esperarla y sin pedir permisos de root.
+
+    Va aqui y no en la interfaz porque `aplicar()` es el unico sitio por el que
+    pasan TODOS los caminos: CeliuzPaper, `--set`, `--random` y
+    `set-wallpaper.sh`. Enganchado en cualquier otro lado se quedaria alguno
+    fuera y el login volveria a desincronizarse a la primera de cambio.
+
+    NO SE ESPERA A QUE TERMINE, y es importante: reescalar el video cuesta unos
+    7 s medidos (4K a 1080p). Bloquear ahi convertiria un cambio de fondo, que
+    ahora es instantaneo, en una espera larga con la aplicacion congelada. El
+    script se apaña solo: si no hay pantalla propia instalada se va en silencio,
+    y si ya hay otro generando, tambien.
+
+    Que falle NO puede estropear el cambio de fondo, que es lo que pediste de
+    verdad; de ahi el try y el silencio.
+    """
+    try:
+        subprocess.Popen([SDDM_FONDO],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except OSError:
+        pass
 
 
 # --- Hablar con mpvpaper ------------------------------------------------------

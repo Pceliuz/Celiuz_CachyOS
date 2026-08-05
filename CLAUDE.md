@@ -306,6 +306,21 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   recordado**, por barato que parezca.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
+- **ffmpeg elige el formato de salida POR LA EXTENSIÓN.** Un temporal llamado
+  `fondo.jpg.nuevo` termina en `.nuevo` y ffmpeg responde *«Unable to choose an
+  output format»* sin escribir nada. La extensión real va **al final**:
+  `fondo.nuevo.jpg`. Ha mordido **dos veces** en este repo —la pantalla de
+  bloqueo (`lock-bg.tmp.jpg`) y el fondo del login—, y las dos veces con el
+  stderr silenciado, así que el síntoma fue «no pasa nada».
+- **Para que un servicio del sistema lea un fichero tuyo, carpeta compartida con
+  setgid — no aflojes los permisos de `$HOME` ni pongas un NOPASSWD.** El
+  greeter de SDDM corre como el usuario `sddm` y no puede entrar en `/home/tu`
+  (está a 700). La solución del repo es `/var/lib/sddm-celiuz` en modo **2750**,
+  de tu usuario y del grupo del servicio: **el setgid hace que lo que crees
+  dentro nazca con ese grupo**, y con eso el servicio lee y tú escribes sin
+  privilegios. Sin el setgid los ficheros nacen con TU grupo y el servicio se
+  encuentra un permiso denegado que no verás por ningún lado. Se monta una sola
+  vez desde `instalar.sh --sddm`; después, cero sudo.
 - **mako se traga igual los errores de `on-notify`.** Si el comando del sonido
   falla, no sale por ningún lado: te quedas sin sonido y sin nada que mirar. Por
   eso `hypr/scripts/sonido-notificacion.sh` tiene `--revisar`, y por eso no se

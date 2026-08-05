@@ -63,6 +63,9 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`sonido-notificacion.sh`** — el «toc» de las notificaciones. Busca el
   reproductor y el sonido que haya en la máquina, y se calla sin protestar si no
   hay ninguno. `--revisar` dice qué usa, o por qué no suena.
+- **`sddm-fondo.sh`** — pone tu fondo actual en la pantalla de inicio de sesión,
+  sin permisos de root. Lo llama `aplicar()` en segundo plano cada vez que
+  cambias de fondo; a mano, `--revisar` y `--forzar`.
 - **`recargar.sh`** — recarga la config avisando de verdad si falla, y comprueba
   incoherencias que son config válida pero no hacen nada.
 - **`wallpaper-pause.py`** — pausa el vídeo del fondo cuando queda tapado, y lo
@@ -943,27 +946,63 @@ y nada más; si el sistema no ofrece apagar, ese botón no aparece en vez de fal
 al pulsarlo; si nunca ha entrado nadie y SDDM no recuerda ninguna cuenta, se coge
 la primera de la lista; y si no hay ninguna, sale un campo para escribirla.
 
-### El fondo del arranque no se actualiza solo
+### El fondo del arranque se actualiza solo
 
-Es la pega real y conviene saberla: el greeter corre como el usuario `sddm`, que
-**no puede leer tu carpeta personal** (está a 700). Por eso el vídeo no se lee de
-`~`, se copia dentro del tema — y copiar ahí pide root.
+Cambias de fondo con CeliuzPaper y el del arranque cambia con él. Sin comandos y
+**sin pedirte la contraseña ni una vez**.
 
-Consecuencia: **cambias de fondo con CeliuzPaper y el del arranque sigue siendo
-el anterior** hasta que vuelvas a pasar `./instalar.sh --sddm`. Podría hacerse
-automático, pero sería una app gráfica pidiéndote la contraseña de sudo cada vez
-que eliges un fondo. Mejor un comando explícito que magia que falla en silencio.
+Costó llegar aquí, y el porqué importa. El greeter corre como el usuario `sddm`,
+que **no puede leer tu carpeta personal** (está a 700), así que el vídeo no puede
+leerse de `~`. La primera versión lo copiaba dentro del tema, en `/usr/share`… que
+es de root. Consecuencia: cada cambio de fondo obligaba a pasar `--sddm` a mano y
+teclear la contraseña, y quien cambia de fondo a menudo se quedaba con un login
+desactualizado para siempre. La conclusión de entonces —«hacerlo automático sería
+una app gráfica pidiendo sudo»— era falsa: había una tercera vía.
 
-Al copiarlo se reescala a **tu** pantalla y se recorta a 30 segundos, que es
-tiempo de sobra para lo que dura un arranque:
+**La vuelta que se le dio.** `--sddm` crea **una sola vez** una carpeta
+compartida y deja los dos ficheros del tema como enlaces a ella:
 
-```sh
-SDDM_SEGUNDOS=60 ./instalar.sh --sddm   # si quieres más
+```
+/usr/share/sddm/themes/celiuz/fondo.jpg ─┐
+/usr/share/sddm/themes/celiuz/fondo.mp4 ─┴─> /var/lib/sddm-celiuz/
+                                              (tuya, la lee el grupo sddm)
 ```
 
-En esta laptop, un fondo de 78 MB a 4K quedó en **1,4 MB** y tardó 11 segundos en
-convertirse. En `/usr/share` no tiene sentido dejar 700 MB de vídeo para una
-pantalla que se ve diez segundos.
+La carpeta es `2750`, de tu usuario y del grupo `sddm`. **El setgid es la pieza
+clave**: hace que los ficheros que crees dentro nazcan con ese grupo, y por eso
+el greeter puede leerlos. Sin él nacerían con tu grupo y el greeter se
+encontraría un permiso denegado, que en el arranque se ve como «el fondo no
+sale» y ninguna explicación más.
+
+A partir de ahí, escribir el fondo del login es escribir en una carpeta tuya:
+cero privilegios. Lo hace `hypr/scripts/sddm-fondo.sh`, y lo llama
+`lib/wallpapers.py` desde `aplicar()` — el único punto por el que pasan todos los
+caminos (CeliuzPaper, `--set`, `--random`, `set-wallpaper.sh`). Enganchado en
+cualquier otro sitio se quedaría alguno fuera.
+
+**No se espera a que termine.** Reescalar cuesta unos 8 segundos medidos (4K a
+1080p), así que se lanza en segundo plano con `nice`: tu fondo cambia al instante
+como siempre y el del login se pone al día por detrás. Además lleva una huella
+(origen + fecha + resolución) para no reencodear el mismo fondo dos veces, y un
+`flock` para que fijar tres fondos seguidos no deje tres ffmpeg peleándose.
+
+```sh
+hypr/scripts/sddm-fondo.sh --revisar   # qué hay puesto y si está al día
+hypr/scripts/sddm-fondo.sh --forzar    # rehacerlo aunque parezca al día
+SDDM_SEGUNDOS=60 ./instalar.sh --sddm  # más de 30 s de vídeo
+```
+
+Se reescala a **tu** pantalla y se recorta a 30 segundos: en `/usr/share` —o en
+`/var/lib`— no tiene sentido dejar 700 MB de vídeo para una pantalla que se ve
+diez segundos. La huella incluye la resolución, así que **cambiar de monitor
+también lo rehace**.
+
+> **Los temporales se llaman `fondo.nuevo.jpg`, no `fondo.jpg.nuevo`.** ffmpeg
+> elige el formato de salida **por la extensión**: con `.nuevo` al final responde
+> *«Unable to choose an output format»* y no escribe nada. Como esto corre en
+> segundo plano con el stderr silenciado, el síntoma era exactamente que no
+> pasaba nada. Este repo ya había tropezado con lo mismo en la pantalla de
+> bloqueo (`lock-bg.tmp.jpg`). Lo vigila `tests/unidad/sddm-fondo.sh`.
 
 ### Ajustes
 
@@ -1009,6 +1048,7 @@ equipo del autor que en uno recién clonado. Sirven desde un TTY o por SSH.
 | `unidad/maquina` | portátil vs. sobremesa, y que el orden de carga no se rompa |
 | `unidad/portabilidad` | que no vuelva a colarse la ruta `~/dotfiles` en el código |
 | `unidad/teclas` | que «no puedo saber si SUPER está pulsada» no se confunda con «no lo está» |
+| `unidad/sddm-fondo` | que el fondo del login se rehaga solo, y que no se marque como hecho si falló |
 
 ### Cómo se prueba algo que te puede echar de tu sesión
 
@@ -1104,7 +1144,7 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `waybar/colores.css` | `hypr/scripts/gen-colores.py` |
 | `mako/colores` | `hypr/scripts/gen-colores.py` |
 | `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` |
-| `/usr/share/sddm/themes/celiuz/fondo.{mp4,jpg}` | `instalar.sh --sddm` (con ffmpeg) |
+| `/var/lib/sddm-celiuz/fondo.{mp4,jpg}` | `hypr/scripts/sddm-fondo.sh`, solo, al cambiar de fondo |
 | `/etc/sddm.conf.d/10-celiuz.conf` | `instalar.sh --sddm` |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
