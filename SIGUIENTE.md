@@ -138,19 +138,20 @@ GPU solo levanta con `AQ_NO_MODIFIERS=1` (sin eso, `bo null` en bucle y se queda
 sin monitor). Lo primero es averiguar si algo de eso hace falta también en la
 sesión real o si es solo cosa del anidado.
 
-### 2. ~~Teclas multimedia~~ — hecho, menos la perilla
+### 2. ~~Teclas multimedia~~ — hecho
 
 Volumen, mute, micro y multimedia ya están en `keybinds.conf`, y funcionan en las
 dos máquinas. Brillo, touchpad y tapa en `conf/teclado-laptop.conf`, que solo se
 carga en portátiles (ver «Portátil o sobremesa» en el README).
 
-**Queda por comprobar en la PC**: si la perilla del X820 manda de verdad
-`XF86AudioRaiseVolume`. Anuncia dispositivos `-consumer-control` y
-`-system-control` aparte, y nunca se probó. Si con los binds puestos la perilla
-ya cambia el volumen, está resuelto; si no, hay que ver qué manda con
-`wev` o `libinput debug-events`.
+**Lo de la perilla del X820 queda cerrado (2026-08-04): ese teclado no tiene esas
+teclas**, lo confirmó el usuario probándolo, y no le hace falta. O sea que en la
+PC los binds de audio no los dispara nadie — y eso **no es un fallo**: un bind
+sobre una tecla que el teclado no emite simplemente no salta, que es justo por lo
+que estas líneas pueden vivir en el fichero común y no en el de portátil. No hay
+nada que investigar aquí; si algún día se cambia de teclado, funcionarán solas.
 
-**Y sin comprobar en el portátil**: el bind de modo avión (`XF86RFKill`). Probarlo
+**Sin comprobar en el portátil**: el bind de modo avión (`XF86RFKill`). Probarlo
 significaba tumbar la wifi de la sesión. El riesgo no es que no funcione, es que
 funcione **dos veces** —si el kernel ya conmuta el rfkill solo, el bind lo
 devuelve— y parezca que la tecla no hace nada. Cómo saberlo, en el propio
