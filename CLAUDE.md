@@ -431,12 +431,39 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   pagar un arranque de python. Las dos copias las compara `tests/unidad/canales.sh`.
   Sin firma (a mano desde un TTY) se usa el único canal si hay uno solo, y **no se
   adivina si hay varios**: acertar la sesión equivocada es peor que no hacer nada.
-- **Sigue sin arreglar, y es de la misma familia: `mpvpaper.sock`.** El fondo usa
-  un socket de nombre fijo en `$XDG_RUNTIME_DIR` y, peor, se mata con
-  `pkill -x mpvpaper` en cuatro sitios, que no distingue de qué sesión es cada
-  proceso. O sea que dos sesiones vivas **sí** se pisan el fondo. No se ha tocado
-  porque arreglarlo de verdad es rehacer cómo se lanza y se mata mpvpaper, y
-  hacerlo a medias en la parte más delicada del repo es peor que dejarlo escrito.
+- **`pkill -x <programa>` no distingue de qué sesión es cada proceso, y por eso
+  ya no se usa en ningún sitio del repo.** Era lo que mataba `mpvpaper` (cuatro
+  sitios), el demonio del fondo, y lo que contaba hyprlocks. Con dos sesiones
+  vivas del mismo usuario, una se llevaba por delante el fondo de la otra; y
+  `pgrep -x hyprlock` hacía que **`lock.sh` saliera sin bloquear nada** si había
+  otra sesión bloqueada — o sea que pedir el bloqueo te dejaba la pantalla
+  abierta, el peor modo de fallo que puede tener ese fichero. Ahora se pregunta
+  a `/proc` con `pids_de_esta_sesion` / `pids_con_marca` (`lib/canales.sh`).
+- **Y la regla que hace segura esa sustitución: SIN FIRMA NO SE RECLAMA NADA.**
+  La tentación al escribir el filtro es «si no hay `HYPRLAND_INSTANCE_SIGNATURE`,
+  no filtres», y eso reconstruye el `pkill -x` exacto: cualquier sitio sin la
+  variable —un TTY, un script, **las propias pruebas**— pasa a matar los procesos
+  de todas tus sesiones. No es hipotético: con esa versión,
+  `pids_de_esta_sesion mpvpaper` desde el entorno de pruebas devolvía el mpvpaper
+  **real** del usuario. Mejor no reclamar nada que reclamarlo todo — y el lado
+  seguro cae solo para quien llama (lock.sh acaba bloqueando, wallpaper.sh acaba
+  lanzando demonio). Lo vigila `tests/unidad/canales.sh`.
+- **A `mpvpaper` se le reconoce por la ruta de su socket, no por el entorno.** Su
+  `--input-ipc-server` sale en la línea de comandos y ya lleva la firma dentro,
+  así que el propio proceso dice de qué sesión es. Más exacto que mirar el
+  entorno y sin el modo de fallo de arriba: sin firma la ruta es la de
+  `sin-sesion`, que no la lleva ningún mpvpaper vivo.
+- **Un `source` que falla NO corta un script de bash.** `wallpaper.sh` y
+  `lock.sh` cargan `lib/canales.sh`; sin esa comprobación seguían corriendo sin
+  las funciones y volvían a matar por nombre —o se quedaban sin saber a quién
+  hablarle— **sin un solo error**. Los dos se plantan ahora con un mensaje. Lo
+  destapó `tests/e2e/fondo.sh`: copiaba `wallpaper.sh` a un temporal **sin
+  `lib/`**, así que llevaba tiempo midiendo un script capado, en verde.
+- **Y el orden de las redirecciones importa al leer `/proc`.**
+  `read -r x < "$d/comm" 2>/dev/null` **no** silencia nada: bash las procesa de
+  izquierda a derecha, así que cuando el proceso desaparece entre el glob y la
+  lectura —pasa constantemente— el error sale por la terminal igual. El
+  `2>/dev/null` va **delante**: `read -r x 2>/dev/null < "$d/comm"`.
 - **Si desaparece el FIFO de órdenes de las barras, el escritorio se
   queda medio mudo**: seis piezas mandan órdenes por ahí (las dos
   líneas-tirador, `SUPER+C`, el panel de calendario, el gestor del dock y la

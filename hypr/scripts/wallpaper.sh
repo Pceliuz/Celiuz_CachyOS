@@ -19,6 +19,14 @@ set -uo pipefail
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT="$SCRIPTS/../wallpapers/current"
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+# Sin esto no hay forma de saber que canal es de esta sesion. Se comprueba a
+# proposito: un `source` que falla en bash NO corta el script, y seguir sin estas
+# funciones significaria volver a matar por nombre, que es justo lo que se quito.
+if ! . "$SCRIPTS/lib/canales.sh" 2>/dev/null || ! declare -F canal >/dev/null; then
+    echo "wallpaper: no encuentro lib/canales.sh; me paro antes de tocar nada" >&2
+    exit 1
+fi
+MPV_SOCK="$(socket_mpv)"
 
 SOLO_MPV=0
 [ "${1:-}" = "--only-mpv" ] && SOLO_MPV=1
@@ -26,12 +34,23 @@ SOLO_MPV=0
 # Si ya habia uno corriendo, fuera. Sin esto, al recargar Hyprland acabarias
 # con varios mpvpaper superpuestos, y cada uno se lleva ~430 MB de RAM.
 #
+# Pero SOLO el de esta sesion. Antes era `pkill -x mpvpaper`, que mata por
+# NOMBRE: con dos sesiones vivas del mismo usuario se llevaba por delante el
+# fondo de la otra, y es tambien lo que dejaba el escritorio real sin fondo al
+# levantar un Hyprland anidado (2026-08-04).
+#
+# Se reconoce al nuestro por la ruta de SU socket IPC, que sale en su linea de
+# comandos y ya lleva la firma dentro. Es mas exacto que mirar el entorno y no
+# tiene el modo de fallo de «sin firma, mato a todos»: sin firma la ruta es la
+# de "sin-sesion", que no la lleva ningun mpvpaper vivo.
+#
 # Hacen falta los dos golpes: si mpvpaper arranco con opciones invalidas se
 # queda colgado sin capa y NO responde a SIGTERM, asi que hay que rematarlo.
-pkill -x mpvpaper 2>/dev/null
-[ "$SOLO_MPV" -eq 0 ] && pkill -f 'wallpaper-paus[e].py' 2>/dev/null
+MIS_MPV="$(pids_con_marca mpvpaper "$MPV_SOCK")"
+[ -n "$MIS_MPV" ] && kill $MIS_MPV 2>/dev/null
 sleep 0.5
-pkill -9 -x mpvpaper 2>/dev/null
+MIS_MPV="$(pids_con_marca mpvpaper "$MPV_SOCK")"
+[ -n "$MIS_MPV" ] && kill -9 $MIS_MPV 2>/dev/null
 sleep 0.3
 
 # El demonio que pausa el video cuando hay una ventana tapandolo y lo mata
@@ -45,10 +64,18 @@ sleep 0.3
 # con --only-mpv, que tampoco lo lanzaba. Resultado: el fondo no se pausaba en
 # toda la sesion, y solo se arreglaba reiniciando.
 #
-# En modo completo se lanza siempre, porque al viejo acabamos de matarlo arriba y
-# preguntar por el seria una carrera: si tarda en morir, el pgrep lo ve todavia,
-# no se lanza a nadie, y la sesion se queda sin demonio.
-if [ "$SOLO_MPV" -eq 0 ] || ! pgrep -f 'wallpaper-paus[e].py' >/dev/null 2>&1; then
+# En modo completo se lanza siempre y no se mata a nadie aqui: el demonio nuevo
+# barre al viejo DE ESTA SESION el solo, nada mas arrancar (ver `matar_otros()`
+# en wallpaper-pause.py). Antes se hacia aqui con un `pkill -f
+# 'wallpaper-paus[e].py'`, que mata por nombre y se llevaba tambien el de otra
+# sesion viva; y la comprobacion posterior era una carrera confesada — si el
+# viejo tardaba en morir, el pgrep lo veia, no se lanzaba a nadie, y la sesion se
+# quedaba sin demonio. Dejar que el nuevo barra quita las dos cosas.
+#
+# En --only-mpv NO se puede lanzar a ciegas: a este script lo llama el propio
+# demonio al salir de un juego, asi que un demonio nuevo barreria a quien nos
+# esta llamando. Ahi se pregunta primero, y solo por los de ESTA sesion.
+if [ "$SOLO_MPV" -eq 0 ] || [ -z "$(pids_de_esta_sesion_cmd wallpaper-pause.py)" ]; then
     setsid "$SCRIPTS/wallpaper-pause.py" >/dev/null 2>&1 &
 fi
 
@@ -109,5 +136,5 @@ case "${DESTINO,,}" in
 esac
 
 mpvpaper -f \
-    -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 $EXTRA --input-ipc-server=$RUNTIME/mpvpaper.sock" \
+    -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 $EXTRA --input-ipc-server=$MPV_SOCK" \
     ALL "$CURRENT"

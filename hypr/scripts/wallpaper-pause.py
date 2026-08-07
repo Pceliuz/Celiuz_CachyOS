@@ -64,7 +64,11 @@ sys.path.insert(0, os.path.join(
 import canales  # noqa: E402
 
 # Lo abre mpvpaper con --input-ipc-server (ver wallpaper.sh).
-MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
+# Con la firma de la sesion; ver lib/canales.py. Ademas de evitar que dos
+# sesiones se hablen al mpvpaper equivocado, esta ruta sale en la linea de
+# comandos de NUESTRO mpvpaper, que es como se le distingue de los ajenos
+# sin recurrir a un `pkill -x` que los mata a todos.
+MPV_SOCKET = canales.socket_mpv()
 STOPLIST = os.path.expanduser("~/.config/mpvpaper/stoplist")
 # La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
 # llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
@@ -198,15 +202,98 @@ def leer_stoplist():
         return set()
 
 
+def _pids(nombre, marca=None):
+    """PIDs de `nombre` cuya linea de comandos contenga `marca`.
+
+    Se hace leyendo /proc y no con pgrep/pkill por lo de siempre: esos matan y
+    cuentan POR NOMBRE, y con dos sesiones vivas del mismo usuario eso significa
+    llevarse por delante el fondo de la otra. La marca es el socket IPC, que
+    lleva la firma de la sesion (ver MPV_SOCKET).
+    """
+    encontrados = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/comm") as fh:
+                if fh.read().strip() != nombre:
+                    continue
+            if marca is not None:
+                with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                    if marca not in fh.read().decode(errors="replace"):
+                        continue
+        except OSError:
+            continue
+        encontrados.append(int(pid))
+    return encontrados
+
+
 def mpvpaper_vivo():
-    return subprocess.run(["pgrep", "-x", "mpvpaper"],
-                          stdout=subprocess.DEVNULL).returncode == 0
+    return bool(_pids("mpvpaper", MPV_SOCKET))
 
 
 def matar_mpvpaper():
-    subprocess.run(["pkill", "-x", "mpvpaper"], stdout=subprocess.DEVNULL)
+    """Mata NUESTRO mpvpaper. Los dos golpes: si arranco con opciones invalidas
+    se queda colgado sin capa y no responde a SIGTERM."""
+    for pid in _pids("mpvpaper", MPV_SOCKET):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
     time.sleep(0.5)
-    subprocess.run(["pkill", "-9", "-x", "mpvpaper"], stdout=subprocess.DEVNULL)
+    for pid in _pids("mpvpaper", MPV_SOCKET):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def matar_otros():
+    """SIGTERM a los otros demonios de fondo de ESTA sesion, y esperar.
+
+    Misma vacuna que en waybar-autohide.py, y por lo mismo: este demonio nace con
+    `setsid`, asi que cerrar sesion no lo mata y un huerfano acaba ocupando el
+    sitio en la siguiente. Antes lo barria wallpaper.sh con un
+    `pkill -f 'wallpaper-paus[e].py'`, que mata por nombre y se llevaba tambien
+    el de otra sesion viva.
+
+    Se filtra por la firma de la instancia: es un competidor si se disputa el
+    mismo escritorio. Un demonio de otra sesion VIVA no lo es.
+    """
+    yo = os.getpid()
+    mi_sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    otros = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == yo:
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                partes = fh.read().decode(errors="replace").split("\0")
+            if not (len(partes) >= 2 and "python" in partes[0]
+                    and partes[1].endswith("wallpaper-pause.py")):
+                continue
+            with open(f"/proc/{pid}/environ", "rb") as fh:
+                entorno = dict(
+                    l.split("=", 1)
+                    for l in fh.read().decode(errors="replace").split("\0")
+                    if "=" in l
+                )
+        except OSError:
+            continue
+        if entorno.get("HYPRLAND_INSTANCE_SIGNATURE") != mi_sig:
+            continue
+        otros.append(int(pid))
+
+    for pid in otros:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    limite = time.monotonic() + 5.0
+    while otros and time.monotonic() < limite:
+        otros = [p for p in otros if os.path.exists(f"/proc/{p}")]
+        if otros:
+            time.sleep(0.1)
 
 
 def avisar(titulo, cuerpo):
@@ -241,8 +328,11 @@ def abrir_fifo():
 
 
 def main():
-    # Un solo demonio a la vez: si quedo otro de una recarga anterior, que se
-    # vaya el viejo. (wallpaper.sh ya lo hace, pero por si se lanza a mano.)
+    # Un solo demonio a la vez, y lo barre EL QUE ARRANCA. Ya no lo hace
+    # wallpaper.sh: alli era un `pkill` por nombre que se llevaba tambien el de
+    # otra sesion viva, y ademas preguntaba despues de matar, que es una carrera
+    # (si el viejo tardaba en morir, se quedaba la sesion sin demonio).
+    matar_otros()
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
     fifo = abrir_fifo()

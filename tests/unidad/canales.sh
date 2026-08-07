@@ -27,7 +27,14 @@ SH="$REPO/hypr/scripts/lib/canales.sh"
 
 # via_py / via_sh — la ruta que da cada implementacion, con el entorno de ahora.
 via_py() { python3 "$PY" "$1"; }
-via_sh() { bash -c ". '$SH'; canal_$1"; }
+via_sh() {
+    # El verbo de la CLI no siempre se llama igual que la funcion de shell: el de
+    # mpv no es un canal de ordenes sino un socket, y las dos implementaciones lo
+    # llaman `socket_mpv`.
+    local fn="canal_$1"
+    [ "$1" = "mpv" ] && fn="socket_mpv"
+    bash -c ". '$SH'; $fn"
+}
 
 # afirmar_gemelos — las dos dicen lo mismo, y ademas lo esperado.
 afirmar_gemelos() {
@@ -123,7 +130,56 @@ wait "$LECTOR" 2>/dev/null
 afirmar_contiene "$TMP/recibido.txt" "show" "la orden llega"
 afirmar_contiene "$TMP/recibido.txt" "dock:show" "y las dos ordenes viajan juntas"
 
-titulo "8. No toco nada de tu equipo"
+titulo "8. El socket de mpvpaper tambien es de una sola sesion"
+export HYPRLAND_INSTANCE_SIGNATURE="firma_de_prueba_1"
+afirmar_gemelos mpv "$XDG_RUNTIME_DIR/mpvpaper.firma_de_prueba_1.sock" \
+    "el socket de mpv"
+
+titulo "9. Sin firma NO se reclama nada como propio"
+# Esta es la parte que mas cerca estuvo de salir mal, y por eso tiene prueba.
+#
+# La tentacion al escribir `pids_de_esta_sesion` es «si no hay firma, no
+# filtres». Eso es EXACTAMENTE el `pkill -x` que se venia a quitar: cualquier
+# sitio sin la variable —un TTY, un script, esta misma prueba— pasaria a matar
+# los procesos de TODAS tus sesiones. Y no es hipotetico: con esa version,
+# `pids_de_esta_sesion mpvpaper` desde el entorno de pruebas devolvia el
+# mpvpaper REAL del usuario, que es el fondo de su escritorio.
+#
+# La regla es al reves: sin firma no se reclama nada. Para quien llama, el lado
+# seguro cae solo (lock.sh acaba bloqueando, wallpaper.sh acaba lanzando).
+unset HYPRLAND_INSTANCE_SIGNATURE
+# `sleep` sirve de cobaya: existe seguro y no es de nadie.
+sleep 30 & COBAYA=$!
+sleep 0.3
+salida="$(bash -c ". '$SH'; pids_de_esta_sesion sleep")"
+if [ -z "$salida" ]; then
+    ok "sin firma no devuelve NINGUN proceso (ni los ajenos)"
+else
+    fallo "sin firma no se reclama nada" \
+          "devolvio PIDs con el entorno sin firma: $salida"
+fi
+salida="$(bash -c ". '$SH'; pids_de_esta_sesion_cmd sleep")"
+if [ -z "$salida" ]; then
+    ok "y la variante que mira la linea de comandos, igual"
+else
+    fallo "sin firma no se reclama nada (por linea de comandos)" \
+          "devolvio: $salida"
+fi
+
+titulo "10. Se reconoce a los propios por una marca en su linea de comandos"
+# Es como wallpaper.sh distingue SU mpvpaper: por la ruta de su socket, que ya
+# lleva la firma dentro. Aqui la cobaya es un sleep con un argumento marcado.
+salida="$(bash -c ". '$SH'; pids_con_marca sleep 30")"
+afirmar_igual "$COBAYA" "$salida" "encuentra al que lleva la marca"
+salida="$(bash -c ". '$SH'; pids_con_marca sleep marca-que-no-lleva-nadie")"
+if [ -z "$salida" ]; then
+    ok "y no devuelve nada si la marca no aparece"
+else
+    fallo "una marca ausente no debe encontrar a nadie" "devolvio: $salida"
+fi
+kill "$COBAYA" 2>/dev/null; wait "$COBAYA" 2>/dev/null
+
+titulo "11. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
 resumen

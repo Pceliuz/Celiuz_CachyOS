@@ -783,6 +783,12 @@ barras.
 > canal por el que se le habla al demonio lleva la firma de la sesión en el
 > nombre, así que un `SUPER+C` va siempre a la sesión desde la que lo pulsas.
 
+Lo mismo vale para el fondo y para la pantalla de bloqueo: el socket de mpvpaper
+lleva la firma de la sesión, y ni el fondo ni el bloqueo se buscan ya «por
+nombre». Antes, con dos sesiones vivas, arrancar el fondo en una **mataba el de
+la otra**, y bloquear la pantalla teniendo la otra sesión bloqueada **no
+bloqueaba nada** — salía creyendo que ya estaba puesto.
+
 Las órdenes se mandan con `hypr/scripts/barras.sh`, que es lo que hay detrás del
 atajo y de las dos líneas-tirador:
 

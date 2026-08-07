@@ -77,15 +77,22 @@ WORKSPACE_LIMPIO="${WORKSPACE_LIMPIO:-99}"
 REINTENTOS="${REINTENTOS:-5}"
 
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-# Los dos canales llevan la firma de la sesion, que es lo que evita que estas
+# Los tres canales llevan la firma de la sesion, que es lo que evita que estas
 # ordenes acaben en OTRA sesion de Hyprland viva a la vez — y mandar el `unlock`
 # a la pantalla de bloqueo de otro es lo peor que podia salir de aquel enredo.
 # El porque completo, en lib/canales.py. Siguen pisables por entorno para las
 # pruebas, que es como e2e/bloqueo.sh comprueba el caso de "no hay demonio".
-. "$(dirname "$(readlink -f "$BASH_SOURCE")")/lib/canales.sh"
+#
+# El `source` se comprueba a proposito: en bash un `source` que falla NO corta el
+# script, y seguir sin estas funciones dejaria el bloqueo sin saber a quien
+# hablarle — o, peor, volviendo a contar hyprlocks por nombre.
+if ! . "$(dirname "$(readlink -f "$BASH_SOURCE")")/lib/canales.sh" 2>/dev/null || ! declare -F canal >/dev/null; then
+    echo "lock: no encuentro lib/canales.sh; me paro antes de tocar nada" >&2
+    exit 1
+fi
 FIFO="${FIFO:-$(canal_fondo)}"
 FIFO_BARRAS="${FIFO_BARRAS:-$(canal_barras)}"
-MPV="$RUNTIME/mpvpaper.sock"
+MPV="${MPV:-$(socket_mpv)}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/celiuzpaper"
 FONDO="$CACHE/lock-bg.jpg"
 # El temporal lleva el .jpg AL FINAL a proposito: ffmpeg elige el formato de
@@ -116,9 +123,13 @@ fi
 exec 2>&1
 echo "=== $(date '+%F %T') lock.sh arranca (pid $$, modo $MODO_FONDO) ==="
 
-# Si ya hay un hyprlock corriendo, no se apilan dos.
-if pgrep -x hyprlock >/dev/null; then
-    echo "lock: ya hay un hyprlock corriendo, no hago nada"
+# Si ya hay un hyprlock corriendo, no se apilan dos. Pero solo cuenta el de ESTA
+# sesion: con `pgrep -x hyprlock` a secas, tener bloqueada otra sesion del mismo
+# usuario —otro TTY, un cambio rapido de usuario— hacia que este script se diera
+# por hecho y saliera sin bloquear NADA. O sea que pedir el bloqueo te dejaba la
+# pantalla abierta, que es el peor modo de fallo que puede tener este fichero.
+if [ -n "$(pids_de_esta_sesion hyprlock)" ]; then
+    echo "lock: ya hay un hyprlock corriendo en esta sesion, no hago nada"
     exit 0
 fi
 

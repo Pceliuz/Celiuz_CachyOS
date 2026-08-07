@@ -62,31 +62,36 @@ def firma():
     return os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or ""
 
 
-def _es_fifo(ruta):
+def _del_tipo(ruta, ext):
+    """Que el fichero sea de verdad lo que su extension promete."""
     try:
-        return stat.S_ISFIFO(os.stat(ruta).st_mode)
+        modo = os.stat(ruta).st_mode
     except OSError:
         return False   # se lo llevaron entre el glob y el stat
+    return stat.S_ISSOCK(modo) if ext == "sock" else stat.S_ISFIFO(modo)
 
 
-def canal(nombre):
-    """Ruta del FIFO de ordenes de `nombre` para ESTA sesion.
+def canal(nombre, ext="fifo"):
+    """Ruta del canal de `nombre` para ESTA sesion.
 
-    `nombre` es el del demonio: "waybar-autohide" o "wallpaper-pause".
+    `nombre` es el del demonio ("waybar-autohide", "wallpaper-pause") o el de la
+    pieza ("mpvpaper"). `ext` distingue un FIFO de ordenes de un socket de mpv;
+    la regla del nombre es la misma para los dos, que es justo lo que se quiere:
+    **nada de una sesion se llama igual en dos sesiones.**
     """
     sig = firma()
     if sig:
-        return os.path.join(RUNTIME, f"{nombre}.{sig}.fifo")
+        return os.path.join(RUNTIME, f"{nombre}.{sig}.{ext}")
 
     # Sin firma. Si solo hay un canal de ese demonio, es ese; si hay varios, no
-    # se adivina (ver la cabecera). Se exige que sea un FIFO DE VERDAD, no un
-    # fichero con ese nombre: `echo x > ruta-sin-fifo` deja uno normal y sale
+    # se adivina (ver la cabecera). Se exige que sea del TIPO que toca, no solo
+    # que se llame asi: `echo x > ruta-sin-fifo` deja un fichero normal y sale
     # con 0, asi que la basura de esa trampa no debe contar como candidata.
-    sueltos = sorted(f for f in glob.glob(os.path.join(RUNTIME, f"{nombre}.*.fifo"))
-                     if _es_fifo(f))
+    sueltos = sorted(f for f in glob.glob(os.path.join(RUNTIME, f"{nombre}.*.{ext}"))
+                     if _del_tipo(f, ext))
     if len(sueltos) == 1:
         return sueltos[0]
-    return os.path.join(RUNTIME, f"{nombre}.sin-sesion.fifo")
+    return os.path.join(RUNTIME, f"{nombre}.sin-sesion.{ext}")
 
 
 def canal_barras():
@@ -97,10 +102,22 @@ def canal_fondo():
     return canal("wallpaper-pause")
 
 
+def socket_mpv():
+    """El socket IPC de mpvpaper de ESTA sesion.
+
+    Lo abre mpvpaper con `--input-ipc-server` (ver wallpaper.sh) y por ahi le
+    hablan el demonio de ahorro, la pantalla de bloqueo y CeliuzPaper. Tambien
+    es lo que identifica a NUESTRO mpvpaper entre los de otras sesiones: su
+    ruta sale en la linea de comandos del proceso, asi que sirve para matarlo
+    sin recurrir a un `pkill -x mpvpaper` que se lleva por delante los ajenos.
+    """
+    return canal("mpvpaper", "sock")
+
+
 if __name__ == "__main__":
     import sys
 
-    verbos = {"barras": canal_barras, "fondo": canal_fondo}
+    verbos = {"barras": canal_barras, "fondo": canal_fondo, "mpv": socket_mpv}
     if len(sys.argv) != 2 or sys.argv[1] not in verbos:
         sys.exit(f"uso: {os.path.basename(sys.argv[0])} {{{'|'.join(verbos)}}}")
     print(verbos[sys.argv[1]]())

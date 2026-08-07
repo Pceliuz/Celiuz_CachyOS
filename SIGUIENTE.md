@@ -5,7 +5,10 @@ queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
 Última sesión: **2026-08-07**, en el **portátil**. Se cerró el caso de las barras
 que no se ocultaban, se veían sobre el bloqueo y salían dobles al desbloquear:
-eran **un solo** fallo, un demonio huérfano de la sesión del 05 (ver abajo).
+eran **un solo** fallo, un demonio huérfano de la sesión del 05 (ver abajo). De
+tirar de ese hilo salió lo demás: **nada de una sesión puede llamarse igual en
+dos sesiones**, ni los FIFO de órdenes, ni el socket del fondo — y **ya no queda
+ningún `pkill` por nombre** en el repo.
 
 Antes, el **2026-08-05**, una auditoría de «¿esto vale para quien clone el
 repo?», que sacó tres cosas que la
@@ -117,14 +120,64 @@ Verificado en la sesión viva: los dos canales con firma, `SUPER+C` saca las
 barras de `bottom` a `top`, el `on-click` tal cual lo lanza waybar sale con 0, y
 `configerrors` vacío. 14 pruebas en verde.
 
-### Lo que NO se tocó, y por qué
+## El fondo y el bloqueo, también por sesión (2026-08-07, portátil)
 
-**`mpvpaper.sock` tiene el mismo problema y sigue igual.** Nombre fijo en
-`$XDG_RUNTIME_DIR` y, peor, se mata con `pkill -x mpvpaper` en cuatro sitios, que
-no mira de qué sesión es cada proceso. Dos sesiones vivas se pisan el fondo.
-Arreglarlo de verdad es rehacer cómo se lanza y se mata mpvpaper —la parte más
-delicada del repo, la del «susto del fondo»— y hacerlo a medias es peor que
-dejarlo escrito. Si algún día se coge, va con su propia sesión de trabajo.
+Es lo que en la entrada anterior quedaba anotado como «no se tocó». Se cogió
+después, a petición del usuario, y **ya no queda ningún `pkill -x` en el repo**.
+
+**Lo que había.** `mpvpaper.sock` con nombre fijo, y cuatro sitios matando o
+contando por nombre: `pkill -x mpvpaper` (dos veces en `wallpaper.sh`, dos en
+`wallpaper-pause.py`), `pkill -f 'wallpaper-paus[e].py'` y `pgrep -x hyprlock`.
+Ese último es el peor de todos: con otra sesión del mismo usuario bloqueada,
+`lock.sh` se daba por hecho y **salía sin bloquear nada**. Pedir el bloqueo te
+dejaba la pantalla abierta.
+
+**Lo que hay ahora.** El socket de mpv lleva la firma, igual que los dos FIFO
+(`canales.py` creció con `socket_mpv()`), y los procesos se buscan en `/proc`:
+
+- `pids_de_esta_sesion <programa>` — por la firma del entorno. Lo usa `lock.sh`.
+- `pids_con_marca <programa> <marca>` — por un trozo de la línea de comandos. Es
+  como se reconoce a **nuestro** mpvpaper: la ruta de su `--input-ipc-server` ya
+  lleva la firma, así que el proceso dice solo de qué sesión es.
+- `wallpaper-pause.py` tiene ya su `matar_otros()`, como el de las barras, y
+  `wallpaper.sh` **ya no mata al demonio**: eso quita de paso una carrera que
+  estaba confesada en un comentario (si el viejo tardaba en morir, el `pgrep` lo
+  veía, no se lanzaba a nadie, y la sesión se quedaba sin demonio).
+
+### Tres cosas que casi salen mal, y por qué están en el `CLAUDE.md`
+
+**1. «Sin firma, no filtres» habría sido el mismo `pkill -x`.** La primera
+versión de `pids_de_esta_sesion` no filtraba si faltaba la variable. Medido: con
+esa versión, llamarla desde el entorno de pruebas devolvía **el mpvpaper real del
+usuario** — o sea que correr la suite te habría apagado el fondo. La regla buena
+es «sin firma no se reclama nada», y el lado seguro cae solo para quien llama.
+Lo vigila la sección 9 de `tests/unidad/canales.sh`.
+
+**2. `tests/e2e/fondo.sh` llevaba tiempo midiendo un script capado.** Copiaba
+`wallpaper.sh` a un temporal **sin `lib/`**, así que el `source` fallaba — y en
+bash un `source` roto no corta nada— y la prueba pasaba sin ejercer la parte que
+decide a quién matar. De hecho es lo único que impidió que el fondo real muriera
+mientras se probaba todo esto. Ahora la prueba copia `lib/`, y los dos scripts se
+plantan con un mensaje si no la encuentran.
+
+**3. El `2>/dev/null` iba en el sitio equivocado.** `read -r x < "$d/comm"
+2>/dev/null` no silencia nada: bash procesa las redirecciones de izquierda a
+derecha, así que un proceso que desaparece entre el glob y la lectura —pasa
+constantemente— escupe el error igual. Se vio en la sesión viva al relanzar el
+fondo. Va delante.
+
+**Verificado en vivo**, que aquí es lo que cierra el asunto: el fondo relanzado
+con su socket con firma, dibujando en la capa 0, respondiendo por IPC y con
+`pause: True` con ventanas encima (o sea que el demonio de ahorro le habla bien);
+un solo demonio de fondo; y `lock.sh` resolviendo los tres canales de esta
+sesión. 14 pruebas en verde, `configerrors` vacío.
+
+### Lo único que queda de esta familia
+
+`pkill fuzzel` en `keybinds.conf` (`SUPER+B`). Es del mismo tipo, pero el lanzador
+es una ventana efímera que solo está abierta mientras la usas, así que lo peor que
+pasa es que se te cierre el fuzzel de la otra sesión. Se deja a propósito: no
+merece un script nuevo solo para eso.
 
 ### Una falsa alarma de las pruebas, ya explicada
 

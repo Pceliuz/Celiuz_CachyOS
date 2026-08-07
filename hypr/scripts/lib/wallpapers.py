@@ -55,7 +55,8 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import canales  # noqa: E402
 
-MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
+# Con la firma de la sesion; ver canales.py (aqui al lado).
+MPV_SOCKET = canales.socket_mpv()
 # FIFO del demonio de ahorro: mientras se esta eligiendo fondo hay que pedirle
 # que no toque la pausa, o pausaria el video de la vista previa.
 # Con la firma de la sesion; ver canales.py (aqui al lado).

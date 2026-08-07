@@ -45,6 +45,12 @@ poner_fondo() {
     # wallpaper.sh busca ../wallpapers/current desde donde esta el.
     mkdir -p "$TMP/scripts"
     cp "$REPO/hypr/scripts/wallpaper.sh" "$TMP/scripts/"
+    # Y lib/, porque wallpaper.sh hace `source` de lib/canales.sh. Sin esto el
+    # `source` fallaba, el script seguia sin sus funciones —en bash un `source`
+    # roto no corta nada— y la prueba estaba midiendo un wallpaper.sh CAPADO:
+    # verde, pero sin ejercer la parte que decide a quien matar. Ahora el script
+    # se planta si no encuentra la lib, y aqui se le da.
+    cp -r "$REPO/hypr/scripts/lib" "$TMP/scripts/"
     "$TMP/scripts/wallpaper.sh" --only-mpv >/dev/null 2>&1
 }
 
@@ -72,7 +78,14 @@ afirmar_contiene "$REGISTRO/mpvpaper.log" 'image-display-duration=inf' \
     "resuelve el enlace \"current\" para saber que es una imagen"
 
 titulo "4. No mato nada de tu sesion"
-afirmar "el pkill fue el falso, no el de verdad" test -f "$REGISTRO/pkill.log"
+# Ya no se mata por nombre, asi que lo que hay que exigir es lo contrario que
+# antes: que NO se llame a pkill. Se reconoce al mpvpaper propio por la ruta de
+# su socket, que lleva la firma de la sesion; sin firma —como aqui, que
+# preparar_entorno la quita— esa ruta es la de "sin-sesion" y no la lleva nadie,
+# asi que no hay a quien matar. Antes, `pkill -x mpvpaper` se llevaba por delante
+# el fondo de CUALQUIER sesion del usuario.
+afirmar "no se llama a pkill (ya no se mata por nombre)" \
+    test ! -f "$REGISTRO/pkill.log"
 # Se mira con el PATH original: dentro del entorno de prueba, `pgrep` es falso.
 MPV_DESPUES="$(PATH="${PATH#"$FALSOS":}" pgrep -x mpvpaper 2>/dev/null | head -1)"
 afirmar_igual "$MPV_ANTES" "$MPV_DESPUES" \
