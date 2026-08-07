@@ -439,6 +439,48 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   `tr '\0' '\n' < /proc/<pid>/environ | grep HYPRLAND_INSTANCE_SIGNATURE` y
   compáralo con el de tu sesión. **«Existe la carpeta de la instancia» NO sirve
   para saber si vive**: Hyprland no siempre la limpia al irse.
+- **Y le pasaba igual a `waybar-autohide.py`, que es peor porque las barras SE
+  VEN** (2026-08-07). Se documentó la enfermedad y solo se vacunó a un enfermo.
+  Aquí hay un agravante que el fondo no tiene: **`WAYLAND_DISPLAY` se reutiliza
+  entre sesiones** —`wayland-1` las dos veces—, así que las cuatro waybar de un
+  demonio de hace dos días se dibujan en la sesión de hoy. El huérfano estaba
+  adoptado por `systemd --user`, que sobrevive al cierre de sesión.
+  Lo que se veía eran **tres fallos que parecían no tener nada que ver**, y
+  ninguno se parece a la causa:
+  1. *las barras no se ocultan aunque haya apps abiertas* — el socket muerto no
+     contesta y el valor de reserva de `read_state()` es 0 ventanas, o sea
+     «escritorio vacío», que es justo cuando las barras se quedan puestas;
+  2. *se ven por encima de la pantalla de bloqueo* — el `lock` de `lock.sh` entra
+     por el FIFO, que era del demonio BUENO, y ese mata solo las suyas; el
+     huérfano había perdido el FIFO y estaba sordo (lo delata `(deleted)` en
+     `ls -l /proc/<pid>/fd`);
+  3. *al desbloquear parecen dos barras peleándose* — es que lo son: el `unlock`
+     relanza las cuatro del bueno y quedan ocho capas.
+  Arreglado por las dos puntas, y hacen falta las dos: `ABANDONO` (se va solo) y
+  `matar_otros()` **en todos los arranques**, no solo con `--reiniciar`, que era
+  lo que dejaba convivir al huérfano con el demonio nuevo al abrir sesión. Lo
+  vigila `tests/unidad/barras-huerfanas.sh`.
+- **«¿Contestó?» NO es lo mismo que «¿está vivo?» al hablar con Hyprland.** Para
+  decidir si tu compositor sigue ahí, lo que vale es el **`connect`**, no que la
+  respuesta traiga datos: `query()` tiene un timeout de 1 s en el `recv`, así que
+  un Hyprland vivo pero atareado devuelve exactamente el mismo vacío que uno
+  muerto — y tomarlo por muerto apaga las barras de una sesión buena. Por eso
+  existe `hypr_alcanzable()` aparte. Mordió al escribir la prueba: el Hyprland de
+  mentira aceptaba y callaba, y el demonio se rendía con él delante.
+- **Un doble de socket en una prueba tiene que ATENDER, no solo escuchar.** Un
+  `listen()` sin `accept()` en bucle aguanta unas pocas conexiones y luego llena
+  la cola; como el demonio pregunta a 10 Hz, a partir de ahí los `connect`
+  empiezan a fallar y el doble acaba fingiendo justo el fallo que la prueba
+  quería descartar.
+- **Un barrido «mata a los que se llamen como yo» necesita un discriminante, y el
+  bueno es `XDG_RUNTIME_DIR`.** Lo que hace rival a otra instancia no es el
+  nombre, es disputarse el mismo escritorio: mismo runtime, mismo FIFO y mismas
+  capas. Sin ese filtro, `matar_otros()` corriendo en cada arranque sería el
+  `pkill` por nombre que ya mordió con `wallpaper.sh` — y **un `$HOME` desechable
+  no aísla de eso**, así que `tests/unidad/barras-huerfanas.sh` habría matado el
+  demonio de la sesión real de quien ejecutara las pruebas. Ojo con la asimetría:
+  al de **otra sesión de Hyprland con el mismo runtime SÍ** hay que matarlo, que
+  es justo el huérfano; el discriminante es el runtime, nunca la instancia.
 
 ## Las pruebas
 

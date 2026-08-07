@@ -106,6 +106,29 @@ REINTENTOS_VENTANA = 60.0
 # Periodo del bucle. 0.1 s da una reaccion inmediata a ojo y no cuesta nada.
 TICK = 0.1
 
+# Segundos sin conseguir hablar con NUESTRO Hyprland antes de apartarse y
+# llevarse las barras. Es la misma vacuna que `wallpaper-pause.py` (ver ABANDONO
+# alli, y "el susto del fondo" en SIGUIENTE.md): este demonio tambien nace con
+# `setsid`, o sea que NO muere con el compositor que lo arranco, y SOCKET se fija
+# al empezar, asi que un Hyprland nuevo tampoco lo recupera.
+#
+# Sin esto pasa lo del 2026-08-07, y el sintoma no se parece a la causa. Un
+# demonio de la sesion del 05 seguia vivo dos dias despues, adoptado por
+# `systemd --user`, y como el WAYLAND_DISPLAY se reutiliza entre sesiones
+# (`wayland-1` las dos veces) SUS cuatro waybar se dibujaban en la sesion NUEVA.
+# Se veia como tres fallos distintos que en realidad eran este:
+#
+#   - "las barras no se ocultan aunque haya apps": `read_state()` no podia leer
+#     nada del socket muerto y su valor de reserva es 0 ventanas, o sea
+#     "escritorio vacio", que es justo cuando las barras se quedan puestas.
+#   - "en el bloqueo se ven": el `lock` de lock.sh entra por el FIFO, que era del
+#     demonio BUENO, y ese mata solo las suyas. Las del huerfano no las manda
+#     nadie: el huerfano habia perdido el FIFO (lo delata `(deleted)` en
+#     `ls -l /proc/<pid>/fd`) y estaba sordo para siempre.
+#   - "al desbloquear parecen dos barras peleandose": porque lo son. El `unlock`
+#     relanza las cuatro del demonio bueno y quedan ocho capas waybar encima.
+ABANDONO = float(os.environ.get("WAYBAR_AUTOHIDE_ABANDONO", "60"))
+
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 FIFO_PATH = os.path.join(RUNTIME, "waybar-autohide.fifo")
 
@@ -147,6 +170,29 @@ def query(cmd):
         return ""
 
 
+def hypr_alcanzable():
+    """Si el socket de NUESTRA instancia sigue aceptando conexiones.
+
+    Es lo unico que distingue "mi Hyprland ya no esta" de "esta y ha tardado".
+    Que `query()` vuelva vacio NO sirve para eso: el `recv` tiene un timeout de
+    1 s, asi que un compositor vivo pero atareado da exactamente la misma
+    respuesta vacia que uno muerto, y tomarlo por muerto apagaria las barras de
+    una sesion buena. Lo que no se puede fingir es el `connect`: si no hay nadie
+    escuchando da ECONNREFUSED, y si la carpeta se limpio, ENOENT.
+
+    Y "existe la carpeta de la instancia" tampoco vale: Hyprland no siempre la
+    borra al irse — el huerfano del 2026-08-07 tenia la suya intacta dos dias
+    despues.
+    """
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect(SOCKET)
+        return True
+    except OSError:
+        return False
+
+
 def screen_size():
     """Tamano LOGICO del monitor enfocado, que es en lo que viene el cursor."""
     try:
@@ -162,7 +208,14 @@ SCREEN_W, SCREEN_H = screen_size()
 
 
 def read_state():
-    """(ventanas en el workspace activo, x, y del cursor). Una sola ida y vuelta."""
+    """(ventanas en el workspace activo, x, y del cursor, contesto). Una ida y vuelta.
+
+    El cuarto valor es si Hyprland llego a contestar, y hay que devolverlo aparte
+    porque los otros tres NO distinguen: cuando el socket no responde, el valor de
+    reserva son 0 ventanas y el cursor en el centro, que es indistinguible de un
+    escritorio vacio de verdad. Confundirlos es lo que dejaba las barras puestas
+    para siempre en un demonio huerfano (ver ABANDONO).
+    """
     out = query("[[BATCH]]activeworkspace;cursorpos")
     windows = 0
     # Si falla la lectura se asume "fuera de las dos barras": el centro exacto.
@@ -180,7 +233,7 @@ def read_state():
         m = CURSOR_RE.match(line)
         if m:
             cursor_x, cursor_y = int(m.group(1)), int(m.group(2))
-    return windows, cursor_x, cursor_y
+    return windows, cursor_x, cursor_y, bool(out)
 
 
 # Niveles de capa de Hyprland: 0 background, 1 bottom, 2 top, 3 overlay. Las
@@ -541,8 +594,22 @@ def matar_otros():
     mataba a si mismo antes de relanzar nada; y no esperaba, de modo que el
     `cleanup` de la instancia vieja llegaba tarde y borraba el FIFO que la nueva
     acababa de crear.
+
+    Y se filtra ademas por `XDG_RUNTIME_DIR`, que es lo que decide si el otro es
+    de verdad un COMPETIDOR. Lo que hace rival a otra instancia no es llamarse
+    igual, es disputarse el mismo escritorio: el mismo runtime es el mismo FIFO y
+    las mismas capas waybar. Uno con otro runtime —el `tests/anidado.sh`, o una
+    prueba con su `$HOME` de mentira— no estorba a nadie, y matarlo seria
+    exactamente el `pkill` por nombre que ya mordio en este repo con
+    `wallpaper.sh` (2026-08-04): un `$HOME` desechable NO aisla de eso, porque
+    matar por nombre no mira de que sesion es cada proceso.
+
+    Ojo con la asimetria: SI hay que matar al de otra sesion de Hyprland que
+    comparta runtime, que es justo el huerfano que motiva todo esto. El
+    discriminante es el runtime, nunca la instancia del compositor.
     """
     yo = os.getpid()
+    mi_runtime = RUNTIME
     otros = []
     for pid in os.listdir("/proc"):
         if not pid.isdigit() or int(pid) == yo:
@@ -552,8 +619,20 @@ def matar_otros():
                 partes = fh.read().decode(errors="replace").split("\0")
         except OSError:
             continue
-        if len(partes) >= 2 and "python" in partes[0] and \
-                partes[1].endswith("waybar-autohide.py"):
+        if not (len(partes) >= 2 and "python" in partes[0] and
+                partes[1].endswith("waybar-autohide.py")):
+            continue
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as fh:
+                entorno = dict(
+                    linea.split("=", 1)
+                    for linea in fh.read().decode(errors="replace").split("\0")
+                    if "=" in linea
+                )
+        except OSError:
+            continue   # ya no esta, o no es nuestro: no se toca a ciegas
+        suyo = entorno.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+        if suyo == mi_runtime:
             otros.append(int(pid))
 
     for pid in otros:
@@ -570,8 +649,14 @@ def matar_otros():
 
 
 def main():
-    if "--reiniciar" in sys.argv:
-        matar_otros()
+    # SIEMPRE, no solo con `--reiniciar`. Antes solo barria el atajo de reinicio,
+    # asi que al abrir sesion el demonio nuevo convivia tan tranquilo con
+    # cualquier huerfano de una sesion anterior — y el huerfano se queda con las
+    # barras que se ven, porque `WAYLAND_DISPLAY` se reutiliza entre sesiones.
+    # Esto es la mitad barata del arreglo: corta el problema al arrancar. La otra
+    # mitad es ABANDONO, que ademas cubre al que se queda huerfano estando ya en
+    # marcha, cuando aqui no hay nadie arrancando que lo barra.
+    matar_otros()
 
     fifo = abrir_fifo()
 
@@ -602,6 +687,7 @@ def main():
     time.sleep(1.0)
 
     proxima_revision = 0.0
+    sin_hyprland = None
 
     while True:
         # El timeout de select() hace de reloj del bucle: no hace falta sleep.
@@ -636,7 +722,29 @@ def main():
         for bar in bars.values():
             bar.supervisar()
 
-        windows, cursor_x, cursor_y = read_state()
+        windows, cursor_x, cursor_y, contesto = read_state()
+
+        # Nuestro Hyprland ya no esta: apartarse y llevarse las barras (ABANDONO).
+        # Hay que separarlo del arranque en frio, que tambien falla al principio,
+        # y por eso se mide TIEMPO seguido sin contestar en vez de un fallo suelto
+        # —el socket da timeouts sueltos con la maquina cargada—.
+        #
+        # `cleanup()` es justo lo que hace falta: mata las cuatro barras (que son
+        # lo que ensucia la sesion nueva) y suelta el FIFO solo si sigue siendo el
+        # nuestro, para no dejar sordo al demonio bueno al irse.
+        # `contesto` es solo el camino barato: mientras Hyprland responda no hay
+        # nada que preguntar. Solo cuando vuelve vacio se paga el `connect` de
+        # hypr_alcanzable(), que es lo que de verdad separa "muerto" de "lento".
+        if contesto or hypr_alcanzable():
+            sin_hyprland = None
+        else:
+            if sin_hyprland is None:
+                sin_hyprland = time.monotonic()
+            elif time.monotonic() - sin_hyprland >= ABANDONO:
+                print("waybar-autohide: mi Hyprland ya no esta; dejo el sitio",
+                      file=sys.stderr)
+                cleanup()
+
         capas = layer_levels()
         for bar in bars.values():
             bar.update(windows, cursor_x, cursor_y, capas)

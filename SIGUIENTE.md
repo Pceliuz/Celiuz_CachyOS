@@ -3,9 +3,12 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-05**, en el **portátil** (lo último se subió el
-**2026-08-07**; las fechas de cada apartado son las de cuando se midió). Fue una
-auditoría de «¿esto vale para quien clone el repo?», que sacó tres cosas que la
+Última sesión: **2026-08-07**, en el **portátil**. Se cerró el caso de las barras
+que no se ocultaban, se veían sobre el bloqueo y salían dobles al desbloquear:
+eran **un solo** fallo, un demonio huérfano de la sesión del 05 (ver abajo).
+
+Antes, el **2026-08-05**, una auditoría de «¿esto vale para quien clone el
+repo?», que sacó tres cosas que la
 adaptación anterior no había cubierto: la distribución del teclado —la laptop
 escribía con la de la PC—, ocho rutas cableadas a `~/dotfiles` en ficheros que el
 cerrojo no miraba, y el sensor de temperatura de la barra, que seguía siendo el
@@ -25,6 +28,54 @@ primero: significa que algo del sistema cambió por debajo (una actualización d
 Hyprland, de mpv o de waybar).
 
 ---
+
+## Lo último: las barras dobles eran un huérfano (2026-08-07, portátil)
+
+Lo trajo el usuario como **tres** quejas: las barras no se ocultaban aunque
+hubiera una app delante, se veían sobre la pantalla de bloqueo —donde no debe
+haber más que el fondo— y al desbloquear parecían «dos barras peleándose». Era un
+solo fallo, y ninguno de los tres síntomas se parece a él.
+
+**Había DOS demonios.** `waybar-autohide.py` de la sesión del **05** seguía vivo
+el 07, adoptado por `systemd --user`. Y sus barras se veían porque
+**`WAYLAND_DISPLAY` se reutiliza entre sesiones** (`wayland-1` las dos veces).
+Medido en la sesión viva antes de tocar nada:
+
+- PID 35735 (del 05) con `HYPRLAND_INSTANCE_SIGNATURE` de una instancia muerta,
+  dueño de las **cuatro waybar que se veían**, y con el FIFO marcado `(deleted)`
+  en `ls -l /proc/35735/fd`: sordo, no le llegaba ninguna orden.
+- PID 148924 (del 07) con el FIFO bueno —o sea que `lock`, `unlock` y `SUPER+C`
+  iban a él— y sus cuatro waybar en **zombi**.
+
+De ahí salen los tres síntomas: no se ocultaban porque el socket muerto no
+contesta y el valor de reserva de `read_state()` es 0 ventanas («escritorio
+vacío», que es cuando se quedan puestas); se veían en el bloqueo porque el `lock`
+llegaba al demonio bueno, que mata solo las suyas; y al desbloquear el `unlock`
+relanzaba las cuatro del bueno **encima** de las cuatro del huérfano.
+
+Es **la misma enfermedad del «susto del fondo»** del 04, que se documentó en el
+`CLAUDE.md` como regla general y solo se vacunó a un enfermo: `wallpaper-pause.py`
+tenía su `ABANDONO` y este no.
+
+Arreglado por las dos puntas, y hacen falta las dos:
+
+1. **`ABANDONO`** (60 s sin poder hablar con su Hyprland → se aparta y se lleva
+   sus barras). Cubre al que se queda huérfano ya en marcha.
+2. **`matar_otros()` en TODOS los arranques**, no solo con `--reiniciar`. Era lo
+   que dejaba que el demonio nuevo conviviera tan tranquilo con el huérfano al
+   abrir sesión.
+
+Dos trampas que costaron una vuelta cada una, las dos en el `CLAUDE.md`:
+**«contestó» no es «está vivo»** (el `recv` tiene timeout de 1 s, así que un
+Hyprland atareado devuelve el mismo vacío que uno muerto; lo que decide es el
+`connect`, y por eso existe `hypr_alcanzable()`), y **el barrido se filtra por
+`XDG_RUNTIME_DIR`** — sin eso, correr las pruebas mataría el demonio de la sesión
+real, que es el `pkill` por nombre de siempre.
+
+Lo cubre `tests/unidad/barras-huerfanas.sh` (8 comprobaciones), **comprobada
+contra el código viejo: fallan 4 de 8**. Y verificado en la sesión viva: un solo
+demonio, las barras en `bottom` con ventanas abiertas, y el ciclo del bloqueo por
+el FIFO deja **0** barras con el bloqueo puesto y **4** —no 8— al desbloquear.
 
 ## El reinicio del 2026-08-03: cerrado
 

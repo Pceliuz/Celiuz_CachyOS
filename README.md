@@ -771,6 +771,23 @@ sigue funcionando y el demonio no se apaga.
 > cuando `exec-once` vuelve a correr. Lo cubre
 > `tests/unidad/barras-supervisor.sh`.
 
+Y **solo manda un demonio a la vez**: al arrancar echa a cualquier otro que esté
+gobernando el mismo escritorio, y si el suyo propio se queda sin Hyprland —cerrar
+sesión no lo mata, porque nace con `setsid`— se aparta a los 60 s llevándose sus
+barras.
+
+> Esto era el fallo de **«las barras no se ocultan, se ven sobre el bloqueo y al
+> desbloquear salen dobles»**. Parecen tres cosas y era una: un demonio de una
+> sesión anterior seguía vivo, y como **`WAYLAND_DISPLAY` se reutiliza entre
+> sesiones**, sus cuatro waybar se dibujaban sobre la sesión nueva. No se
+> ocultaban porque, sin poder hablar con su Hyprland, veía siempre «escritorio
+> vacío»; y el `lock` de la pantalla de bloqueo llegaba al *otro* demonio, que
+> solo mata las suyas. Lo cubre `tests/unidad/barras-huerfanas.sh`.
+>
+> Si alguna vez vuelve a pasar, se mira así: `pgrep -af waybar-autohide.py` (debe
+> salir **uno**) y `ls -l /proc/<pid>/fd | grep fifo` — un `(deleted)` ahí es un
+> demonio sordo, que no recibe ninguna orden.
+
 Reparto: a la izquierda los sensores (velocidad, temperatura, CPU, memoria); en
 el centro el reloj y los siete escritorios; a la derecha volumen, red,
 notificaciones y bandeja.
