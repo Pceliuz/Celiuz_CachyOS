@@ -343,6 +343,15 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   la temperatura de la batería. Lo estable es la ruta del dispositivo a la que
   apunta el enlace (`realpath`, y luego la carpeta padre). Y dentro, la entrada
   del encapsulado (`Tctl`, `Tdie`, `Package id 0`), nunca la de un núcleo suelto.
+- **`/etc/vconsole.conf` dice con qué teclado se INSTALÓ, no cuál hay enchufado.**
+  Es la fuente buena para la distribución **en un portátil** —quien contestó esa
+  pregunta estaba tecleando en el teclado interno— y una fuente **falsa en un
+  sobremesa**: el de la PC del autor pone `XKBLAYOUT=latam` y su teclado es un
+  ANSI us, porque eligió latam al instalar y cambió de teclado después. Por eso
+  `perfil_teclado()` la mira solo si el chasis es un portátil. Si algún día se
+  «arregla» esa asimetría creyendo que es un descuido, se arregla el portátil y
+  se rompe la PC. Y el síntoma no avisa: las teclas simplemente dejan de dar lo
+  que tienen serigrafiado.
 - **Un `device {}` de Hyprland arregla UN teclado, no «el teclado».** El perfil
   de portátil devolvía el Ctrl derecho con
   `device { name = at-translated-set-2-keyboard }`, y eso dejaba fuera a todo lo

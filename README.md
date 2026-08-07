@@ -414,8 +414,42 @@ El perfil **`sin-altgr`** es el del X820 y conserva `lv3:switch`.
 > antes y perfil de portátil, un teclado que no fuera el interno salía con
 > `o "lv3:switch"`; ahora sale vacío.
 
+### La distribución: que las teclas den lo que tienen escrito
+
+`kb_options` era media historia. La otra es **qué distribución arranca activa**, y
+el repo traía `us,latam` porque el teclado del autor está serigrafiado en us. En
+un portátil eso suele ser falso: las teclas están impresas en otra cosa, y
+entonces la `ñ`, los acentos y los símbolos salen donde no toca. Había que
+corregir con `SUPER+DEL` en cada sesión.
+
+En un **portátil** la distribución sale ahora de `/etc/vconsole.conf` — lo que
+contestaste cuando el instalador de tu distro te preguntó por el teclado. Ahí es
+de fiar, porque estabas **tecleando en el teclado interno mientras respondías**.
+La tuya queda la primera y `us(altgr-intl)` la segunda, para alternar con
+`SUPER+DEL` (hay atajos y juegos que dan por hecho un teclado us).
+
+> **Y en un sobremesa esa misma fuente miente**, que es la trampa de todo esto.
+> El `/etc/vconsole.conf` de la PC del autor dice `latam` y su teclado es un ANSI
+> us: eligió latam al instalar y **cambió de teclado después**, que es lo normal
+> en una torre. Por eso un sobremesa no la mira y se queda con la del autor —
+> deducirlo de ahí arreglaría el portátil y rompería la PC.
+
+Lo escribe `instalar.sh` en `hypr/conf/local.conf`, que no se versiona, y ahí se
+puede cambiar a mano si te lo detectó mal:
+
+```sh
+hypr/scripts/lib/maquina.py layout      # latam,us
+localectl list-x11-keymap-layouts       # los nombres válidos
+```
+
+`hyprland.conf` trae el valor de fábrica **antes** de leer `local.conf`, así que
+quien clone el repo y arranque sin instalar no se come un error de hyprlang por
+una variable sin definir — que además le dejaría sin teclado con el que
+arreglarlo.
+
 | | Sobremesa | Portátil |
 |---|---|---|
+| Distribución | `us,latam` (la del autor) | la del sistema primero, `us` de segunda |
 | Ctrl derecho | hace de AltGr (lo necesita el X820) | vuelve a ser Ctrl, **en todos los teclados** |
 | Touchpad | — | tap, arrastre, y se calla mientras escribes |
 | Brillo | — | `Fn` + las teclas de brillo |

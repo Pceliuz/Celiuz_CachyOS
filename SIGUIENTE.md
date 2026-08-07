@@ -3,12 +3,14 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-05**, en el **portátil**. Lo último fue una auditoría de
-«¿esto vale para quien clone el repo?», que sacó dos cosas que la adaptación
-anterior no había cubierto: ocho rutas cableadas a `~/dotfiles` en ficheros que
-el cerrojo no miraba, y el sensor de temperatura de la barra, que seguía siendo
-el del Ryzen de la PC. Antes, el supervisor de las barras y el perfil de teclado
-de portátil para todos los teclados.
+Última sesión: **2026-08-05**, en el **portátil** (lo último se subió el
+**2026-08-07**; las fechas de cada apartado son las de cuando se midió). Fue una
+auditoría de «¿esto vale para quien clone el repo?», que sacó tres cosas que la
+adaptación anterior no había cubierto: la distribución del teclado —la laptop
+escribía con la de la PC—, ocho rutas cableadas a `~/dotfiles` en ficheros que el
+cerrojo no miraba, y el sensor de temperatura de la barra, que seguía siendo el
+del Ryzen de la PC. Antes, el supervisor de las barras y el perfil de teclado de
+portátil para todos los teclados.
 
 ## Lo primero al abrir el repo
 
@@ -36,7 +38,37 @@ Lo único que sigue igual son las dos cosas que se dejaron sin comprobar **a
 propósito**, y que siguen abajo, en «Lo siguiente»: el bind de modo avión y la
 perilla del X820.
 
-## Lo último: lo que la adaptación no había cubierto (2026-08-05, portátil)
+## Lo último: la laptop escribe con SU teclado (2026-08-05, portátil)
+
+Lo pilló el usuario: se había arreglado `kb_options` (el Ctrl derecho) pero **no
+la distribución**. La laptop arrancaba en `us(altgr-intl)` —la del teclado ANSI
+del autor— cuando su teclado está serigrafiado en **latam**, así que la `ñ`, los
+acentos y los símbolos salían donde no toca y había que corregir con `SUPER+DEL`
+en cada sesión.
+
+Ahora, en un portátil, la distribución sale de `/etc/vconsole.conf`: lo que se
+contestó al instalar la distro, que en un portátil es de fiar porque se respondió
+tecleando en el teclado interno. Queda `latam,us` con variante `,altgr-intl`.
+
+**La trampa, y está en el `CLAUDE.md`: en un sobremesa esa fuente miente.** El
+`/etc/vconsole.conf` de la PC también dice `latam` y su teclado es un ANSI us
+—se eligió latam al instalar y se cambió de teclado después—, así que un
+sobremesa NO la mira y conserva la del autor. Comprobado forzando esa rama sobre
+una copia del repo: sigue dando `us,latam` y `altgr-intl,`, o sea que **al pasar
+`./instalar.sh` en la PC no cambia nada**.
+
+El valor viaja por `$kb_layout` / `$kb_variant`: valor de fábrica en
+`hyprland.conf` (antes del `source` de `local.conf`, para que un clon sin
+instalar no se coma un error de hyprlang por una variable sin definir) y lo pisa
+el generado `local.conf`, editable a mano.
+
+Verificado en la sesión viva tras `hyprctl reload`: el teclado interno **y el
+USB** salen con `l "latam,us"`, índice 0 y `active keymap: Spanish (Latin
+American)`, con `o ""`. Lo cubre `tests/unidad/maquina.sh` (46 comprobaciones),
+que prueba las dos ramas y los casos raros: valores entre comillas, un portátil
+ya instalado en `us`, y una caja sin `/etc/vconsole.conf`.
+
+## Antes: lo que la adaptación no había cubierto (2026-08-05, portátil)
 
 Se auditó el repo entero preguntando «¿esto vale para quien lo clone?», no solo
 el cambio de la sesión. Salieron dos cosas, las dos venidas de la PC.
