@@ -779,10 +779,25 @@ barras.
 > Ese barrido no es a ciegas: solo se lleva por delante a un duplicado de la
 > propia sesión o a un huérfano —uno cuyo Hyprland ya no contesta—. Si tienes
 > **dos sesiones de Hyprland vivas a la vez** con el mismo usuario (dos TTY, o un
-> cambio rápido de usuario), cada una conserva sus barras. Lo que sí comparten en
-> ese caso es el FIFO de órdenes, que va por `XDG_RUNTIME_DIR`: eso viene de
-> antes y no está resuelto, así que un `SUPER+C` puede acabar en la sesión
-> equivocada.
+> cambio rápido de usuario), cada una conserva sus barras **y sus órdenes**: el
+> canal por el que se le habla al demonio lleva la firma de la sesión en el
+> nombre, así que un `SUPER+C` va siempre a la sesión desde la que lo pulsas.
+
+Las órdenes se mandan con `hypr/scripts/barras.sh`, que es lo que hay detrás del
+atajo y de las dos líneas-tirador:
+
+```sh
+hypr/scripts/barras.sh show            # saca la barra de arriba
+hypr/scripts/barras.sh show dock:show  # las dos, que es lo que hace SUPER+C
+```
+
+Existe en vez de un `echo` al FIFO por tres razones, y las tres han mordido aquí:
+la ruta ya no es fija (lleva la firma de la sesión), escribir en un FIFO se
+bloquea si nadie lee —así que va con `timeout`, o un click colgaría la barra—, y
+sobre todo porque **`echo x > ruta-que-no-es-un-FIFO` crea un fichero normal y
+sale con 0**: el atajo parecía funcionar y no hacía nada. Ahora avisa por
+notificación, que es la única forma de enterarse (waybar se traga el `stderr` de
+los `on-click`).
 
 > Esto era el fallo de **«las barras no se ocultan, se ven sobre el bloqueo y al
 > desbloquear salen dobles»**. Parecen tres cosas y era una: un demonio de una

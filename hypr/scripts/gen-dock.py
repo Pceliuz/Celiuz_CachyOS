@@ -34,6 +34,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 
+import canales  # noqa: E402
+
 import apps  # noqa: E402
 import nf_icons  # noqa: E402
 
@@ -79,7 +81,8 @@ PREFIJO_LANZAMIENTO = os.path.join(RAIZ, "hypr/scripts/lanzar.sh")
 PREFIJO_VIEJO = "uwsm app --"
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-FIFO = os.path.join(RUNTIME, "waybar-autohide.fifo")
+# Con la firma de la sesion; ver lib/canales.py.
+FIFO = canales.canal_barras()
 
 # --- GEOMETRIA ---------------------------------------------------------------
 # Todo esto tiene que cuadrar con el bloque "El dock" de style.css:

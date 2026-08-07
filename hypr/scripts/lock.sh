@@ -77,8 +77,14 @@ WORKSPACE_LIMPIO="${WORKSPACE_LIMPIO:-99}"
 REINTENTOS="${REINTENTOS:-5}"
 
 RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-FIFO="${FIFO:-$RUNTIME/wallpaper-pause.fifo}"
-FIFO_BARRAS="${FIFO_BARRAS:-$RUNTIME/waybar-autohide.fifo}"
+# Los dos canales llevan la firma de la sesion, que es lo que evita que estas
+# ordenes acaben en OTRA sesion de Hyprland viva a la vez — y mandar el `unlock`
+# a la pantalla de bloqueo de otro es lo peor que podia salir de aquel enredo.
+# El porque completo, en lib/canales.py. Siguen pisables por entorno para las
+# pruebas, que es como e2e/bloqueo.sh comprueba el caso de "no hay demonio".
+. "$(dirname "$(readlink -f "$BASH_SOURCE")")/lib/canales.sh"
+FIFO="${FIFO:-$(canal_fondo)}"
+FIFO_BARRAS="${FIFO_BARRAS:-$(canal_barras)}"
 MPV="$RUNTIME/mpvpaper.sock"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/celiuzpaper"
 FONDO="$CACHE/lock-bg.jpg"

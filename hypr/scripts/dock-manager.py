@@ -37,6 +37,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 
+import canales  # noqa: E402
+
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -72,7 +74,8 @@ ICONOS_FILA = 8
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 PID_PATH = os.path.join(RUNTIME, "dock-manager.pid")
-FIFO_BARRA = os.path.join(RUNTIME, "waybar-autohide.fifo")
+# Con la firma de la sesion; ver lib/canales.py.
+FIFO_BARRA = canales.canal_barras()
 
 # Glifos de la interfaz, por codigo y no por el caracter en si: los de la zona de
 # uso privado se corrompen al pasar por editores y herramientas de texto.

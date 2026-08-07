@@ -17,7 +17,7 @@
 #   systemctl --user      hypridle y mako son unidades del USUARIO, no de la
 #                         sesion grafica. Arrancarlas desde aqui manosea las de
 #                         verdad — y hypridle es quien bloquea tu pantalla.
-#   waybar-autohide.py    rehace $XDG_RUNTIME_DIR/waybar-autohide.fifo, y con el
+#   waybar-autohide.py    rehace $XDG_RUNTIME_DIR/waybar-autohide.<firma>.fifo, y con el
 #                         se queda sordo el demonio bueno.
 #
 # Paso el 2026-08-04: un anidado levantado para mirar cuatro cosas dejo el

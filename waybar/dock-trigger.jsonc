@@ -29,6 +29,7 @@
         "format": " ",
         "tooltip": false,
         // El prefijo "dock:" es lo que distingue este tirador del de arriba.
-        "on-click": "test -p $XDG_RUNTIME_DIR/waybar-autohide.fifo && echo dock:show > $XDG_RUNTIME_DIR/waybar-autohide.fifo"
+        // Ver el comentario gemelo en trigger.jsonc.
+        "on-click": "$HOME/.config/hypr/scripts/barras.sh dock:show"
     }
 }

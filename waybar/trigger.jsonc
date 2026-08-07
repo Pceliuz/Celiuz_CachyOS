@@ -35,6 +35,9 @@
         // un caracter: asi el grosor no depende del tamano de fuente.
         "format": " ",
         "tooltip": false,
-        "on-click": "test -p $XDG_RUNTIME_DIR/waybar-autohide.fifo && echo show > $XDG_RUNTIME_DIR/waybar-autohide.fifo"
+        // La ruta del canal lleva la firma de la sesion (ver lib/canales.py), asi
+        // que la calcula barras.sh en vez de escribirse aqui. Ademas avisa si el
+        // demonio no esta: waybar se traga el stderr de los on-click.
+        "on-click": "$HOME/.config/hypr/scripts/barras.sh show"
     }
 }

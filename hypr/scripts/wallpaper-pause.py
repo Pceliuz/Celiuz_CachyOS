@@ -37,7 +37,8 @@ stoplist leyendo /proc (sin lanzar pidof, para no crear procesos a cada rato) y
 reconcilia la pausa contra lo que mpv tiene de verdad, porque mpvpaper se
 reinicia por fuera de aqui (CeliuzPaper, set-wallpaper.sh) y vuelve sin pausa.
 
-Ordenes por el FIFO ($XDG_RUNTIME_DIR/wallpaper-pause.fifo): `hold` para que deje
+Ordenes por el FIFO ($XDG_RUNTIME_DIR/wallpaper-pause.<firma>.fifo, uno por
+sesion; ver lib/canales.py): `hold` para que deje
 de tocar la pausa y `release` para que vuelva a mandar. Las usa CeliuzPaper: al
 elegir fondo hace falta ver el video en marcha, y este demonio lo pausaria por
 tener ventanas abiertas.
@@ -57,6 +58,11 @@ import sys
 import time
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "lib"))
+import canales  # noqa: E402
+
 # Lo abre mpvpaper con --input-ipc-server (ver wallpaper.sh).
 MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
 STOPLIST = os.path.expanduser("~/.config/mpvpaper/stoplist")
@@ -78,7 +84,8 @@ MAX_REVIVIR = 3
 #               fondo: con la pausa puesta veri­as un fotograma congelado y no
 #               se puede elegir asi).
 #   release  -> vuelve a mandar, y recalcula ya mismo.
-FIFO_PATH = os.path.join(RUNTIME, "wallpaper-pause.fifo")
+# Con la firma de la sesion; ver lib/canales.py.
+FIFO_PATH = canales.canal_fondo()
 
 # Cada cuanto se revisa la stoplist, como maximo. Tambien es el timeout del
 # select, o sea el latido del bucle cuando no pasa nada en Hyprland.

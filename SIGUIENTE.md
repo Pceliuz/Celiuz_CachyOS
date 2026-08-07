@@ -87,10 +87,54 @@ mata solo al duplicado de la propia firma y al huérfano (otra firma cuyo Hyprla
 ya no contesta); una tercera sesión viva se deja en paz. La afirmación 5 de la
 prueba lo vigila, y **falla contra `7c7f3ee`**.
 
-Lo que **sigue sin resolver** de ese escenario, y viene de antes: dos sesiones
-vivas comparten el FIFO de órdenes, porque su ruta sale de `XDG_RUNTIME_DIR`. O
-sea que un `SUPER+C` puede acabar en la sesión equivocada. Está escrito en el
-README; no se ha tocado porque no es el fallo que se venía a arreglar.
+## Y los canales de órdenes, uno por sesión (2026-08-07, portátil)
+
+Salió de tirar del hilo anterior: **`$XDG_RUNTIME_DIR` es del USUARIO, no de la
+sesión**. Los dos demonios ponían ahí un FIFO de nombre fijo
+(`waybar-autohide.fifo`, `wallpaper-pause.fifo`), así que dos sesiones de Hyprland
+vivas a la vez se lo robaban en bucle —cada demonio rehace el suyo cuando ve que
+no es el suyo— y las órdenes acababan donde les tocara. El `SUPER+C` era lo
+visible; lo grave era el `lock`/`unlock` de la pantalla de bloqueo.
+
+Ahora el canal lleva la firma: `waybar-autohide.<firma>.fifo`. Lo calcula
+**`hypr/scripts/lib/canales.py`**, con gemelo **`lib/canales.sh`** porque
+`lock.sh` corre en cada bloqueo y no puede pagar un arranque de python. Que la
+convención esté escrita dos veces es deuda a la fuerza, y por eso
+`tests/unidad/canales.sh` **compara las dos implementaciones caso por caso**.
+
+Sin firma (a mano desde un TTY o por ssh) se usa el único canal si hay uno solo,
+y **no se adivina si hay varios**: mandar un `unlock` a la pantalla de bloqueo de
+otra sesión es peor que no hacer nada.
+
+Los seis que escriben pasan por ahí. Y los tres de la config (el `SUPER+C` de
+`keybinds.conf` y los `on-click` de `trigger.jsonc` y `dock-trigger.jsonc`) ya no
+llevan la ruta escrita: llaman a **`hypr/scripts/barras.sh`**, que además **avisa
+si no hay demonio**. Eso tapa el fallo silencioso de siempre: `echo x >
+ruta-que-no-es-un-FIFO` crea un fichero normal y sale con 0, así que el atajo
+parecía ir y no hacía nada — y waybar se traga el `stderr` de los `on-click`.
+
+Verificado en la sesión viva: los dos canales con firma, `SUPER+C` saca las
+barras de `bottom` a `top`, el `on-click` tal cual lo lanza waybar sale con 0, y
+`configerrors` vacío. 14 pruebas en verde.
+
+### Lo que NO se tocó, y por qué
+
+**`mpvpaper.sock` tiene el mismo problema y sigue igual.** Nombre fijo en
+`$XDG_RUNTIME_DIR` y, peor, se mata con `pkill -x mpvpaper` en cuatro sitios, que
+no mira de qué sesión es cada proceso. Dos sesiones vivas se pisan el fondo.
+Arreglarlo de verdad es rehacer cómo se lanza y se mata mpvpaper —la parte más
+delicada del repo, la del «susto del fondo»— y hacerlo a medias es peor que
+dejarlo escrito. Si algún día se coge, va con su propia sesión de trabajo.
+
+### Una falsa alarma de las pruebas, ya explicada
+
+`afirmar_intacta_la_casa_real` saltó durante esta sesión sin que ninguna prueba
+tocara nada: **la suite tarda minutos, y la pantalla se bloqueó por inactividad
+mientras corría**, así que `lock.sh` reescribió `lock-bg.jpg`, `lock-fondo.conf`,
+`lock-medidas.conf` y `lock.log` en la caché de verdad. Antes solo decía «la
+huella cambió: a1b2 -> c3d4», que no le sirve a nadie; ahora **lista los ficheros
+que cambiaron** y avisa de este caso por su nombre. La guardia no se ha
+debilitado.
 
 ## El reinicio del 2026-08-03: cerrado
 

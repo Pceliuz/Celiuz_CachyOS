@@ -26,6 +26,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 
+import canales  # noqa: E402
+
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("GtkLayerShell", "0.1")
@@ -48,7 +50,8 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 PID_PATH = os.path.join(RUNTIME, "calendar-panel.pid")
 # El FIFO del demonio de la barra: mientras el panel este abierto le pedimos
 # que no se esconda, o el panel quedaria colgando de una barra invisible.
-FIFO_BARRA = os.path.join(RUNTIME, "waybar-autohide.fifo")
+# Con la firma de la sesion; ver lib/canales.py.
+FIFO_BARRA = canales.canal_barras()
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
          "agosto", "setiembre", "octubre", "noviembre", "diciembre"]

@@ -417,7 +417,27 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   equipo. **Cópialos aparte antes de cualquier `checkout`, `merge`, `pull` o
   `stash` que cruce el commit `ef7a528`.** Pasó de verdad el 2026-08-01, en la
   laptop, después de haberlo documentado como riesgo para la otra máquina.
-- **Si desaparece `$XDG_RUNTIME_DIR/waybar-autohide.fifo`, el escritorio se
+- **`$XDG_RUNTIME_DIR` es del USUARIO, no de la sesión.** Es la trampa que estuvo
+  detrás del enredo de las barras, y se repite con cualquier cosa que pongas ahí:
+  esa carpeta sobrevive a cerrar sesión y la comparten **todas** tus sesiones
+  gráficas a la vez. Los dos FIFO de órdenes se llamaban `waybar-autohide.fifo` y
+  `wallpaper-pause.fifo` a secas, así que dos sesiones de Hyprland vivas —dos
+  TTY, un cambio rápido de usuario— se los robaban en bucle (cada demonio rehace
+  el suyo cuando ve que no es el suyo) y un `SUPER+C` acababa donde le tocara.
+  Lo grave no era el atajo: era el `lock`/`unlock` de la pantalla de bloqueo.
+  **Todo lo que sea de una sesión lleva la firma en el nombre**
+  (`waybar-autohide.<firma>.fifo`), y quién la calcula es `lib/canales.py` — con
+  su gemelo `lib/canales.sh`, porque `lock.sh` corre en cada bloqueo y no puede
+  pagar un arranque de python. Las dos copias las compara `tests/unidad/canales.sh`.
+  Sin firma (a mano desde un TTY) se usa el único canal si hay uno solo, y **no se
+  adivina si hay varios**: acertar la sesión equivocada es peor que no hacer nada.
+- **Sigue sin arreglar, y es de la misma familia: `mpvpaper.sock`.** El fondo usa
+  un socket de nombre fijo en `$XDG_RUNTIME_DIR` y, peor, se mata con
+  `pkill -x mpvpaper` en cuatro sitios, que no distingue de qué sesión es cada
+  proceso. O sea que dos sesiones vivas **sí** se pisan el fondo. No se ha tocado
+  porque arreglarlo de verdad es rehacer cómo se lanza y se mata mpvpaper, y
+  hacerlo a medias en la parte más delicada del repo es peor que dejarlo escrito.
+- **Si desaparece el FIFO de órdenes de las barras, el escritorio se
   queda medio mudo**: seis piezas mandan órdenes por ahí (las dos
   líneas-tirador, `SUPER+C`, el panel de calendario, el gestor del dock y la
   pantalla de bloqueo) y `echo x > ruta-sin-fifo` **crea un fichero normal y

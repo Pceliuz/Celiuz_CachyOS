@@ -35,6 +35,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 
 CASA = os.path.expanduser("~")
 # La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
@@ -48,10 +49,17 @@ LANZADOR = os.path.join(RAIZ, "hypr/scripts/wallpaper.sh")
 SDDM_FONDO = os.path.join(RAIZ, "hypr/scripts/sddm-fondo.sh")
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+
+# Este modulo vive DENTRO de lib/, asi que se anade su propia carpeta: se le
+# importa desde scripts que ya la tienen en el path y desde otros que no.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import canales  # noqa: E402
+
 MPV_SOCKET = os.path.join(RUNTIME, "mpvpaper.sock")
 # FIFO del demonio de ahorro: mientras se esta eligiendo fondo hay que pedirle
 # que no toque la pausa, o pausaria el video de la vista previa.
-FIFO_PAUSA = os.path.join(RUNTIME, "wallpaper-pause.fifo")
+# Con la firma de la sesion; ver canales.py (aqui al lado).
+FIFO_PAUSA = canales.canal_fondo()
 
 CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.join(CASA, ".cache")),
                      "celiuzpaper")

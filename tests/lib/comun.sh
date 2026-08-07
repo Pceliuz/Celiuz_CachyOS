@@ -93,24 +93,43 @@ resumen() {
 
 # --- El entorno de mentira ----------------------------------------------------
 
-# Huella de la cache real del usuario: nombre y fecha de cada fichero. Si al
+# Listado de la cache real del usuario: nombre y fecha de cada fichero. Si al
 # terminar una prueba esto ha cambiado, es que algo se escapo del corralito.
-_huella_cache_real() {
+_listado_cache_real() {
     local dir="${XDG_CACHE_HOME:-$HOME/.cache}/celiuzpaper"
     [ -d "$dir" ] || { echo "(no hay)"; return; }
-    ls -la --time-style=+%s "$dir" 2>/dev/null | sha256sum | cut -c1-16
+    ls -la --time-style=+%s "$dir" 2>/dev/null
+}
+
+_huella_cache_real() {
+    _listado_cache_real | sha256sum | cut -c1-16
 }
 
 # afirmar_intacta_la_casa_real — que la prueba no se salio de su corralito.
+#
+# Si falla, DICE QUE FICHEROS cambiaron, y no solo que la huella es otra. Dos
+# hashes no le sirven de nada a nadie, y hay un caso que da falsa alarma y hay
+# que poder reconocer de un vistazo: **la suite tarda minutos, asi que si tu
+# sesion se bloquea por inactividad mientras corre, lock.sh reescribe
+# `lock-bg.jpg`, `lock-fondo.conf`, `lock-medidas.conf` y `lock.log` en la cache
+# de verdad**. La prueba no ha tocado nada; ha sido tu escritorio. Paso el
+# 2026-08-07 y cuesta un rato entenderlo si solo ves cambiar un hash.
 afirmar_intacta_la_casa_real() {
     local antes="$HUELLA_REAL" despues
     despues="$(HOME="$CASA_REAL" XDG_CACHE_HOME="$CASA_REAL/.cache" _huella_cache_real)"
     if [ "$antes" = "$despues" ]; then
         ok "no toco la cache real del usuario ($CASA_REAL)"
-    else
-        fallo "no toco la cache real del usuario" \
-              "la huella cambio: $antes -> $despues"
+        return
     fi
+
+    local ahora cambios
+    ahora="$(HOME="$CASA_REAL" XDG_CACHE_HOME="$CASA_REAL/.cache" _listado_cache_real)"
+    cambios="$(diff <(printf '%s\n' "$LISTADO_REAL") <(printf '%s\n' "$ahora") \
+               | grep -E '^[<>]' | sed 's/^/        /')"
+    fallo "no toco la cache real del usuario" \
+          "cambio esto (si son ficheros lock-*, probablemente se te bloqueo la
+      pantalla mientras corrian las pruebas, y no es culpa de la prueba):
+$cambios"
 }
 
 # preparar_entorno — crea un HOME desechable y deja todo apuntando ahi.
@@ -124,6 +143,7 @@ preparar_entorno() {
     CASA_REAL="${HOME}"
     export CASA_REAL
     HUELLA_REAL="$(_huella_cache_real)"
+    LISTADO_REAL="$(_listado_cache_real)"   # para poder decir QUE cambio
     export HUELLA_REAL
 
     TMP="$(mktemp -d "${TMPDIR:-/tmp}/prueba-dotfiles-XXXXXX")"

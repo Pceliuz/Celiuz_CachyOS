@@ -41,7 +41,8 @@ la razon de ser del demonio y no un extra: durante un tiempo hizo lo contrario,
 apagarse entero en cuanto una de las cuatro caia, y eso dejaba el escritorio sin
 barras hasta cerrar sesion.
 
-Ordenes por el FIFO ($XDG_RUNTIME_DIR/waybar-autohide.fifo):
+Ordenes por el FIFO ($XDG_RUNTIME_DIR/waybar-autohide.<firma>.fifo; la firma es
+la de la sesion de Hyprland, ver lib/canales.py):
     show | hide | toggle | hold | release | reload | lock | unlock
                                                     -> barra de arriba
     dock:show | dock:hide | dock:lock | ...         -> dock
@@ -82,6 +83,10 @@ import time
 # clonado. Antes ponia "~/dotfiles/...", que obligaba a clonar justo ahi.
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 WAYBAR_DIR = os.path.join(RAIZ, "waybar")
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "lib"))
+import canales  # noqa: E402
 
 # Franja desde el borde superior que cuenta como "el puntero esta en la barra".
 # Algo mas que los 38 px de alto, para que rozar el borde no la cierre.
@@ -130,7 +135,9 @@ TICK = 0.1
 ABANDONO = float(os.environ.get("WAYBAR_AUTOHIDE_ABANDONO", "60"))
 
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-FIFO_PATH = os.path.join(RUNTIME, "waybar-autohide.fifo")
+# Lleva la firma de la sesion: dos sesiones vivas a la vez compartian este
+# fichero y se lo robaban en bucle. El porque, en lib/canales.py.
+FIFO_PATH = canales.canal_barras()
 
 CURSOR_RE = re.compile(r"^(\d+),\s*(\d+)$")
 
