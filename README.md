@@ -776,6 +776,14 @@ gobernando el mismo escritorio, y si el suyo propio se queda sin Hyprland —cer
 sesión no lo mata, porque nace con `setsid`— se aparta a los 60 s llevándose sus
 barras.
 
+> Ese barrido no es a ciegas: solo se lleva por delante a un duplicado de la
+> propia sesión o a un huérfano —uno cuyo Hyprland ya no contesta—. Si tienes
+> **dos sesiones de Hyprland vivas a la vez** con el mismo usuario (dos TTY, o un
+> cambio rápido de usuario), cada una conserva sus barras. Lo que sí comparten en
+> ese caso es el FIFO de órdenes, que va por `XDG_RUNTIME_DIR`: eso viene de
+> antes y no está resuelto, así que un `SUPER+C` puede acabar en la sesión
+> equivocada.
+
 > Esto era el fallo de **«las barras no se ocultan, se ven sobre el bloqueo y al
 > desbloquear salen dobles»**. Parecen tres cosas y era una: un demonio de una
 > sesión anterior seguía vivo, y como **`WAYLAND_DISPLAY` se reutiliza entre

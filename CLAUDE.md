@@ -472,15 +472,25 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   la cola; como el demonio pregunta a 10 Hz, a partir de ahí los `connect`
   empiezan a fallar y el doble acaba fingiendo justo el fallo que la prueba
   quería descartar.
-- **Un barrido «mata a los que se llamen como yo» necesita un discriminante, y el
-  bueno es `XDG_RUNTIME_DIR`.** Lo que hace rival a otra instancia no es el
-  nombre, es disputarse el mismo escritorio: mismo runtime, mismo FIFO y mismas
-  capas. Sin ese filtro, `matar_otros()` corriendo en cada arranque sería el
-  `pkill` por nombre que ya mordió con `wallpaper.sh` — y **un `$HOME` desechable
-  no aísla de eso**, así que `tests/unidad/barras-huerfanas.sh` habría matado el
-  demonio de la sesión real de quien ejecutara las pruebas. Ojo con la asimetría:
-  al de **otra sesión de Hyprland con el mismo runtime SÍ** hay que matarlo, que
-  es justo el huérfano; el discriminante es el runtime, nunca la instancia.
+- **Un barrido «mata a los que se llamen como yo» necesita un discriminante, y
+  hacen falta DOS.** Lo que hace rival a otra instancia no es el nombre, es
+  disputarse el mismo escritorio, y eso se decide en dos pasos:
+  1. **`XDG_RUNTIME_DIR`**: mismo runtime es el mismo FIFO y las mismas capas.
+     Sin este filtro, `matar_otros()` corriendo en cada arranque sería el `pkill`
+     por nombre que ya mordió con `wallpaper.sh` — y **un `$HOME` desechable no
+     aísla de eso**, así que `tests/unidad/barras-huerfanas.sh` habría matado el
+     demonio de la sesión real de quien ejecutara las pruebas.
+  2. **Y que el otro esté MUERTO**, o sea un duplicado de tu propia instancia.
+     El runtime a secas no basta y esto se coló en `7c7f3ee`: **dos sesiones
+     Hyprland vivas del mismo usuario comparten runtime** (dos TTY, o un cambio
+     rápido de usuario), así que el segundo en entrar dejaba al primero sin
+     barras teniendo su compositor delante. Eso es peor que el fallo que se
+     estaba arreglando, y `ABANDONO` no lo salva: a ese demonio no le pasa nada,
+     lo matan. Se mata solo al duplicado de la propia firma y al huérfano —otra
+     firma cuyo Hyprland ya no contesta—; una tercera sesión viva se deja en paz.
+  La regla general: **antes de barrer «a los que se llamen como yo», pregúntate a
+  quién estás llamando rival**. Un proceso vivo con su propio dueño detrás no lo
+  es, por mucho que comparta nombre y carpeta.
 
 ## Las pruebas
 

@@ -170,6 +170,24 @@ def query(cmd):
         return ""
 
 
+def socket_alcanzable(ruta):
+    """Si hay alguien escuchando en ese socket. Sin mandar nada ni leer nada."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect(ruta)
+        return True
+    except OSError:
+        return False
+
+
+def instancia_viva(sig):
+    """Si esa instancia de Hyprland —la de OTRO, normalmente— sigue en pie."""
+    if not sig:
+        return False
+    return socket_alcanzable(os.path.join(RUNTIME, "hypr", sig, ".socket.sock"))
+
+
 def hypr_alcanzable():
     """Si el socket de NUESTRA instancia sigue aceptando conexiones.
 
@@ -184,13 +202,7 @@ def hypr_alcanzable():
     borra al irse — el huerfano del 2026-08-07 tenia la suya intacta dos dias
     despues.
     """
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(1.0)
-            s.connect(SOCKET)
-        return True
-    except OSError:
-        return False
+    return socket_alcanzable(SOCKET)
 
 
 def screen_size():
@@ -605,11 +617,26 @@ def matar_otros():
     matar por nombre no mira de que sesion es cada proceso.
 
     Ojo con la asimetria: SI hay que matar al de otra sesion de Hyprland que
-    comparta runtime, que es justo el huerfano que motiva todo esto. El
-    discriminante es el runtime, nunca la instancia del compositor.
+    comparta runtime, que es justo el huerfano que motiva todo esto — pero solo
+    si esa sesion ya NO ESTA. Con el runtime a secas no bastaba: dos sesiones
+    Hyprland VIVAS del mismo usuario (dos TTY, cambio rapido de usuario) lo
+    comparten, y el segundo en entrar dejaba al primero sin barras teniendo su
+    compositor delante. Eso es peor que el fallo que se estaba arreglando, y no
+    lo arregla ABANDONO, porque a ese demonio no le pasa nada: lo matan.
+
+    Asi que se mata a un competidor solo si es una de estas dos cosas:
+
+      - un DUPLICADO de mi propia instancia (misma firma) — el caso de
+        `--reiniciar`, y el de un `exec-once` que corriera dos veces;
+      - un HUERFANO: otra firma, y su Hyprland ya no contesta.
+
+    Una tercera sesion viva se deja en paz. Seguira disputandose el FIFO con
+    nosotros —lo comparten por el runtime, y eso es de antes y no se arregla
+    aqui—, pero conservara sus barras.
     """
     yo = os.getpid()
     mi_runtime = RUNTIME
+    mi_sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
     otros = []
     for pid in os.listdir("/proc"):
         if not pid.isdigit() or int(pid) == yo:
@@ -632,8 +659,12 @@ def matar_otros():
         except OSError:
             continue   # ya no esta, o no es nuestro: no se toca a ciegas
         suyo = entorno.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-        if suyo == mi_runtime:
-            otros.append(int(pid))
+        if suyo != mi_runtime:
+            continue           # otro escritorio: no es asunto nuestro
+        su_sig = entorno.get("HYPRLAND_INSTANCE_SIGNATURE")
+        if su_sig and su_sig != mi_sig and instancia_viva(su_sig):
+            continue           # otra sesion, pero VIVA: sus barras son suyas
+        otros.append(int(pid))
 
     for pid in otros:
         try:

@@ -71,8 +71,18 @@ while True:
 levantar_falso_hypr() {
     mkdir -p "$1/hypr/$2"
     python3 -c "$FALSO_HYPR_PY" "$1/hypr/$2/.socket.sock" &
+    LANZADOS="$LANZADOS $!"
     sleep 0.5
 }
+
+# Todo lo que se lanza al fondo se apunta aqui y se barre al salir. `fallo()` no
+# corta la prueba, asi que en el camino normal bastaria con matarlos al final;
+# esto es para el Ctrl+C y para el caso de que una afirmacion nueva se cuele
+# antes de la limpieza. `preparar_entorno` ya dejo su propio trap: se encadena,
+# no se pisa, o el HOME de mentira se quedaria sin borrar.
+LANZADOS=""
+trap 'for p in $LANZADOS; do kill "$p" 2>/dev/null; done; limpiar_entorno' \
+    EXIT INT TERM
 
 titulo "1. Su Hyprland ya no esta: se aparta"
 # El directorio de la instancia existe pero no hay nadie escuchando, que es
@@ -100,11 +110,11 @@ afirmar_contiene "$TMP/huerfano.log" "dejo el sitio" \
 titulo "2. Su Hyprland sigue vivo: se queda"
 SIG2="instancia-viva"
 levantar_falso_hypr "$XDG_RUNTIME_DIR" "$SIG2"
-FALSO_HYPR=$!
 
 WAYBAR_AUTOHIDE_ABANDONO=2 HYPRLAND_INSTANCE_SIGNATURE="$SIG2" \
     "$DEMONIO" >"$TMP/vivo.log" 2>&1 &
 VIVO=$!
+LANZADOS="$LANZADOS $VIVO"
 sleep 8   # cuatro veces el ABANDONO de la prueba
 
 if kill -0 "$VIVO" 2>/dev/null; then
@@ -122,6 +132,7 @@ SEGUNDO_LOG="$TMP/segundo.log"
 WAYBAR_AUTOHIDE_ABANDONO=2 HYPRLAND_INSTANCE_SIGNATURE="$SIG2" \
     "$DEMONIO" >"$SEGUNDO_LOG" 2>&1 &
 SEGUNDO=$!
+LANZADOS="$LANZADOS $SEGUNDO"
 sleep 6
 
 if kill -0 "$VIVO" 2>/dev/null; then
@@ -144,17 +155,18 @@ titulo "4. Pero NO barre a uno de otro escritorio"
 # sesion real de quien la ejecuta.
 OTRO_RUNTIME="$TMP/otro-runtime"
 levantar_falso_hypr "$OTRO_RUNTIME" "$SIG2"
-OTRO_HYPR=$!
 
 XDG_RUNTIME_DIR="$OTRO_RUNTIME" WAYBAR_AUTOHIDE_ABANDONO=2 \
     HYPRLAND_INSTANCE_SIGNATURE="$SIG2" "$DEMONIO" >"$TMP/ajeno.log" 2>&1 &
 AJENO=$!
+LANZADOS="$LANZADOS $AJENO"
 sleep 2
 
 # Y ahora arranca otro en el runtime de la prueba: no debe tocar al de arriba.
 WAYBAR_AUTOHIDE_ABANDONO=2 HYPRLAND_INSTANCE_SIGNATURE="$SIG2" \
     "$DEMONIO" >"$TMP/tercero.log" 2>&1 &
 TERCERO=$!
+LANZADOS="$LANZADOS $TERCERO"
 sleep 5
 
 if kill -0 "$AJENO" 2>/dev/null; then
@@ -164,12 +176,43 @@ else
           "se llevo por delante un demonio de otro escritorio"
 fi
 
-for p in "$VIVO" "$SEGUNDO" "$TERCERO" "$AJENO" "$FALSO_HYPR" "$OTRO_HYPR"; do
-    kill "$p" 2>/dev/null
-done
-wait "$VIVO" "$SEGUNDO" "$TERCERO" "$AJENO" "$FALSO_HYPR" "$OTRO_HYPR" 2>/dev/null
+titulo "5. Ni a otra sesion del mismo escritorio que siga VIVA"
+# El runtime a secas no bastaba como discriminante, y este es el caso que lo
+# demuestra: dos sesiones Hyprland vivas del MISMO usuario comparten
+# XDG_RUNTIME_DIR (dos TTY, o un cambio rapido de usuario). Con el filtro solo
+# por runtime, el segundo en entrar dejaba al primero sin barras teniendo su
+# compositor delante — peor que el fallo que se estaba arreglando, y ABANDONO no
+# lo salva, porque a ese demonio no le pasa nada: lo matan.
+#
+# Se mata solo al duplicado de la propia instancia (caso 3) y al huerfano. Una
+# tercera sesion viva se deja en paz.
+SIG3="otra-sesion-viva"
+levantar_falso_hypr "$XDG_RUNTIME_DIR" "$SIG3"
 
-titulo "5. No toco nada de tu equipo"
+WAYBAR_AUTOHIDE_ABANDONO=2 HYPRLAND_INSTANCE_SIGNATURE="$SIG3" \
+    "$DEMONIO" >"$TMP/vecino.log" 2>&1 &
+VECINO=$!
+LANZADOS="$LANZADOS $VECINO"
+sleep 2
+
+# Y ahora entra uno de la instancia SIG2, que sigue viva y es otra distinta.
+WAYBAR_AUTOHIDE_ABANDONO=2 HYPRLAND_INSTANCE_SIGNATURE="$SIG2" \
+    "$DEMONIO" >"$TMP/cuarto.log" 2>&1 &
+CUARTO=$!
+LANZADOS="$LANZADOS $CUARTO"
+sleep 5
+
+if kill -0 "$VECINO" 2>/dev/null; then
+    ok "una sesion viva conserva sus barras cuando entra otra"
+else
+    fallo "no se mata a una sesion viva del mismo runtime" \
+          "se quedo sin demonio teniendo su Hyprland delante: $(cat "$TMP/vecino.log")"
+fi
+
+for p in $LANZADOS; do kill "$p" 2>/dev/null; done
+wait $LANZADOS 2>/dev/null
+
+titulo "6. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
 resumen

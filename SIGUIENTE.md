@@ -72,10 +72,25 @@ Hyprland atareado devuelve el mismo vacío que uno muerto; lo que decide es el
 `XDG_RUNTIME_DIR`** — sin eso, correr las pruebas mataría el demonio de la sesión
 real, que es el `pkill` por nombre de siempre.
 
-Lo cubre `tests/unidad/barras-huerfanas.sh` (8 comprobaciones), **comprobada
-contra el código viejo: fallan 4 de 8**. Y verificado en la sesión viva: un solo
+Lo cubre `tests/unidad/barras-huerfanas.sh` (9 comprobaciones), **comprobada
+contra el código viejo: fallan 4 de 9**. Y verificado en la sesión viva: un solo
 demonio, las barras en `bottom` con ventanas abiertas, y el ciclo del bloqueo por
 el FIFO deja **0** barras con el bloqueo puesto y **4** —no 8— al desbloquear.
+
+**Y el primer intento (`7c7f3ee`) tenía una regresión, encontrada al preguntarse
+«¿esto vale para quien clone el repo?».** El barrido filtraba solo por
+`XDG_RUNTIME_DIR`, y **dos sesiones Hyprland vivas del mismo usuario lo
+comparten** (dos TTY, cambio rápido de usuario): el segundo en entrar dejaba al
+primero sin barras con su compositor delante. Peor que el fallo original, y
+`ABANDONO` no lo salva porque a ese demonio no le pasa nada — lo matan. Ahora se
+mata solo al duplicado de la propia firma y al huérfano (otra firma cuyo Hyprland
+ya no contesta); una tercera sesión viva se deja en paz. La afirmación 5 de la
+prueba lo vigila, y **falla contra `7c7f3ee`**.
+
+Lo que **sigue sin resolver** de ese escenario, y viene de antes: dos sesiones
+vivas comparten el FIFO de órdenes, porque su ruta sale de `XDG_RUNTIME_DIR`. O
+sea que un `SUPER+C` puede acabar en la sesión equivocada. Está escrito en el
+README; no se ha tocado porque no es el fallo que se venía a arreglar.
 
 ## El reinicio del 2026-08-03: cerrado
 
