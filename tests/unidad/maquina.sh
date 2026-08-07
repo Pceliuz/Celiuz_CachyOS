@@ -136,7 +136,77 @@ esac
 afirmar "el --json lleva tambien el teclado" \
         sh -c "'$MAQUINA' --json | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d[\"teclado\"][\"perfil\"] else 1)'"
 
-titulo "4. El cableado de hyprland.conf"
+titulo "4. La distribucion del teclado de cada caja"
+# Es lo que decide si las teclas dan lo que tienen serigrafiado encima. La
+# asimetria de aqui NO es un descuido y hay que probarla por los dos lados: un
+# portatil se fia de /etc/vconsole.conf y un sobremesa no, porque en una torre
+# ese fichero dice con que teclado se INSTALO y no cual hay enchufado ahora (el
+# del autor pone «latam» y su teclado es un ANSI us).
+python3 - "$REPO/hypr/scripts/lib" "$TMP" > "$TMP/layout.txt" <<'PY'
+import os, sys
+sys.path.insert(0, sys.argv[1])
+tmp = sys.argv[2]
+import maquina
+
+def montar(nombre, chasis, vconsole):
+    raiz = os.path.join(tmp, "kbl-" + nombre)
+    dmi = os.path.join(raiz, "dmi")
+    os.makedirs(dmi, exist_ok=True)
+    open(os.path.join(dmi, "chassis_type"), "w").write(f"{chasis}\n")
+    maquina.DMI = dmi
+    maquina.POWER = os.path.join(raiz, "sin-power")
+    maquina.LID_PROC = os.path.join(raiz, "sin-lid")
+    maquina.INPUT_SYS = os.path.join(raiz, "sin-input")
+    ruta_vc = os.path.join(raiz, "vconsole.conf")
+    if vconsole is None:
+        maquina.VCONSOLE = os.path.join(raiz, "no-existe")
+    else:
+        open(ruta_vc, "w").write(vconsole)
+        maquina.VCONSOLE = ruta_vc
+    return maquina.perfil_teclado()
+
+# Un portatil instalado en latam: manda su teclado, y us queda de segunda.
+p = montar("latam", 10, 'KEYMAP=la-latin1\nXKBLAYOUT=latam\nXKBMODEL=pc105\n')
+print("latam_layout", p["kb_layout"])
+print("latam_variant", p["kb_variant"])
+
+# Uno instalado con comillas y una variante, que tambien se ve en la vida real.
+p = montar("comillas", 10, 'XKBLAYOUT="de"\nXKBVARIANT="nodeadkeys"\n')
+print("de_layout", p["kb_layout"])
+print("de_variant", p["kb_variant"])
+
+# Un portatil que YA se instalo en us: se queda como estaba, sin duplicar us.
+p = montar("us", 10, 'XKBLAYOUT=us\n')
+print("us_layout", p["kb_layout"])
+
+# Un portatil sin /etc/vconsole.conf: cae a la del autor y no revienta.
+p = montar("sin-vconsole", 10, None)
+print("sinvc_layout", p["kb_layout"])
+
+# Y EL CASO QUE IMPORTA: un sobremesa con vconsole en latam —el de la PC del
+# autor— NO se lo cree, porque ahi el teclado es un ANSI us enchufado despues.
+s = montar("sobremesa", 7, 'KEYMAP=la-latin1\nXKBLAYOUT=latam\n')
+print("sobremesa_layout", s["kb_layout"])
+print("sobremesa_variant", s["kb_variant"])
+PY
+leer_l() { grep "^$1 " "$TMP/layout.txt" | cut -d' ' -f2; }
+afirmar_igual "latam,us"    "$(leer_l latam_layout)"   "un portatil instalado en latam arranca EN LATAM, con us de segunda"
+afirmar_igual ",altgr-intl" "$(leer_l latam_variant)"  "y la variante va en el mismo orden (latam sin variante, us internacional)"
+afirmar_igual "de,us"       "$(leer_l de_layout)"      "lee el valor aunque venga entre comillas"
+afirmar_igual "nodeadkeys,altgr-intl" "$(leer_l de_variant)" "y se trae tambien su variante"
+afirmar_igual "us,latam"    "$(leer_l us_layout)"      "uno ya instalado en us se queda igual, sin duplicarse"
+afirmar_igual "us,latam"    "$(leer_l sinvc_layout)"   "sin /etc/vconsole.conf cae a la de siempre"
+afirmar_igual "us,latam"    "$(leer_l sobremesa_layout)" "un SOBREMESA no se cree su vconsole: seria el teclado con el que se instalo, no el de ahora"
+afirmar_igual "altgr-intl," "$(leer_l sobremesa_variant)" "y conserva la variante del teclado ANSI del autor"
+
+# La CLI, que es por donde lo lee instalar.sh.
+salida_layout="$("$MAQUINA" layout 2>&1)"
+case "$salida_layout" in
+    *,*) ok "«maquina.py layout» da dos distribuciones («$salida_layout»)" ;;
+    *)   fallo "maquina.py layout da dos distribuciones separadas por coma" "obtuve «$salida_layout»" ;;
+esac
+
+titulo "5. El cableado de hyprland.conf"
 HYPR="$REPO/hypr/hyprland.conf"
 # El patron va con `\$` porque afirmar_contiene usa grep -E, y en ERE un `$`
 # suelto es el ancla de fin de linea: `source = $conf_maquina` no casaria nunca.
@@ -164,7 +234,7 @@ afirmar_igual "1" "$(leer_o tras_input)"      "se carga DESPUES de input.conf"
 afirmar_igual "1" "$(leer_o tras_binds)"      "se carga DESPUES de keybinds.conf"
 afirmar_igual "1" "$(leer_o el_ultimo)"       "es el ultimo source de todos"
 
-titulo "5. Los dos destinos existen y dicen lo que deben"
+titulo "6. Los dos destinos existen y dicen lo que deben"
 NADA="$REPO/hypr/conf/nada.conf"
 LAPTOP="$REPO/hypr/conf/teclado-laptop.conf"
 afirmar "nada.conf existe (un sobremesa lo carga)" test -f "$NADA"
@@ -214,16 +284,35 @@ afirmar_igual "1" "$(leer_d vacia_options)" "el bloque input GLOBAL vacia kb_opt
 afirmar_igual "1" "$(leer_d sin_device)"    "y no lo hace por nombre de dispositivo, que dejaba fuera a los demas"
 afirmar_igual "1" "$(leer_d sin_lv3)"       "no queda ningun lv3:switch activo en el perfil de portatil"
 
-titulo "6. El instalador escribe las dos cosas en local.conf"
+titulo "7. El instalador escribe lo de esta maquina en local.conf"
 # Un solo escritor: si la terminal y el tipo de equipo los escribieran dos
 # funciones, la segunda borraria lo de la primera. El sintoma seria "se me
 # olvida la terminal cada vez que instalo".
 afirmar_contiene "$REPO/instalar.sh" 'conf_maquina = \$conf_maquina' "escribe \$conf_maquina en local.conf"
 afirmar_contiene "$REPO/instalar.sh" 'terminal = \$term'             "y sigue escribiendo \$terminal"
+afirmar_contiene "$REPO/instalar.sh" 'kb_layout = \$kb_layout'       "y la distribucion del teclado de esta caja"
 escritores=$(grep -c 'cat > "$REPO/hypr/conf/local.conf"' "$REPO/instalar.sh")
 afirmar_igual "1" "$escritores" "solo hay UN sitio que escribe local.conf"
 
-titulo "7. No toco nada de tu equipo"
+# El valor de fabrica tiene que estar en hyprland.conf ANTES del source de
+# local.conf: quien clone el repo y arranque sin instalar se comeria un error de
+# hyprlang por una variable sin definir, y ahi no hay teclado con el que
+# arreglarlo. Es el mismo trato que $conf_maquina.
+afirmar_contiene "$REPO/hypr/hyprland.conf" '^\$kb_layout = ' \
+        "hyprland.conf trae un valor de fabrica para \$kb_layout"
+afirmar_contiene "$REPO/hypr/hyprland.conf" '^\$kb_variant = ' \
+        "y otro para \$kb_variant"
+orden=$(grep -nE '^\$kb_layout|^source = \$HOME/\.config/hypr/conf/local\.conf' \
+        "$REPO/hypr/hyprland.conf" | head -2 | cut -d: -f1)
+# Con `set --` y no con ${x%% *}: `tr` deja un espacio al final y el recorte por
+# el ultimo espacio devolvia una cadena vacia, o sea una comparacion siempre rota.
+set -- $orden
+afirmar "el valor de fabrica va ANTES de leer local.conf" test "${1:-0}" -lt "${2:-0}"
+# Y que input.conf ya no los lleve escritos: si los escribiera, ganaria el suyo.
+afirmar_no_contiene "$REPO/hypr/conf/input.conf" '^[^#]*kb_layout = [a-z]' \
+        "input.conf usa la variable y no una distribucion escrita a mano"
+
+titulo "8. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
 resumen

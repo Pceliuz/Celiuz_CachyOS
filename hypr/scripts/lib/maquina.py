@@ -55,6 +55,8 @@ USO DESDE LA TERMINAL
     maquina.py                  resumen de lo que hay
     maquina.py tipo             imprime `laptop` o `escritorio`
     maquina.py teclado          imprime `completo` o `sin-altgr`
+    maquina.py layout           imprime lo que debe valer `kb_layout` aqui
+    maquina.py variante         imprime lo que debe valer `kb_variant` aqui
     maquina.py --json           todo, para otro script
     maquina.py --es-laptop      sin imprimir nada; sale 0 si es portatil
 
@@ -106,6 +108,10 @@ DMI = "/sys/class/dmi/id"
 POWER = "/sys/class/power_supply"
 LID_PROC = "/proc/acpi/button/lid"
 INPUT_SYS = "/sys/class/input"
+# La distribucion que se eligio al instalar el sistema. La escribe el instalador
+# de la distro y la mantiene `localectl`; se lee el fichero y no `localectl`
+# porque es un dato quieto y no merece lanzar un proceso.
+VCONSOLE = "/etc/vconsole.conf"
 
 
 def _leer(ruta):
@@ -201,6 +207,32 @@ def es_laptop():
 PERFIL_COMPLETO = "completo"
 PERFIL_SIN_ALTGR = "sin-altgr"
 
+# La distribucion del autor, que es la del sobremesa y la de siempre: us con la
+# variante internacional delante y latam detras para escribir en espanol con la
+# memoria muscular de siempre. Ver conf/input.conf.
+LAYOUT_AUTOR = "us,latam"
+VARIANTE_AUTOR = "altgr-intl,"
+
+
+def distribucion_del_sistema():
+    """(layout, variante) que se eligio al instalar el sistema, o (None, None).
+
+    Sale de /etc/vconsole.conf (XKBLAYOUT y XKBVARIANT), que es lo que contesto
+    el usuario cuando el instalador de la distro le pregunto por su teclado.
+    """
+    datos = {}
+    try:
+        with open(VCONSOLE, encoding="utf-8") as f:
+            for linea in f:
+                linea = linea.strip()
+                if linea.startswith("#") or "=" not in linea:
+                    continue
+                clave, valor = linea.split("=", 1)
+                datos[clave.strip()] = valor.strip().strip('"').strip("'")
+    except OSError:
+        return None, None
+    return datos.get("XKBLAYOUT") or None, datos.get("XKBVARIANT") or ""
+
 
 def perfil_teclado():
     """Que perfil de teclado le toca a esta caja, y por que.
@@ -219,19 +251,56 @@ def perfil_teclado():
     caso por defecto y ahi el repo conserva la config del autor. Si te pasa,
     la solucion es una linea: `kb_options =` en conf/input.conf.
 
+    Y LO MISMO CON LA DISTRIBUCION, que es lo que decide si las teclas dan lo
+    que tienen escrito encima. El repo trae `us,latam` porque el teclado del
+    autor esta serigrafiado en us; en un portatil eso es casi siempre falso, y
+    entonces la `ñ`, los acentos y los simbolos salen donde no toca.
+
+    En un portatil SI se puede saber cual es, y la fuente es /etc/vconsole.conf:
+    lo que el usuario contesto cuando el instalador de la distro le pregunto por
+    su teclado. En un portatil eso es de fiar porque **estaba tecleando en el
+    teclado interno mientras respondia**.
+
+    OJO, Y ES LA TRAMPA DE TODO ESTO: en un SOBREMESA esa misma fuente miente.
+    La del autor dice `XKBLAYOUT=latam` y su teclado es un ANSI us — eligio
+    latam al instalar y luego cambio de teclado, que es lo normal en una torre.
+    Por eso el sobremesa NO mira vconsole y se queda con la del autor: deducirlo
+    de ahi arreglaria el portatil y romperia la PC.
+
     Devuelve un diccionario con:
       perfil      «completo» o «sin-altgr»
       motivo      por que se ha decidido eso (para diagnosticar sin adivinar)
       kb_options  lo que deberia valer `kb_options` en esta caja
+      kb_layout   lo que deberia valer `kb_layout`, con la de esta caja delante
+      kb_variant  la variante de cada una, en el mismo orden
       conf        el fichero que lo aplica, o None si no hace falta ninguno
     """
     d = detalle()
     if d["tipo"] == "laptop":
+        sistema, variante = distribucion_del_sistema()
+        # La segunda distribucion es la del autor, para poder alternar con
+        # SUPER+DEL: hay atajos y juegos que dan por hecho un teclado us. Si el
+        # sistema ya dice us, esto queda igual que estaba y no se toca nada.
+        if sistema and sistema != "us":
+            layout = f"{sistema},us"
+            varian = f"{variante},altgr-intl"
+            porque = (f"el sistema se instalo con el teclado «{sistema}», y en "
+                      f"un portatil eso es de fiar porque se respondio tecleando "
+                      f"en el teclado interno")
+        else:
+            layout, varian = LAYOUT_AUTOR, VARIANTE_AUTOR
+            porque = ("no hay ninguna distribucion apuntada en /etc/vconsole.conf, "
+                      "o ya es «us»: se deja la de siempre"
+                      if not sistema else
+                      "el sistema ya se instalo con «us»: se deja la de siempre")
         return {
             "perfil": PERFIL_COMPLETO,
             "motivo": ("es un portatil (" + d["motivo"] + "), y el teclado "
                        "interno de un portatil tiene AltGr y tecla «<>»"),
             "kb_options": "",
+            "kb_layout": layout,
+            "kb_variant": varian,
+            "motivo_layout": porque,
             "conf": "conf/teclado-laptop.conf",
         }
     return {
@@ -239,6 +308,10 @@ def perfil_teclado():
         "motivo": ("es un sobremesa (" + d["motivo"] + "), asi que se deja la "
                    "config del autor: teclado ANSI de 75% sin AltGr"),
         "kb_options": "lv3:switch",
+        "kb_layout": LAYOUT_AUTOR,
+        "kb_variant": VARIANTE_AUTOR,
+        "motivo_layout": ("es un sobremesa: /etc/vconsole.conf no dice cual es "
+                          "el teclado que hay enchufado AHORA, asi que no se usa"),
         "conf": None,
     }
 
@@ -261,6 +334,10 @@ def _resumen():
     print(f"      kb_options = {t['kb_options'] or '(vacio: el Ctrl derecho sigue siendo Ctrl)'}")
     print(f"      {t['motivo']}")
     print()
+    print(f"      kb_layout  = {t['kb_layout']}   (la primera es la que arranca activa)")
+    print(f"      kb_variant = {t['kb_variant']}")
+    print(f"      {t['motivo_layout']}")
+    print()
 
 
 def main():
@@ -280,6 +357,10 @@ def main():
         return print(detalle()["motivo"])
     if orden == "teclado":
         return print(perfil_teclado()["perfil"])
+    if orden == "layout":
+        return print(perfil_teclado()["kb_layout"])
+    if orden == "variante":
+        return print(perfil_teclado()["kb_variant"])
     if orden:
         sys.exit(f"maquina: no entiendo «{orden}». Prueba --help")
     _resumen()

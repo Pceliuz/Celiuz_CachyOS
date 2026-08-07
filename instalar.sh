@@ -260,12 +260,22 @@ maquina_local() {
     # solo con anadir un campo.
     motivo="$("$REPO/hypr/scripts/lib/maquina.py" motivo 2>/dev/null)"
 
+    # La distribucion del teclado, por el mismo camino: se le PREGUNTA, no se
+    # deduce aqui. En un portatil sale de /etc/vconsole.conf y en un sobremesa se
+    # queda la del autor; el porque de esa asimetria esta en maquina.py.
+    local kb_layout kb_variant motivo_layout
+    kb_layout="$("$REPO/hypr/scripts/lib/maquina.py" layout 2>/dev/null || echo 'us,latam')"
+    kb_variant="$("$REPO/hypr/scripts/lib/maquina.py" variante 2>/dev/null || echo 'altgr-intl,')"
+    motivo_layout="$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import maquina; print(maquina.perfil_teclado()["motivo_layout"])' "$REPO/hypr/scripts/lib" 2>/dev/null)"
+
     if [ "$tipo" = "laptop" ]; then
         conf_maquina='$HOME/.config/hypr/conf/teclado-laptop.conf'
         echo "  equipo: portatil  ($motivo)"
         gris "    se carga conf/teclado-laptop.conf: touchpad, tapa, brillo y el"
         gris "    perfil de teclado «completo» (kb_options vacio, o sea que el"
         gris "    Ctrl derecho sigue siendo Ctrl en TODOS los teclados)"
+        echo "  teclado: $kb_layout  (la primera arranca activa; SUPER+DEL alterna)"
+        gris "    $motivo_layout"
     else
         conf_maquina='$HOME/.config/hypr/conf/nada.conf'
         echo "  equipo: sobremesa  ($motivo)"
@@ -301,6 +311,16 @@ maquina_local() {
 # Si se detecto mal, cambia esta linea a mano y recarga con SUPER+SHIFT+R; el
 # siguiente ./instalar.sh la volvera a calcular.
 \$conf_maquina = $conf_maquina
+
+# La distribucion del teclado de ESTA maquina. La primera es la que arranca
+# activa; SUPER+DEL alterna entre las dos.
+#
+# $motivo_layout
+#
+# Si no es la tuya, cambiala aqui y recarga con SUPER+SHIFT+R. Los nombres
+# validos salen de: localectl list-x11-keymap-layouts
+\$kb_layout = $kb_layout
+\$kb_variant = $kb_variant
 EOF
         hecho "  escrito hypr/conf/local.conf"
     fi
