@@ -31,10 +31,10 @@
 {
     "temperature": {
         "critical-threshold": 85,
-        // Los <span size='130%'> agrandan solo el glifo, no las cifras. Waybar
+        // Los <span size='150%'> agrandan solo el glifo, no las cifras. Waybar
         // interpreta markup de Pango en los "format" de los modulos.
-        "format": "<span size='130%'>{icon}</span> {temperatureC}°C",
-        "format-critical": "<span size='130%'>{icon}</span> {temperatureC}°C",
+        "format": "<span size='150%'>{icon}</span> {temperatureC}°C",
+        "format-critical": "<span size='150%'>{icon}</span> {temperatureC}°C",
         "format-icons": ["󱃂", "󰔏", "󰸁"],
         "interval": 2,
         "tooltip-format": "CPU: {temperatureC}°C",

@@ -25,8 +25,14 @@
 * {
     font-family: "MesloLGS Nerd Font";
     /* Tamano del TEXTO. Los iconos van aparte: cada modulo envuelve su glifo en
-     * <span size='130%'> dentro de su "format" en config.jsonc, asi se agrandan
-     * sin arrastrar consigo los numeros y el reloj. */
+     * <span size='150%'> dentro de su "format" en config.jsonc, asi se agrandan
+     * sin arrastrar consigo los numeros y el reloj.
+     *
+     * Ese 150% no vive solo: al moverlo hay que mover con el la altura de la
+     * barra (config.jsonc, o GTK recorta las pastillas de hover), el font-size
+     * de los workspaces de mas abajo (son numeros pelados, sin "format" donde
+     * meter el span) y el "icon-size" del tray (son imagenes, y el span no les
+     * llega). Son cuatro sitios y ninguno se entera de que los otros existen. */
     font-size: 14px;
     /* GTK dibuja un borde minimo por defecto en cada widget; lo quitamos. */
     border: none;
@@ -69,7 +75,9 @@ window#waybar.hidden {
 
 /* --- Comportamiento comun de los modulos-boton --- */
 
-#workspaces button,
+/* Los workspaces NO estan en esta lista, aunque tambien sean botones: desde que
+ * son puntos y no numeros, el padding y el borde de aqui les sobran y la
+ * pastilla de hover les taparia el punto entero. Tienen su propio bloque. */
 #submap,
 #temperature,
 #cpu,
@@ -94,7 +102,6 @@ window#waybar.hidden {
                 color 200ms ease-in-out;
 }
 
-#workspaces button:hover,
 #submap:hover,
 #temperature:hover,
 #cpu:hover,
@@ -120,30 +127,95 @@ window#waybar.hidden {
     background-color: transparent;
 }
 
-/* Workspace vacio: apagado, pero visible. */
+/* Los workspaces son PUNTOS, no numeros. El de encima se estira a pastilla.
+ *
+ * El numero ya no se dibuja: `"format": ""` en config.jsonc deja la etiqueta
+ * vacia, asi que la forma es un FONDO y no un glifo. Nada de este bloque depende
+ * del alto de la barra ni de la fuente, y eso es a proposito: es un repo que se
+ * clona en otras maquinas, donde ni una cosa ni la otra tienen por que medir lo
+ * mismo que aqui.
+ *
+ * EL ALTO SOLO SE PUEDE ACOTAR CON EL MARGEN VERTICAL, y conviene saber por que
+ * antes de intentar simplificarlo. En una caja horizontal de GTK los hijos se
+ * estiran a lo alto y no hay CSS que lo impida: `min-height` es un SUELO y no
+ * existe el techo. Probado moviendo la forma a la etiqueta, que parecia la
+ * salida elegante — la etiqueta se estira exactamente igual. El margen si sirve
+ * porque queda FUERA de la caja que se rellena.
+ *
+ * El precio es que el margen depende del alto de la barra: 17 + 10 + 17 = los
+ * 44px de config.jsonc. Si se mueve uno sin el otro los puntos se deforman —a
+ * 60px de barra salen CAPSULAS VERTICALES y el activo un circulo, el diseno del
+ * reves y sin un solo error por ningun lado—, asi que la cuenta la vigila
+ * tests/unidad/barra-workspaces.sh en vez de quedarse en este comentario. */
 #workspaces button {
-    color: @tenue;
-    /* Los workspaces son numeros pelados, no pasan por ningun "format" donde
-     * meter el <span>. Se agrandan aqui, a la par de los iconos. */
-    font-size: 18px;
-    padding: 0 9px;
+    /* El font-size va a 0 porque una etiqueta vacia no ocupa ancho pero si el
+     * alto de linea de su fuente. Ojo: al boton no le basta, hace falta ademas
+     * la regla `#workspaces button label` del final del bloque, porque el
+     * selector `*` del principio del fichero le pone 14px a TODOS los widgets
+     * directamente y eso gana sobre lo que la etiqueta herede de su padre. Sin
+     * ella el punto no baja de 18px y la barra crece a 52 para meterlo. */
+    font-size: 0;
+    min-width: 10px;
+    min-height: 10px;
+    padding: 0;
+    margin: 17px 5px;
+    border: none;
+    /* Un radio mayor que la mitad del alto siempre sale redondo, y asi el mismo
+     * valor vale para el circulo y para la pastilla del activo. */
+    border-radius: 999px;
+    /* Workspace CON ventanas: el punto encendido. Es el estado base y el vacio
+     * es la excepcion, no al reves — ver la nota de `.empty` aqui debajo. */
+    background-color: alpha(@luz, 0.85);
+    /* min-width es lo que anima el estiramiento del activo. */
+    transition: background-color 200ms ease-in-out,
+                min-width 200ms ease-in-out;
 }
 
-/* Workspace con ventanas abiertas. */
-#workspaces button.occupied {
-    color: @luz;
+/* Workspace vacio: apagado, pero visible.
+ *
+ * LA CLASE ES `empty`, NO `occupied`. Este fichero llevaba una regla
+ * `.occupied` que no pintaba nada: el modulo hyprland/workspaces de waybar
+ * 0.15 marca los VACIOS y no los llenos, asi que la regla era codigo muerto y
+ * los workspaces con ventanas se veian igual de apagados que los vacios —con
+ * numeros no cantaba, pero con puntos el modulo entero perderia la mitad de lo
+ * que tiene que decir. Comprobado pintando `.empty` de rojo con tres
+ * workspaces ocupados: se encendieron solo los cuatro vacios.
+ *
+ * Por eso la logica va al reves de lo que uno escribiria: lo encendido es el
+ * caso base y lo apagado la excepcion. Ademas asi degrada del lado bueno — si
+ * algun dia waybar renombra la clase, quedan todos los puntos encendidos en
+ * vez de todos apagados. */
+#workspaces button.empty {
+    background-color: alpha(@tenue, 0.5);
 }
 
-/* Workspace activo: se distingue por el amatista del texto y un borde tenue,
- * no por un fondo solido — asi la barra sigue viendose transparente. */
+/* El activo: se estira a pastilla y se pone amatista. Es lo unico que cambia de
+ * FORMA en toda la barra, y por eso se lee de un vistazo sin necesidad de
+ * numeros. El halo lo despega del fondo cuando el wallpaper es claro. */
 #workspaces button.active {
-    color: @amatista;
-    border-color: alpha(@amatista, 0.35);
+    min-width: 28px;
+    background-color: @amatista;
+    box-shadow: 0 0 6px alpha(@glow_activo, 0.55);
+}
+
+/* Al posar el puntero, el punto se enciende sin cambiar de tamano: si creciera,
+ * los de al lado se correrian y apuntar al siguiente seria un juego. */
+#workspaces button:hover {
+    background-color: @neon;
+    box-shadow: none;
 }
 
 #workspaces button.urgent {
-    color: @alerta;
-    border-color: @alerta;
+    background-color: @alerta;
+}
+
+/* La etiqueta vacia de cada punto. Sin esto no hay puntos, y el porque esta
+ * arriba: el `font-size: 0` del boton no le llega. Va en su propia regla porque
+ * el CSS de GTK no permite anidar. */
+#workspaces button label {
+    font-size: 0;
+    min-height: 0;
+    padding: 0;
 }
 
 #submap {

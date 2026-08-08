@@ -396,6 +396,29 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   from gi.repository import GdkPixbuf
   GdkPixbuf.Pixbuf.new_from_file_at_size("ruta.svg", 48, 48)'
   ```
+- **`hyprland/workspaces` marca los workspaces VACÍOS (`.empty`), no los llenos.**
+  `style.css` llevaba una regla `#workspaces button.occupied` que no pintó nunca
+  nada: `occupied` está en el binario de waybar, pero es del módulo de sway. O
+  sea que un workspace con ventanas se veía exactamente igual que uno vacío.
+  Con números apenas se notaba —el número seguía ahí—, pero al pasar a puntos el
+  módulo se quedaba diciendo la mitad de lo que tiene que decir. Comprobado
+  pintando `.empty` de rojo con tres workspaces ocupados de siete: se
+  encendieron los cuatro vacíos y ninguno más. **Lo encendido va como caso base
+  y `.empty` como excepción**, que además degrada del lado bueno: si waybar
+  renombra la clase, se quedan todos los puntos encendidos en vez de todos
+  apagados. La lección general, que vale para cualquier módulo: **una regla CSS
+  que no casa no da ningún error**, así que un nombre de clase inventado se ve
+  igual que uno correcto cuyo estado no se da nunca. Píntala de rojo y provoca
+  el estado antes de creerte que funciona.
+- **Y en el CSS de GTK, `min-height` es un SUELO y no hay techo.** Los puntos de
+  los workspaces no bajaban de 18px por mucho `min-height: 10px`. No era del
+  botón sino de su **etiqueta**, y el `font-size: 0` del botón no le llega:
+  el selector `*` del principio de `style.css` le pone 14px a TODOS los widgets
+  *directamente*, y eso gana sobre lo que la etiqueta herede de su padre. Una
+  etiqueta vacía no ocupa ancho pero sí el alto de línea de su fuente. Hace
+  falta una regla propia, `#workspaces button label`. Se mide sin adivinar:
+  subes el margen vertical a un valor grande y lees el alto real de la capa con
+  `hyprctl layers` — lo que sobre de la cuenta es el alto natural del botón.
 - **ffmpeg elige el formato de salida POR LA EXTENSIÓN.** Un temporal llamado
   `fondo.jpg.nuevo` termina en `.nuevo` y ffmpeg responde *«Unable to choose an
   output format»* sin escribir nada. La extensión real va **al final**:

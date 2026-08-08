@@ -757,6 +757,29 @@ línea-tirador para cada una. La barra en sí es **invisible** — solo flotan l
 iconos, y la pastilla violeta de cada módulo aparece al pasar el puntero. El
 auto-ocultado lo lleva `waybar-autohide.py`.
 
+### Los workspaces son puntos
+
+En el centro, junto al reloj, hay siete puntos: uno por workspace, los mismos que
+`SUPER+1..7`. Se leen de un vistazo y sin números:
+
+| | |
+|---|---|
+| punto apagado | workspace vacío |
+| punto encendido | tiene ventanas |
+| **pastilla** amatista | donde estás |
+
+El activo es lo único que cambia de **forma** en toda la barra, que es lo que
+permite encontrarlo sin leer nada. El número no desaparece del todo: sigue en el
+tooltip, al posar el puntero.
+
+> Si vas a tocar el tamaño de los puntos, mira antes
+> `tests/unidad/barra-workspaces.sh`. En el CSS de GTK el alto de un punto solo
+> se puede acotar con el margen vertical, así que sale de una resta contra el
+> alto de la barra —`"height"` en `config.jsonc`— y los dos números viven en
+> ficheros distintos. Moviendo uno solo, los puntos salen deformados y **no falla
+> nada**: a 60 px de barra se convierten en cápsulas verticales y el activo en un
+> círculo. La prueba existe para que eso se vea en rojo y no en tu escritorio.
+
 Ese script además **vigila y relanza**: si una de las cuatro instancias se cae,
 la vuelve a levantar. Si se cae una y otra vez —una config rota, un módulo que
 revienta al arrancar—, se rinde después de cinco intentos en un minuto y **avisa

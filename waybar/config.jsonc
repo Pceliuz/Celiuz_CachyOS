@@ -11,7 +11,14 @@
     "position": "top",
     // Sube junto con los iconos: si la barra queda mas baja que el contenido,
     // GTK recorta las pastillas de hover por arriba y por abajo.
-    "height": 38,
+    //
+    // La cuenta, por si hay que volver a moverlo: el glifo va al 150% de los
+    // 14px de style.css = 21px, y Pango le da 36px de linea. Mas el padding
+    // (1px) y el margen (4px) de cada pastilla, arriba y abajo, salen 46. Se
+    // dejan 44: la barra no lleva zona exclusiva, asi que crecer no le quita
+    // sitio a las ventanas, pero en una pantalla de portatil cada pixel de alto
+    // se nota y GTK aprieta esos margenes sin recortar nada.
+    "height": 44,
     "spacing": 0,
 
     // Clave para el auto-ocultado: sin zona exclusiva la barra nunca le quita
@@ -70,6 +77,13 @@
     "hyprland/workspaces": {
         // Muestra siempre 1-7 aunque esten vacios (coinciden con tus binds SUPER+1..7).
         "persistent-workspaces": { "*": 7 },
+        // Sin numero: los workspaces son puntos, y el de encima una pastilla.
+        // La etiqueta se deja VACIA a proposito y toda la forma la pone
+        // style.css sobre el fondo del boton. Ojo, que el numero sigue
+        // haciendo falta en alguna parte: va al tooltip, que es lo unico que
+        // queda para saber a cual estas apuntando.
+        "format": "",
+        "tooltip": true,
         "on-click": "activate",
         // Rueda del mouse sobre la barra para saltar de workspace.
         "on-scroll-up": "hyprctl dispatch workspace e+1",
@@ -101,14 +115,14 @@
         // {usage} ES el uso total del procesador: la media de los 12 hilos del
         // Ryzen 5 5500, el mismo numero que da el "CPU" de btop. No es el de un
         // proceso suelto. El desglose por hilo esta en el tooltip.
-        "format": "<span size='130%'>󰻠</span> {usage}%",
+        "format": "<span size='150%'>󰻠</span> {usage}%",
         "interval": 2,
         "tooltip-format": "Uso total: {usage}%\nCarga (1/5/15 min): {load}\nFrecuencia media: {avg_frequency} GHz",
         "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui btop"
     },
 
     "memory": {
-        "format": "<span size='130%'>󰍛</span> {percentage}%",
+        "format": "<span size='150%'>󰍛</span> {percentage}%",
         "interval": 2,
         "tooltip-format": "RAM: {used:0.1f}G / {total:0.1f}G",
         "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui btop"
@@ -120,8 +134,8 @@
 
     "pulseaudio": {
         // Funciona con PipeWire via pipewire-pulse (lo que tienes instalado).
-        "format": "<span size='130%'>{icon}</span> {volume}%",
-        "format-muted": "<span size='130%'>󰝟</span> muteado",
+        "format": "<span size='150%'>{icon}</span> {volume}%",
+        "format-muted": "<span size='150%'>󰝟</span> muteado",
         "format-icons": {
             "headphone": "󰋋",
             "headset": "󰋎",
@@ -147,8 +161,8 @@
         // corrompen al pasar por herramientas de texto (ya paso dos veces en
         // este repo). Asi el archivo es ASCII puro y no hay nada que se pueda
         // aplastar. \uf063 es la flecha abajo y \uf062 la de arriba.
-        "format": "<span size='130%'>\uf063</span> {bandwidthDownBytes}  <span size='130%'>\uf062</span> {bandwidthUpBytes}",
-        "format-disconnected": "<span size='130%'>\uf063</span> --  <span size='130%'>\uf062</span> --",
+        "format": "<span size='150%'>\uf063</span> {bandwidthDownBytes}  <span size='150%'>\uf062</span> {bandwidthUpBytes}",
+        "format-disconnected": "<span size='150%'>\uf063</span> --  <span size='150%'>\uf062</span> --",
         // 2 s: waybar calcula la velocidad como la media entre dos lecturas, asi
         // que este numero es tambien la ventana de promediado. Menos de eso da
         // cifras que saltan demasiado para leerlas.
@@ -160,10 +174,10 @@
     },
 
     "network": {
-        "format-ethernet": "<span size='130%'>󰈀</span> {ipaddr}",
-        "format-wifi": "<span size='130%'>󰤨</span> {essid} {signalStrength}%",
-        "format-linked": "<span size='130%'>󰈀</span> sin IP",
-        "format-disconnected": "<span size='130%'>󰤭</span> desconectado",
+        "format-ethernet": "<span size='150%'>󰈀</span> {ipaddr}",
+        "format-wifi": "<span size='150%'>󰤨</span> {essid} {signalStrength}%",
+        "format-linked": "<span size='150%'>󰈀</span> sin IP",
+        "format-disconnected": "<span size='150%'>󰤭</span> desconectado",
         "tooltip-format-ethernet": "{ifname}\nIP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} — IP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
         "interval": 5,
@@ -191,19 +205,19 @@
         // trabajo y avisar tan pronto ensena a ignorar el aviso.
         "states": { "atencion": 25, "critico": 10 },
 
-        "format": "<span size='130%'>{icon}</span> {capacity}%",
+        "format": "<span size='150%'>{icon}</span> {capacity}%",
 
         // Enchufado y subiendo. El rayo es el que se mueve en style.css.
-        "format-charging": "<span size='130%'>󰂄</span> {capacity}%",
+        "format-charging": "<span size='150%'>󰂄</span> {capacity}%",
         // Enchufado y ya lleno: el rayo sobra, deja de cargar.
-        "format-full": "<span size='130%'>󰂅</span> {capacity}%",
+        "format-full": "<span size='150%'>󰂅</span> {capacity}%",
         // Enchufado pero sin cargar. Pasa de verdad: muchos portatiles paran
         // sobre el 80% para cuidar la bateria, y sin este caso la barra diria
         // "cargando" durante horas sin que suba ni un punto.
-        "format-not-charging": "<span size='130%'>󰂄</span> {capacity}%",
+        "format-not-charging": "<span size='150%'>󰂄</span> {capacity}%",
         // Descargando y en las ultimas: el icono cambia a la alerta, para que se
         // note aunque no se lea el numero.
-        "format-critico": "<span size='130%'>󰂃</span> {capacity}%",
+        "format-critico": "<span size='150%'>󰂃</span> {capacity}%",
 
         // De vacia a llena. Waybar elige segun la carga, asi que el orden
         // importa: de menos a mas.
@@ -233,7 +247,7 @@
         // Cada 2 s. Es un grep sobre la salida de makoctl, no cuesta nada, y
         // mako no avisa por ninguna senal cuando cambia la cuenta.
         "interval": 2,
-        "format": "<span size='130%'>{}</span>",
+        "format": "<span size='150%'>{}</span>",
         "on-click": "makoctl dismiss",
         "on-click-right": "makoctl mode -t no-molestar",
         "on-click-middle": "makoctl restore",
@@ -242,7 +256,9 @@
 
     "tray": {
         // Los iconos del tray son imagenes, no glifos: no les llega el <span>.
-        "icon-size": 20,
+        // Va a mano a la par de ellos: 20 cuando el <span> estaba al 130%, 23
+        // ahora que esta al 150%. Si se cambia uno, se cambia este.
+        "icon-size": 23,
         "spacing": 8
     },
 
@@ -262,7 +278,7 @@
         // repo no debe hacer, que se usa en mas de un equipo. Sin la opcion,
         // waybar toma el locale de la sesion, y los nombres de mes son iguales
         // en todos los locales de espanol.
-        "format": "<span size='130%'>󰥔</span> {:L%d %b  %H:%M}",
+        "format": "<span size='150%'>󰥔</span> {:L%d %b  %H:%M}",
         // El calendario ya no vive aqui. El tooltip de waybar solo sabe dibujar
         // una rejilla de numeros: no puede mostrar feriados ni tus eventos de
         // Google, y aparece con solo rozar el reloj. Lo reemplaza el panel de
