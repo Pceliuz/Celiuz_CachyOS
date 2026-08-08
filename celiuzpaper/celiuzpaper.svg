@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Icono de CeliuzPaper.
-     Un lienzo 16:9 (la forma de un fondo de pantalla) con el triangulo de
-     reproduccion dentro, porque los fondos son video. Los colores son los mismos
-     que la barra y el dock: violeta profundo de fondo y amatista #b16cff para lo
-     que importa, asi el icono pertenece al mismo sistema que el resto. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Icono de CeliuzPaper.
+       Un lienzo 16:9 (la forma de un fondo de pantalla) con el triangulo de
+       reproduccion dentro, porque los fondos son video. Los colores son los mismos
+       que la barra y el dock: violeta profundo de fondo y amatista #b16cff para lo
+       que importa, asi el icono pertenece al mismo sistema que el resto.
+
+       OJO CON MOVER ESTE COMENTARIO ARRIBA DEL <svg>. gdk-pixbuf reconoce el
+       formato olfateando los primeros bytes, y solo admite la declaracion XML
+       por delante: con un comentario en medio se planta con "Couldn't recognize
+       the image file format" y el icono NO se ve. Es lo que le pasaba al dock,
+       que carga estos ficheros por background-image (dock-icons.css): el boton
+       salia vacio y la app solo se distinguia por el tooltip. Lo mismo vale para
+       cualquier icono nuevo del repo: el fichero empieza por <svg, y lo que haya
+       que contar se cuenta dentro. -->
   <defs>
     <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#2a1046"/>

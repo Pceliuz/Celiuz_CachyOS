@@ -378,6 +378,24 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   recordado**, por barato que parezca.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
+- **Un SVG que empieza por un comentario no es una imagen para gdk-pixbuf.** El
+  icono de CeliuzPaper llevaba su explicación entre la declaración XML y el
+  `<svg>`, y el olfateo de formato de gdk-pixbuf —que solo admite la declaración
+  por delante— se plantaba con *«Couldn't recognize the image file format»*. El
+  fichero estaba, el enlace en `~/.local/share/icons/hicolor/scalable/apps`
+  estaba, `dock-icons.css` apuntaba bien: lo único que fallaba era el primer
+  byte. Y el síntoma no se parece a un fichero ilegible, porque el dock los carga
+  por `background-image` y una imagen que no carga no es un error, es un botón
+  **vacío**: la app quedaba en el dock como un hueco que solo se distinguía por
+  el tooltip. Los iconos del sistema (`kitty.svg`, `org.kde.dolphin.svg`) no lo
+  sufren porque empiezan directamente por `<svg`. **Un icono del repo empieza por
+  `<svg`, y lo que haya que contar se cuenta dentro.** Se comprueba en un
+  segundo, y conviene hacerlo al añadir cualquiera:
+  ```sh
+  python3 -c 'import gi; gi.require_version("GdkPixbuf","2.0")
+  from gi.repository import GdkPixbuf
+  GdkPixbuf.Pixbuf.new_from_file_at_size("ruta.svg", 48, 48)'
+  ```
 - **ffmpeg elige el formato de salida POR LA EXTENSIÓN.** Un temporal llamado
   `fondo.jpg.nuevo` termina en `.nuevo` y ffmpeg responde *«Unable to choose an
   output format»* sin escribir nada. La extensión real va **al final**:
