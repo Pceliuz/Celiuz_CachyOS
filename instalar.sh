@@ -183,6 +183,11 @@ desplegar() {
     hacer mkdir -p "$HOME/.local/bin"
     enlazar "$REPO/hypr/scripts/terminal.sh" "$HOME/.local/bin/celiuz-terminal"
 
+    # El historial de notificaciones, tambien por el PATH: no es solo para
+    # teclearlo comodo, es la puerta por la que cualquier otro programa puede
+    # preguntar que llego hoy sin saber donde esta clonado este repo.
+    enlazar "$REPO/hypr/scripts/avisos.py" "$HOME/.local/bin/avisos"
+
     # Hyprland 0.56 busca hyprland.lua ANTES que hyprland.conf. Si aparece uno
     # —lo repone cualquier reinstalacion de CachyOS— nuestra config queda
     # ignorada en silencio, con un solo "Lua config not found" de diferencia en
@@ -323,6 +328,36 @@ maquina_local() {
 \$kb_variant = $kb_variant
 EOF
         hecho "  escrito hypr/conf/local.conf"
+    fi
+
+    # --- Tu fichero, el que el repo no toca nunca ---
+    #
+    # Se crea VACIO si no existe, y no se pisa jamas si ya esta: aqui es donde
+    # pones lo tuyo (un exec-once de un programa que solo tienes tu, un bind para
+    # algo que no viene en este repo, un ajuste que prefieres distinto). Va el
+    # ultimo en hyprland.conf, asi que desde ahi puedes pisar cualquier cosa.
+    #
+    # Existe porque hyprlang avisa por un `source` que no encuentra, y este repo
+    # se toma en serio que `hyprctl configerrors` salga limpio en una instalacion
+    # recien hecha.
+    if [ ! -e "$REPO/hypr/conf/personal.conf" ]; then
+        if [ "$SOLO_REVISAR" -eq 0 ]; then
+            cat > "$REPO/hypr/conf/personal.conf" <<'EOF'
+# hypr/conf/personal.conf — TUYO. No se versiona, y el repo no lo pisa nunca.
+#
+# Se carga el ULTIMO de todos, asi que aqui puedes anadir lo que quieras y
+# tambien pisar cualquier ajuste o atajo del repo: en hyprlang gana el ultimo.
+#
+#   exec-once = mi-programa
+#   bind = SUPER, G, exec, otra-cosa
+#   bind = SUPER, Q, killactive     # pisar uno que ya existe
+EOF
+            hecho "  creado hypr/conf/personal.conf (vacio, para tus cosas)"
+        else
+            aviso "falta hypr/conf/personal.conf (lo crea el instalador)"
+        fi
+    else
+        gris "  hypr/conf/personal.conf ya esta (no se toca)"
     fi
 
     # --- El lado derecho de la barra, y el sensor de temperatura ---

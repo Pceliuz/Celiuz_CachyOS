@@ -13,7 +13,7 @@ arrancar la sesion se manda un aviso de cortesia diciendo con cual empiezas.
 
 Uso:
     teclado.py estado     imprime la activa en una linea (para la barra o el
-                          asistente); sin tocar nada
+                          script); sin tocar nada
     teclado.py cambiar    pasa a la siguiente y avisa      (bind SUPER+DEL)
     teclado.py avisar     solo avisa de la que hay puesta  (exec-once al inicio)
 

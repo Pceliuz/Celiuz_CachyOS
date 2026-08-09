@@ -443,6 +443,51 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   silencioso sonaría en cada aviso, que es lo peor de los dos mundos porque
   además no ves qué llegó. La sección `[mode=no-molestar]` tiene que anularlo
   con `on-notify=none` — eso sí funciona. Las dos cosas están comprobadas.
+- **Traer los canales con firma con la sesión abierta deja un `mpvpaper`
+  huérfano, y nadie lo recoge jamás.** Los demonios se reconocen por la firma
+  que llevan en la línea de comandos (`--input-ipc-server=…<firma>.sock`); el
+  que ya estaba corriendo lleva el nombre viejo, así que el código nuevo **no lo
+  ve** y `wallpaper.sh` levanta otro al lado. Se queda un mpvpaper de más
+  gastando GPU —el de la sesión del autor iba por **1 GB de RSS**— hasta cerrar
+  sesión. Pasó al actualizar la PC el 2026-08-08. Se limpia matando por PID el
+  que tenga el socket sin firma y borrando los canales viejos
+  (`mpvpaper.sock`, `wallpaper-pause.fifo`). Cerrar sesión y volver a entrar
+  también vale, y es lo más corto.
+- **Congelar una app hace que el COMPOSITOR la acuse de colgada.** Hyprland 0.56
+  vigila que cada ventana conteste a su ping y, a los `misc:anr_missed_pings`
+  fallos (5 de fábrica), dibuja «{title} - {class} no responde» con «Esperar» y
+  «Forzar cierre». Como el bloqueo congela apps *a propósito*, salía ese diálogo
+  detrás de la pantalla de bloqueo —visible porque el `xray` enseña lo de
+  debajo—, acusando a una app que habíamos parado nosotros dos líneas antes.
+  **Lo pinta Hyprland, no la app**: no sale en `hyprctl clients`, no es un
+  proceso aparte (`pgrep hyprland-dialog` no encuentra nada) y no se quita
+  cerrando ventanas ni saltando a un escritorio vacío. Buscarlo por ahí es
+  perder la tarde — lo delata que los textos están **traducidos**, y las
+  ventanas de una app no las traduce el compositor. `lock.sh` apaga
+  `misc:enable_anr_dialog` antes de congelar y lo devuelve tras descongelar; el
+  orden lo vigila `tests/e2e/bloqueo.sh`.
+- **El id de una notificación NO está en la llamada `Notify`: viene en la
+  respuesta.** Quien espíe el bus tiene que emparejar el `reply_serial` de la
+  respuesta con el `serial` de la llamada, o no hay forma de saber a qué aviso se
+  refiere un `NotificationClosed` ni un `ActionInvoked`. Lo usa
+  `hypr/scripts/avisos.py`.
+- **Espiar el bus con una regla ancha te trae TODO el tráfico de la sesión.** Un
+  `type='method_return'` a secas recoge gsettings, systemd y los portales, y el
+  proceso se pasa el día despertándose para nada. La regla buena lleva remitente:
+  `type='method_return',sender='org.freedesktop.Notifications'` — el bus resuelve
+  el nombre conocido solo. Medido: con ella, 16 mensajes en 9 s.
+- **Una conexión de D-Bus que llama a `BecomeMonitor` ya no puede hablar**, solo
+  escuchar. Hay que abrirle una conexión privada
+  (`Gio.DBusConnection.new_for_address_sync`) y no la compartida de
+  `Gio.bus_get_sync`, o se queda muda para el resto del proceso.
+- **Las hints de una notificación pueden traer el icono en crudo** (`image-data`,
+  un array de píxeles). Guardarlas enteras son cientos de KB por aviso, y el
+  registro vive en `$XDG_RUNTIME_DIR`, que es el mismo tmpfs donde está el fifo
+  de las barras. Filtra a escalares.
+- **`makoctl history -j` existe desde mako 1.11 y NO vale como historial**: no
+  trae marca de tiempo, es un búfer en memoria de 5 (`max-history`) que muere con
+  mako, y `restore` **saca** cosas de él porque es una pila de deshacer. Antes de
+  «simplificar» `avisos.py` para que tire de ahí, léete su cabecera.
 - **`uwsm app -- inexistente` sale con 1 y notifica**, no falla en silencio. Si lo
   mides con `| head`, el `$?` que ves es el de `head`, no el de uwsm.
 - **`fc-list | grep -q` con `set -o pipefail` da falso negativo**: `grep -q` cierra

@@ -133,6 +133,54 @@ esac'
         "aun fallando, te devuelve a tu escritorio"
 }
 
+comprobar_aviso_no_responde() {
+    titulo "3. Congelar sin que el compositor acuse a las apps de colgadas"
+    # Congelar una app es dejarla muda a proposito, y Hyprland vigila que cada
+    # ventana conteste a su ping: a los `anr_missed_pings` fallos dibuja «no
+    # responde» con «Esperar» y «Forzar cierre». Lo pinta EL COMPOSITOR, asi que
+    # no se tapa cerrando ventanas, y con el xray encendido se ve por debajo del
+    # bloqueo. Le paso al autor: la pantalla de bloqueo con un dialogo detras
+    # acusando a Obsidian de colgada... cuando la habia congelado el propio
+    # bloqueo dos lineas antes.
+    rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
+    binario_falso hyprctl 0 '
+case "$*" in
+  "activeworkspace -j")                    echo "{\"id\": 7, \"windows\": 4}" ;;
+  "getoption misc:session_lock_xray -j")   echo "{\"int\": 0}" ;;
+  "getoption misc:enable_anr_dialog -j")   echo "{\"int\": 1}" ;;
+  *)                                       echo "ok" ;;
+esac'
+    # systemctl SE SUSTITUYE, y no es opcional: congelar.py lo llama de verdad y
+    # con el bus del usuario delante congelaria las apps de la sesion real.
+    binario_falso systemctl 0
+    binario_falso "$BLOQUEO" 0
+
+    LOCK_DESPEGADO=1 CONGELAR=1 MODO_FONDO=xray REINTENTOS=1 \
+    FIFO="$TMP/no-existe-pausa.fifo" FIFO_BARRAS="$TMP/no-existe-barras.fifo" \
+        "$REPO/hypr/scripts/lock.sh" > "$TMP/diario-anr.txt" 2>&1
+
+    local diario="$TMP/diario-anr.txt"
+
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:enable_anr_dialog false' \
+        "apaga el aviso de «no responde» al congelar"
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:enable_anr_dialog 1' \
+        "y lo devuelve al valor que tenia (dejarlo apagado seria una fuga)"
+
+    # El ORDEN importa tanto como que ocurra. Si se apagara despues de congelar,
+    # el aviso ya habria salido; si se devolviera antes de descongelar, el
+    # compositor encontraria las apps mudas y lo sacaria justo al final.
+    local n_apaga n_congela n_descongela n_devuelve
+    n_apaga=$(grep -n 'no responde» apagado' "$diario" | head -1 | cut -d: -f1)
+    n_congela=$(grep -n 'congelando aplicaciones' "$diario" | head -1 | cut -d: -f1)
+    n_descongela=$(grep -n 'descongel' "$diario" | head -1 | cut -d: -f1)
+    n_devuelve=$(grep -n 'no responde» devuelto' "$diario" | head -1 | cut -d: -f1)
+
+    afirmar "lo apaga ANTES de congelar" \
+        test -n "$n_apaga" -a -n "$n_congela" -a "${n_apaga:-99}" -lt "${n_congela:-0}"
+    afirmar "lo devuelve DESPUES de descongelar" \
+        test -n "$n_devuelve" -a -n "$n_descongela" -a "${n_devuelve:-0}" -gt "${n_descongela:-99}"
+}
+
 comprobar_sin_pantalla() {
     titulo "3. Sin poder medir la pantalla (equipo recien clonado, sin sesion)"
     rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
@@ -161,6 +209,7 @@ comprobar_no_toca_nada_real() {
 
 comprobar_bloqueo_normal
 comprobar_bloqueo_caido
+comprobar_aviso_no_responde
 comprobar_sin_pantalla
 comprobar_no_toca_nada_real
 resumen

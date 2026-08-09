@@ -14,8 +14,8 @@ la cuenta como ventana, asi que no rompe el mosaico ni roba sitio.
 
 Quien manda de verdad es waybar/dock-apps.json; aqui solo se edita esa lista y se
 llama a gen-dock.py, que regenera dock.jsonc y le pide al demonio que reinicie el
-dock. Asi el mismo camino sirve para el clic derecho, para la terminal y para un
-asistente.
+dock. Asi el mismo camino sirve para el clic derecho, para la terminal y para
+cualquier script.
 
 Cada app entra al dock con SU PROPIO icono, el mismo que le ves en el lanzador
 (SUPER+D): se guarda el campo `Icon=` de su .desktop y gen-dock.py lo resuelve a

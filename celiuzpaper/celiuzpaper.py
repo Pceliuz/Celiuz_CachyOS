@@ -48,7 +48,7 @@ EL DISENO, Y POR QUE
   elegida con un halo. La profundidad la da el contraste, no los bordes.
 - Nada de botones, ni "Aplicar", ni "Cancelar". Flechas, Enter y Escape.
 
-Para que lo maneje el asistente esta la parte de terminal (--set, --random), que
+Para manejarlo desde un script esta la parte de terminal (--set, --random), que
 usa el mismo camino: lib/wallpapers.py.
 """
 
@@ -1089,7 +1089,7 @@ def cli_list():
 def cli_carpetas(args):
     """Anadir, quitar y listar las carpetas propias, sin abrir la ventana.
 
-    Es la puerta por la que entra el asistente: la GUI y esto llaman a lo mismo.
+    Es la puerta de entrada desde fuera: la GUI y esto llaman a lo mismo.
     """
     if not args:
         propias = wp.carpetas_extra()

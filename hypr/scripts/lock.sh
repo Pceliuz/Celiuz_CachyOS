@@ -257,6 +257,7 @@ EOF
 # --- 2. Preparar el escritorio ------------------------------------------------
 WS_ORIGINAL=""
 XRAY_ORIGINAL=""
+ANR_ORIGINAL=""
 BARRAS_ESCONDIDAS=0
 CONGELADO=0
 
@@ -307,8 +308,20 @@ limpiar() {
         echo "lock: xray devuelto a $XRAY_ORIGINAL"
     fi
     if [ "$CONGELADO" -eq 1 ]; then
+        # El aviso propio existe porque congelar.py no dice nada cuando no habia
+        # nada congelado, y entonces el diario no deja constancia de que se
+        # intento. Un descongelado que no se hizo es lo peor que puede quedar
+        # aqui: apps paradas para siempre y sin rastro de por que.
+        echo "lock: descongelando aplicaciones..."
         "$SCRIPTS/lib/congelar.py" descongelar 2>&1 | sed 's/^/lock: /'
         CONGELADO=0
+    fi
+    # El aviso de "no responde" se devuelve DESPUES de descongelar, no antes: si
+    # se reactivara con las apps todavia paradas, el compositor las encontraria
+    # mudas y sacaria justo el dialogo que se queria evitar.
+    if [ -n "$ANR_ORIGINAL" ]; then
+        hyprctl keyword misc:enable_anr_dialog "$ANR_ORIGINAL" >/dev/null 2>&1
+        echo "lock: aviso de «no responde» devuelto a $ANR_ORIGINAL"
     fi
     recomponer
     avisar "$FIFO" release
@@ -341,6 +354,27 @@ fi
 despejar
 
 if [ "$CONGELAR" -eq 1 ]; then
+    # ANTES de congelar, callar el aviso de «no responde» del compositor.
+    #
+    # POR QUE, que no es evidente: congelar una app es DEJARLA MUDA a proposito.
+    # Hyprland 0.56 vigila que cada ventana conteste a su ping y, si falla
+    # `misc:anr_missed_pings` veces (5 de fabrica), dibuja el, «{title} - {class}
+    # no responde» con «Esperar» y «Forzar cierre». Ese aviso lo pinta EL
+    # COMPOSITOR, no la app —por eso no sale en `hyprctl clients` ni como proceso
+    # aparte, y por eso no se puede tapar cerrando ventanas—, y con el xray
+    # encendido se ve por debajo del bloqueo. Resultado: te encuentras la
+    # pantalla de bloqueo con un cuadro de dialogo detras acusando a una app de
+    # colgada... cuando la colgamos nosotros hace dos lineas, y aposta.
+    #
+    # No se toca `anr_missed_pings`: subirlo solo retrasa el aviso, y un bloqueo
+    # dura lo que dura. Se apaga el aviso entero mientras dura, y se devuelve tal
+    # cual estaba en el trap (por eso se guarda el valor, y no se asume 1).
+    ANR_ORIGINAL=$(hyprctl getoption misc:enable_anr_dialog -j 2>/dev/null \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["int"])' 2>/dev/null)
+    [ -n "$ANR_ORIGINAL" ] || ANR_ORIGINAL=1
+    hyprctl keyword misc:enable_anr_dialog false >/dev/null 2>&1
+    echo "lock: aviso de «no responde» apagado (estaba en $ANR_ORIGINAL)"
+
     echo "lock: congelando aplicaciones..."
     "$SCRIPTS/lib/congelar.py" congelar 2>&1 | sed 's/^/lock: /'
     CONGELADO=1

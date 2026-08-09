@@ -5,7 +5,7 @@ Todo lo que hay que saber sobre los fondos de pantalla, en un solo sitio:
 donde estan, cual esta puesto, como se cambia y como se le habla a mpvpaper.
 
 Lo usan CeliuzPaper (la app) y set-wallpaper.sh (la version de terminal), y es
-por donde entraria un asistente: aqui no hay interfaz, solo datos y acciones.
+por donde se entra desde fuera: aqui no hay interfaz, solo datos y acciones.
 
 Los fondos salen de varias FUENTES, y cada una es un modulo en el selector:
 

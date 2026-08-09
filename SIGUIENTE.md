@@ -3,7 +3,11 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-07**, en el **portátil**. Se cerró el caso de las barras
+Última sesión: **2026-08-08**, en la **PC**: llegó el historial de
+notificaciones (`SUPER+H`), la captura de la ventana con foco (`SUPER+ALT+S`) y
+se cerró el diálogo de «no responde» que asomaba sobre la pantalla de bloqueo.
+
+Antes, el **2026-08-07** en el **portátil**. Se cerró el caso de las barras
 que no se ocultaban, se veían sobre el bloqueo y salían dobles al desbloquear:
 eran **un solo** fallo, un demonio huérfano de la sesión del 05 (ver abajo). De
 tirar de ese hilo salió lo demás: **nada de una sesión puede llamarse igual en
@@ -21,7 +25,7 @@ portátil para todos los teclados.
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 12 pruebas. Deben salir todas
+./tests/run.sh          # 15 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -349,6 +353,69 @@ Y verificado también en el portátil (2026-08-05): el greeter dibuja el fondo, 
 tarjeta y el campo de contraseña a 1366x768 —`sddm-greeter-qt6 --test-mode`
 dentro del anidado—, y regenerar el fondo con otro vídeo tardó 18 s **sin pedir
 contraseña**, dejando los ficheros con grupo `sddm` y modo 644.
+
+## El historial de notificaciones (2026-08-08, PC)
+
+**`SUPER+H` enseña todo lo que ha llegado en esta sesión, con su hora, aunque ya
+lo hubieras descartado.** Una notificación sale seis segundos y se va para
+siempre; si estabas jugando o mirando a otro lado, se perdió.
+
+Cómo funciona está en el README («El historial: lo que pasó mientras no
+mirabas»); las trampas de D-Bus, en el `CLAUDE.md`. Lo esencial:
+
+- `hypr/scripts/avisos.py --demonio` **espía el bus**, no le pregunta a mako. El
+  historial de mako no vale: no trae la hora, son 5 en memoria, y `restore` saca
+  cosas de él. Y espiando no se sustituye al demonio: si el grabador se cae,
+  dejas de grabar pero **no te quedas sin avisos**.
+- El registro vive en `$XDG_RUNTIME_DIR`, que systemd borra al cerrar sesión. Lo
+  que quieras conservar se aparta a mano y baja a `~/.local/share`.
+- CLI en el PATH (`avisos`): `listar | ver N | guardar N | guardados`, y
+  `--json` para leerlo desde fuera.
+
+**No hay panel GTK propio a propósito**: el visor es fuzzel, que ya está montado
+y con la paleta puesta. Un panel más es superficie que mantener.
+
+**Lo que no se ha visto nunca**: un aviso que traiga el icono como `image-data`
+en crudo. El filtro de hints está escrito y probado con datos falsos
+(`tests/unidad/avisos.sh`), pero ninguna app de esta máquina lo manda así.
+
+## El diálogo de «no responde» sobre el bloqueo (2026-08-08, PC)
+
+**Al bloquear salía un cuadro de diálogo detrás de la pantalla de bloqueo**,
+acusando a una aplicación de no responder. Pasaba en la PC y en el portátil.
+
+La causa: **congelar una app es dejarla muda a propósito**, y Hyprland vigila que
+cada ventana conteste a su ping. A los 5 fallos dibuja «no responde» con
+«Esperar» y «Forzar cierre». O sea que el bloqueo se acusaba a sí mismo, y se veía
+porque el modo `xray` enseña lo que hay debajo.
+
+**Lo pinta el compositor, no la app.** Por eso no sale en `hyprctl clients`, no es
+un proceso aparte y no se quita cerrando ventanas ni saltando a un escritorio
+vacío — que es justo donde se pierde el tiempo buscándolo. Lo que lo delató fue
+que **el texto está traducido**: las ventanas de una app no las traduce Hyprland.
+
+`lock.sh` apaga `misc:enable_anr_dialog` antes de congelar y lo devuelve tras
+descongelar. El orden es parte del arreglo y lo vigila `tests/e2e/bloqueo.sh`
+(4 comprobaciones nuevas). Detalle en el README, «El diálogo de "no responde"».
+
+**Lo que NO se pudo reproducir a mano**: congelar una app suelta y esperar, ni
+con el umbral bajado a 1 ping ni con la ventana enfocada, no saca el diálogo en
+40 s. Se arregló por la causa, no por el síntoma reproducido — así que si vuelve
+a verse, eso es lo primero que hay que contar.
+
+## Un fichero para tus cosas: `personal.conf` (2026-08-08)
+
+`hypr/conf/personal.conf` lo crea `instalar.sh` **vacío** y no lo toca nunca más.
+No se versiona, y se carga **el último de todos**, así que desde ahí se puede
+añadir lo que sea y pisar cualquier atajo o ajuste del repo.
+
+Sirve para lo que es de una máquina y de nadie más, sin que salga como
+modificación en cada `git pull`. La prueba `tests/unidad/maquina.sh` vigila que
+siga siendo el último y que `$conf_maquina` sea el último **del repo**.
+
+Ojo al clonar: hasta que no pases el instalador, Hyprland avisa de que no
+encuentra ese `source` — el mismo trato que `local.conf`, y `--revisar` lo saca
+como pendiente.
 
 ## El SUPER+TAB y el sonido (2026-08-04)
 

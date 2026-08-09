@@ -10,7 +10,7 @@ que cuadrar con el numero de botones. Hecho a mano se desincroniza en cuanto
 anades una app; asi la lista de apps es un dato y el resto sale de una cuenta.
 
 Tambien es la puerta que usa el gestor de clic derecho (dock-manager.py) y la que
-usaria un asistente para tocar el dock: escribe el JSON de datos y llama aqui.
+se toca el dock desde un script: escribe el JSON de datos y llama aqui.
 
 Uso:
     gen-dock.py                       regenera dock.jsonc y recarga el dock

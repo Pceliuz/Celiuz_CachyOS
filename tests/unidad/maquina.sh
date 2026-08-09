@@ -225,14 +225,21 @@ defecto = next((i for i, l in enumerate(lineas) if l.strip().startswith("$conf_m
 print("declarado_antes", int(0 <= defecto < n("local.conf")))
 print("tras_input",   int(n("$conf_maquina") > n("input.conf") > -1))
 print("tras_binds",   int(n("$conf_maquina") > n("keybinds.conf") > -1))
-print("el_ultimo",    int(n("$conf_maquina") == max(
-    i for i, l in enumerate(lineas) if l.strip().startswith("source"))))
+fuentes = [i for i, l in enumerate(lineas) if l.strip().startswith("source")]
+# `$conf_maquina` tiene que ir despues de TODO lo que trae el repo, porque son
+# correcciones sobre lo ya dicho y en hyprlang gana el ultimo que habla.
+# La unica excepcion permitida es `personal.conf`, que es del usuario y no del
+# repo: si el se molesta en escribir algo ahi, gana el.
+print("ultimo_del_repo", int(n("$conf_maquina") == max(
+    i for i in fuentes if "personal.conf" not in lineas[i])))
+print("personal_el_ultimo", int(n("personal.conf") == max(fuentes)))
 PY
 leer_o() { grep "^$1 " "$TMP/orden.txt" | cut -d' ' -f2; }
 afirmar_igual "1" "$(leer_o declarado_antes)" "el valor de fabrica se declara antes de leer local.conf"
 afirmar_igual "1" "$(leer_o tras_input)"      "se carga DESPUES de input.conf"
 afirmar_igual "1" "$(leer_o tras_binds)"      "se carga DESPUES de keybinds.conf"
-afirmar_igual "1" "$(leer_o el_ultimo)"       "es el ultimo source de todos"
+afirmar_igual "1" "$(leer_o ultimo_del_repo)"     "es el ultimo source de los del repo"
+afirmar_igual "1" "$(leer_o personal_el_ultimo)"  "solo personal.conf va despues (es del usuario: gana el)"
 
 titulo "6. Los dos destinos existen y dicen lo que deben"
 NADA="$REPO/hypr/conf/nada.conf"

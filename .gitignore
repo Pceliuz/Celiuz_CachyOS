@@ -27,6 +27,12 @@ waybar/dock-icons.css
 waybar/local.jsonc
 hypr/conf/local.conf
 
+# Tus anadidos a la config de Hyprland. Lo crea instalar.sh vacio y se carga el
+# ULTIMO, asi que desde ahi puedes pisar cualquier cosa del repo. No se versiona
+# por dos razones: lo que metas ahi es tuyo y de nadie mas, y asi tus cambios no
+# aparecen como modificaciones cada vez que traigas actualizaciones.
+hypr/conf/personal.conf
+
 # El fondo de la pantalla de inicio de sesion. `instalar.sh --sddm` lo genera con
 # ffmpeg a partir del tuyo y lo copia a /usr/share/sddm/themes/celiuz, no aqui —
 # pero si algun dia se prueba a mano dentro del repo, que no se cuele: es un

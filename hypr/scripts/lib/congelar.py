@@ -28,7 +28,7 @@ que se colgo, no responde, y no hay ninguna pista de por que. Asi que:
    sesiones SSH), asi que si algo va mal SIEMPRE queda una terminal viva desde la
    que ejecutar:  hypr/scripts/lib/congelar.py descongelar
 
-Uso directo (util tambien para el asistente):
+Uso directo (util tambien desde un script):
     congelar.py estado        que hay congelado ahora
     congelar.py congelar      congela lo que toque (sin bloquear la pantalla)
     congelar.py descongelar   descongela todo, pase lo que pase

@@ -40,6 +40,9 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   lista fija de carpetas se deja fuera lo que instales por vías nuevas.
 - **`vista-escritorios.py`** — el selector de `SUPER + TAB`: enseña los
   escritorios que tienen apps abiertas y eliges a cuál ir. Ver su sección abajo.
+- **`avisos.py`** — el historial de notificaciones. Un grabador escucha el bus y
+  apunta todo lo que pasa por pantalla, con su hora; `SUPER + H` lo saca. Se
+  borra al cerrar sesión salvo lo que apartes a mano. Ver su sección abajo.
 - **`calendar-panel.py`** — al pulsar el reloj se abre un calendario con los
   feriados peruanos (`lib/pe_fechas.py`) y los eventos de Google Calendar
   (`lib/gcal.py`).
@@ -181,16 +184,19 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + V` | Flotante / anclada |
 | `SUPER + B` | Lanzador de aplicaciones |
 | `SUPER + SHIFT + B` | Lanzador en modo "ejecutar binario" |
+| `SUPER + A` | Panel de Celiuz (abre y cierra con la misma tecla) |
 | `SUPER + C` | Sacar la barra y el dock |
 | `SUPER + SHIFT + C` | Reiniciar el demonio de las barras |
 | `SUPER + N` | Descartar la notificación de arriba |
 | `SUPER + SHIFT + N` | Descartarlas todas |
 | `SUPER + ALT + N` | No molestar (encender / apagar) |
 | `SUPER + CTRL + N` | Recuperar la última descartada |
+| `SUPER + H` | Historial: todo lo que llegó en esta sesión, con su hora |
 | `SUPER + SHIFT + R` | Recargar la config (y avisar de verdad si falla) |
 | `SUPER + L` | Bloquear la pantalla |
 | `SUPER + S` | Captura de una zona |
 | `SUPER + SHIFT + S` | Captura de la pantalla entera |
+| `SUPER + ALT + S` | Captura de la ventana que tengas delante |
 | `SUPER + 1..7` | Ir al escritorio |
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
 | `SUPER + flechas` | Mover el foco |
@@ -376,8 +382,8 @@ Dos detalles que no son adorno:
   entiende como *sustituye al anterior*: pulsar el atajo cuatro veces seguidas
   reescribe un aviso, no apila cuatro.
 
-`teclado.py estado` imprime la activa en una línea, para la barra o para el
-asistente.
+`teclado.py estado` imprime la activa en una línea, para la barra o para
+cualquier otro script.
 
 ---
 
@@ -969,6 +975,83 @@ Clic izquierdo descarta, derecho conmuta "no molestar", central recupera.
 > la de "hay pendientes" acabaron con el **mismo** codepoint y los dos estados se
 > veían idénticos. En JSON van como `\uf063`; en Python, con `chr(0xf063)`.
 
+### El historial: lo que pasó mientras no mirabas
+
+Una notificación sale seis segundos y se va para siempre. Si estabas jugando,
+leyendo o mirando a otro lado, se perdió — y no hay forma de saber qué era.
+`SUPER+H` abre lo que ha llegado en esta sesión, con su hora, aunque ya lo
+hubieras descartado.
+
+```sh
+avisos listar          # lo de esta sesión, lo último abajo
+avisos ver 12          # uno entero, sin recortar
+avisos guardar 12 "mirarlo mañana"
+avisos guardados       # lo apartado, que sobrevive al reinicio
+avisos listar --json   # para leerlo desde otro programa
+```
+
+**El trato es que se graba todo y casi nada se queda.** El registro de la sesión
+vive en `$XDG_RUNTIME_DIR`, un tmpfs en modo 700 que systemd borra al cerrar la
+última sesión: «se guarda hasta que cierro sesión y luego desaparece» no necesita
+ni una línea de código de limpieza, ni un cron, ni acordarse. Por ahí pasa
+cualquier cosa que una app decida notificar —un código de dos factores, el asunto
+de un correo—, así que no toca el disco nunca. Lo único que baja a
+`~/.local/share` es lo que apartas tú, uno a uno, porque justo eso es lo que le
+pides.
+
+`tests/unidad/avisos.sh` vigila esa promesa: si un día alguien cambia una ruta y
+el registro entero empieza a caer en `~/.local`, eso no daría ningún error — solo
+dejaría de cumplirse, en silencio.
+
+#### Es otra cosa que `SUPER+CTRL+N`
+
+`makoctl restore` vuelve a **sacar** una notificación a la pantalla y la quita de
+la pila de mako. El historial solo mira. No comparten lista, y por eso no se
+pelean.
+
+#### Por qué espía el bus en vez de preguntarle a mako
+
+mako 1.11 tiene su propio historial (`makoctl history -j`) y no sirve para esto,
+por tres razones **medidas**:
+
+1. **No trae la hora.** Sus campos son id, app_name, app_icon, category,
+   desktop_entry, summary, body, urgency y actions. Un historial sin «cuándo» es
+   media cosa.
+2. Es un búfer **en memoria de 5** (`max-history`) que muere con mako.
+3. `makoctl restore` **saca** cosas de ese búfer: es una pila de deshacer, no un
+   archivo. Compartirlo sería pelearse por la misma lista.
+
+Así que `hypr/scripts/avisos.py --demonio` escucha el bus directamente. La
+ventaja de fondo es que **no sustituye al demonio de notificaciones**: mako sigue
+haciendo su trabajo, y si el grabador se cae dejas de grabar pero no te quedas
+sin avisos. No puede romper lo que ya funciona.
+
+Apunta también qué fue de cada aviso: si expiró, si lo descartaste o si pulsaste
+su acción — que es lo que distingue «no me enteré» de «lo vi y lo dejé pasar».
+
+> **El id de la notificación no está en la llamada `Notify`, viene en la
+> respuesta.** Se emparejan por `reply_serial`, que es igual al `serial` de la
+> llamada. Sin eso no hay forma de saber a qué aviso se refiere un
+> `NotificationClosed`.
+
+> **La regla de espiado tiene que ser estrecha.** Para las respuestas va
+> `type='method_return',sender='org.freedesktop.Notifications'`; con un
+> `type='method_return'` a secas te llega **todo** el tráfico del bus (gsettings,
+> systemd, portales) y el proceso se despierta constantemente para nada. Medido:
+> con la regla estrecha, 16 mensajes en 9 s.
+
+> **Una conexión que llama a `BecomeMonitor` ya no puede hablar**, solo escuchar.
+> Por eso se abre una conexión privada y no la compartida de `Gio.bus_get_sync`.
+
+> **Las hints pueden traer el icono en crudo** (`image-data`, un array de
+> píxeles). Volcarlo al registro serían cientos de KB por aviso, en un tmpfs que
+> comparte sitio con el fifo de las barras. Solo se guardan las hints escalares.
+
+**No hay panel GTK propio a propósito**: fuzzel ya está montado, con la paleta
+puesta y sabiendo buscar. Un panel más es una superficie más que mantener, y esto
+se abre, se mira y se cierra. El `--json` está para leerlo desde fuera si algún
+día quieres montarle otra cara.
+
 ---
 
 ## La pantalla de bloqueo
@@ -1011,6 +1094,33 @@ Si algo se quedara congelado, desde cualquier terminal:
 ```sh
 ~/dotfiles/hypr/scripts/lib/congelar.py descongelar
 ```
+
+#### El diálogo de «no responde» que salía detrás del bloqueo
+
+Congelar una app es **dejarla muda a propósito**. Y Hyprland 0.56 vigila que cada
+ventana conteste a su ping: cuando falla `misc:anr_missed_pings` veces (5 de
+fábrica), dibuja *«{title} - {class} no responde»* con los botones **Esperar** y
+**Forzar cierre**.
+
+El resultado era una pantalla de bloqueo con un cuadro de diálogo detrás,
+acusando a una aplicación de estar colgada... cuando la había congelado el propio
+bloqueo dos líneas antes. Y se veía **por debajo** del bloqueo porque el modo
+`xray` enseña todo lo que hay debajo.
+
+Lo pinta **el compositor**, no la aplicación. Eso importa para diagnosticarlo: no
+sale en `hyprctl clients`, no es un proceso aparte, y no se quita cerrando
+ventanas ni saltando a un escritorio vacío. Buscarlo por ahí es perder la tarde.
+
+Por eso `lock.sh` **apaga `misc:enable_anr_dialog` antes de congelar** y lo
+devuelve al valor que tenía después de descongelar. El orden es parte del
+arreglo, y `tests/e2e/bloqueo.sh` lo vigila:
+
+- si se apagara *después* de congelar, el aviso ya habría salido;
+- si se devolviera *antes* de descongelar, el compositor encontraría las apps
+  todavía mudas y sacaría el diálogo justo al final.
+
+No se toca `anr_missed_pings`: subirlo solo retrasa el aviso, y un bloqueo dura
+lo que dura.
 
 > **Aviso para quien toque esto:** no ejecutes `hyprlock` a mano para probar. Te
 > bloquea la sesión al instante y, si el proceso que lo lanzó muere, te quedas en
@@ -1337,6 +1447,23 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
 | `hypr/conf/local.conf` | `instalar.sh` |
 | `waybar/local.jsonc` | `instalar.sh` (desde `waybar/derecha.jsonc`) |
+
+### Y uno que es tuyo: `hypr/conf/personal.conf`
+
+`instalar.sh` lo crea **vacío** la primera vez y **no lo vuelve a tocar nunca**.
+No se versiona. Es donde van tus añadidos sin tener que editar los ficheros del
+repo: un `exec-once` de un programa que solo tienes tú, un atajo para algo que
+aquí no viene, o un ajuste que prefieres distinto.
+
+```conf
+exec-once = mi-programa
+bind = SUPER, G, exec, otra-cosa
+bind = SUPER, Q, killactive     # también sirve para pisar uno del repo
+```
+
+Se carga **el último** de todos, así que desde ahí puedes pisar cualquier cosa:
+en hyprlang gana quien habla al final. Y como está fuera de git, tus cambios no
+te salen como modificaciones cada vez que traigas actualizaciones.
 
 **`colores.css`, `mako/colores` y `Colores.qml` sí se versionan**: salen de la
 paleta y son iguales en cualquier equipo. Los del dock, `local.conf` y

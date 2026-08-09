@@ -31,7 +31,7 @@ generica, sin lista que mantener:
                   precio de esta capa; se apaga con CAPA_PANTALLA_COMPLETA.
 
 Ademas hay un JSON de excepciones a mano (`hypr/congelar-excepciones.json`),
-mismo patron que `dock-apps.json`, para que tanto tu como el asistente podais
+mismo patron que `dock-apps.json`, para que tanto tu como un script podais
 meter o sacar algo sin tocar este archivo.
 
 POR QUE SCOPES DE SYSTEMD Y NO PIDS SUELTOS
