@@ -3,16 +3,27 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-08**, en la **PC**: llegó el historial de
+Última sesión: **2026-08-09**, en el **portátil**, y fue toda de aspecto: el
+icono de CeliuzPaper —que llevaba sin verse en el dock—, los iconos de la barra
+más grandes, los workspaces convertidos en **puntos**, y la pantalla de bloqueo
+rediseñada a una **columna a la izquierda**. Ver abajo, que de las tres salieron
+fallos que no se veían.
+
+**TODO SUBIDO Y SINCRONIZADO en `4ade398`.** Igual que la vez anterior, el push
+se rechazó a mitad: la PC había subido dos commits (`avisos.py`, `lock.sh`,
+`personal.conf`) mientras aquí se trabajaba. Rebase, sin conflictos, y **todo
+verificado otra vez después**, que es la parte que importa: el remoto tocaba
+`lock.sh` y las mismas pruebas del bloqueo. 17 pruebas en verde,
+`instalar.sh --revisar` sin pendientes, `configerrors` vacío.
+
+> Antes del rebase se copiaron aparte los cinco generados (`dock-apps.json`,
+> `dock.jsonc`, `dock-icons.css`, `local.conf`, `local.jsonc`). No hicieron
+> falta, pero es la precaución del `CLAUDE.md` y cuesta diez segundos.
+
+Antes, el **2026-08-08**, en la **PC**: llegó el historial de
 notificaciones (`SUPER+H`), la captura de la ventana con foco (`SUPER+ALT+S`),
 se cerró el diálogo de «no responde» que asomaba sobre la pantalla de bloqueo, y
 apareció `hypr/conf/personal.conf` para lo que es de una máquina y de nadie más.
-
-**TODO SUBIDO Y SINCRONIZADO en `f458260`.** La PC trajo 14 commits del portátil
-en dos tandas (la segunda llegó mientras se trabajaba, y se resolvió con rebase:
-historia lineal). Verificado después del rebase: 16 pruebas en verde,
-`instalar.sh --revisar` sin pendientes, `configerrors` vacío, un solo demonio de
-barras con sus 4 waybar, un solo `mpvpaper` y pausado con ventanas delante.
 Respaldo previo en `~/respaldo-dotfiles-20260808/`.
 
 Antes, el **2026-08-07** en el **portátil**. Se cerró el caso de las barras
@@ -33,7 +44,7 @@ portátil para todos los teclados.
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 16 pruebas. Deben salir todas
+./tests/run.sh          # 17 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -63,6 +74,101 @@ el huérfano se quedó gastando GPU con **1 GB de RSS**. Está contado en el
 `CLAUDE.md`.
 
 ---
+
+## La sesión de aspecto (2026-08-09, portátil)
+
+Tres encargos que parecían de cinco minutos cada uno. De los tres salió un fallo
+que no se veía, y ése es el patrón que conviene recordar: **en lo visual, «se
+dibuja algo» no significa «está bien»**.
+
+### 1. El icono de CeliuzPaper no se veía en el dock
+
+No faltaba el icono: el SVG llevaba su comentario de diseño **entre la
+declaración XML y el `<svg>`**, y gdk-pixbuf olfatea el formato en los primeros
+bytes. Se plantaba con *«Couldn't recognize the image file format»*, y como el
+dock carga los iconos por `background-image`, una imagen que no carga no da
+error — deja un botón **vacío**. La app estaba ahí, solo que invisible salvo por
+el tooltip.
+
+El comentario ahora va dentro del `<svg>`. **Cualquier icono nuevo del repo
+empieza por `<svg`**, y hay un comando de una línea para comprobarlo en el
+`CLAUDE.md`.
+
+### 2. Los iconos de la barra, y los workspaces como puntos
+
+Los glifos pasaron del 130% al 150%, y con ellos **cuatro sitios que no se
+enteran unos de otros**: la altura de la barra (o GTK recorta las pastillas de
+hover), el `font-size` de los workspaces, y el `icon-size` del tray. Está
+anotado en el comentario de `style.css`.
+
+Los workspaces son ahora puntos, y el activo una pastilla. Dos hallazgos:
+
+- **`#workspaces button.occupied` no había pintado nunca nada.** El módulo de
+  Hyprland marca los workspaces **vacíos** (`.empty`), no los llenos. Con números
+  apenas se notaba; con puntos, un workspace con ventanas se veía igual que uno
+  vacío. Se descubrió pintando `.empty` de rojo. La lógica va ahora al revés
+  —encendido es el caso base— para que degrade del lado bueno.
+- **En el CSS de GTK el alto solo se acota con el margen vertical.** `min-height`
+  es un suelo y no hay techo; probado también moviendo la forma a la etiqueta,
+  que parecía la salida elegante: se estira igual. O sea que la forma del punto
+  sale de una **resta** contra el alto de la barra, y los dos números viven en
+  ficheros distintos. A 60 px de barra los puntos salen cápsulas verticales y el
+  activo un círculo — el diseño del revés, sin un solo error. Lo vigila
+  `tests/unidad/barra-workspaces.sh`.
+
+### 3. La pantalla de bloqueo, a una columna izquierda
+
+Era una tarjeta en el centro y se plantaba justo encima de lo que estuvieras
+mirando. Ahora: banda oscura a la izquierda, título y usuario centrados en ella,
+y debajo reloj, fecha, campo y una fila con batería, teclado y red.
+
+Lo que hay que saber si se toca:
+
+- **`halign` de hyprlock centra en la PANTALLA.** Para centrar dentro de la banda
+  hace falta `halign = center` con un desplazamiento **negativo**
+  (`$lock_col_centro`). Con `halign = left` la x es el borde izquierdo del texto
+  y habría que saber cuánto mide — cambia con la fuente y con los kanji. Ese
+  número depende del ancho del monitor, así que lo calcula `pantalla.py`.
+- **`px()` tiene un suelo (`FACTOR_MIN`)**, o sea que en una pantalla estrecha
+  devuelve más ancho del que cabe. Medido en el anidado con una salida de 351 px:
+  la banda salía de 409 y el desplazamiento se volvía **positivo** — el título se
+  iba a la derecha en vez de centrarse. Todo ancho que tenga que caber lleva
+  ahora su tope contra el ancho real.
+- **La fila de datos** la imprime `hypr/scripts/lock-info.sh` en una línea con
+  marcado Pango. Una etiqueta y no tres porque hyprlang no sabe sumar, y así lo
+  que no aplica —la batería en la PC— desaparece sin dejar hueco. Sus colores se
+  **leen** de `colores.conf`: escribirlos habría sido una cuarta copia de la
+  paleta, y quien clone con otro tono se encontraría el violeta del autor.
+
+### Cómo se prueba una pantalla de bloqueo sin bloquearte
+
+Esto es lo más reutilizable de la sesión. **No se prueba en el escritorio vivo**
+—así se quedó bloqueado el autor el 2026-08-03—, se prueba en el anidado:
+
+```sh
+./tests/anidado.sh env FUERA_RUNTIME="$XDG_RUNTIME_DIR" /ruta/a/tu-script.sh
+```
+
+y dentro del script, antes de lanzar nada: poner la salida a la resolución de
+verdad (`hyprctl keyword monitor <nombre>,1366x768@60,0x0,1`), generar las
+medidas con `pantalla.py --hyprlock`, lanzar `hyprlock -c ... --no-fade-in`,
+esperar, `grim`, y matarlo.
+
+**El seguro no puede ser el nombre del display.** El anidado llama al suyo
+`wayland-1`, igual que la sesión de fuera, así que compararlos da un falso
+positivo — pasó en esta sesión. Lo que separa a los dos es el
+**`XDG_RUNTIME_DIR`**, y de propina que `$HOME` sea el desechable.
+
+### Lo que quedó pendiente de aquí
+
+- **SDDM ya no hace juego con el bloqueo.** El login sigue con la tarjeta violeta
+  centrada. Está anotado en el `README.md` para que no parezca un descuido. Si se
+  quiere igualar, es trabajo aparte y encima es lo único que pide `sudo`.
+- **El teclado sale como «Spanish», no «latam».** Es lo que reporta Hyprland como
+  distribución activa (`active_keymap`), y distingue bien de «English». Para el
+  código corto habría que mapearlo a mano.
+- El usuario **aún no ha visto el bloqueo nuevo en su pantalla**: está verificado
+  con hyprlock de verdad en el anidado, pero falta el `SUPER+L` real.
 
 ## Lo último: las barras dobles eran un huérfano (2026-08-07, portátil)
 
@@ -538,8 +644,16 @@ ahí, ojo con lo que lanzas.
 
 ## Lo primero: una comprobación que solo se hace con los ojos
 
-**Bloquea la pantalla (`SUPER+L`) y mira si vuelve a asomar el diálogo de «no
-responde».** El arreglo se hizo por la causa, no por el síntoma reproducido: en
+Son **dos**, y las dos se hacen con el mismo `SUPER+L`.
+
+**La primera: mira el diseño nuevo del bloqueo.** Está verificado con hyprlock de
+verdad dentro del anidado, a 1366x768 y con el fondo real, pero nadie lo ha visto
+todavía en la pantalla de casa. Lo que se juzga con los ojos y no con una prueba:
+si el reloj y el campo caen a gusto en la columna, si la banda tapa demasiado
+—o demasiado poco— del fondo, y si la fila de datos de abajo se lee. La
+contraseña no se tocó, así que el riesgo es cero: como mucho, se ve raro.
+
+**La segunda: si vuelve a asomar el diálogo de «no responde».** El arreglo se hizo por la causa, no por el síntoma reproducido: en
 la sesión del 08 no se consiguió provocar el diálogo a mano —congelando una app
 con el foco puesto, 40 s, y hasta con `misc:anr_missed_pings` bajado a 1— así
 que lo único que falta es verlo con un bloqueo de verdad, del que dure minutos.
@@ -602,6 +716,21 @@ aunque la sesión ya use `us`. Se arregla con `localectl` y sudo.
 
 Está fuera del repo y tiene un modo de fallo feo (cambia cómo se teclea la
 contraseña en el login), así que **solo si se pide**.
+
+### 6. SDDM se quedó descolgado del rediseño del bloqueo
+
+Desde el 2026-08-09 el bloqueo es una columna a la izquierda y el login sigue con
+la tarjeta violeta centrada. **Dejaron de ser gemelos**, y está anotado en el
+`README.md` para que nadie lo lea como un descuido.
+
+Igualarlos no es traducir el `.conf`: son dos ficheros que no comparten una línea
+—uno es hyprlang, el otro QML— y hay que rehacer el diseño a mano en
+`sddm/celiuz/Main.qml`. Además el greeter es **lo único del repo que pide `sudo`**
+y lo único que puede dejarte sin arrancar, así que se prueba sí o sí con
+`sddm-greeter-qt6 --test-mode --theme <ruta>`, y también **sin `fondo.mp4` ni
+`fondo.jpg`**, que es como le llega a quien clona.
+
+Vale la pena solo si molesta la diferencia: funcionalmente no falla nada.
 
 ## Menores, ya ofrecidos y no pedidos
 
