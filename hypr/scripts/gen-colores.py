@@ -8,11 +8,13 @@ CSS de GTK, mako no tiene variables y el tema de SDDM es QML. Sin esto, el
 violeta estaria escrito a mano en cuatro sitios y tarde o temprano dejarian de
 coincidir.
 
-Tres destinos, una sola fuente:
+Cuatro destinos, una sola fuente:
 
     waybar/colores.css    un `@define-color` por variable, que style.css importa
     mako/colores          los colores ya resueltos, que mako incluye al final
     sddm/celiuz/Colores.qml   un QtObject que Main.qml instancia
+    hypr/conf/colores-pango.conf  la misma paleta en #RRGGBB, para el marcado
+                          Pango de hyprlock (ver render_pango)
 
 Los alfas NO se generan para waybar: el CSS de GTK sabe derivarlos solo con
 `alpha(@amatista, 0.35)`. QML tambien, con Qt.alpha().
@@ -30,6 +32,7 @@ ORIGEN = RAIZ / "hypr" / "conf" / "colores.conf"
 DESTINO = RAIZ / "waybar" / "colores.css"
 DESTINO_MAKO = RAIZ / "mako" / "colores"
 DESTINO_SDDM = RAIZ / "sddm" / "celiuz" / "Colores.qml"
+DESTINO_PANGO = RAIZ / "hypr" / "conf" / "colores-pango.conf"
 
 # Que tono le toca a cada parte de una notificacion.
 #
@@ -210,6 +213,45 @@ def render_sddm(paleta) -> str:
     )
 
 
+def render_pango(paleta) -> str:
+    """La paleta otra vez en hyprlang, pero en el formato que quiere Pango.
+
+    POR QUE HACE FALTA, SI hyprlock YA LEE colores.conf. Porque dentro de
+    hyprlock hay dos textos que no son un color de un campo, sino MARCADO PANGO:
+    el `placeholder_text` y el `fail_text`. Ahi el color va dentro de un
+    `<span foreground="...">`, y Pango no entiende `rgba(8a7aa8ff)`: quiere
+    `#RRGGBB`. Asi que esos dos llevaban el hex escrito a mano — y uno de ellos
+    ya se habia separado de la paleta sin que nadie lo notara (ponia #8b86a3
+    cuando $tenue es #8a7aa8), que es exactamente como se separa una copia.
+
+    Comprobado en un Hyprland anidado, porque no era evidente: hyprlang **si**
+    sustituye variables dentro del marcado Pango. Se pinto un placeholder de
+    verde puro por variable y salio verde.
+
+    LA DOBLE ALMOHADILLA NO ES UNA ERRATA. En hyprlang `#` abre un comentario,
+    asi que un color literal se escapa como `##RRGGBB`; el valor que llega a
+    Pango es `#RRGGBB`. Por eso el fichero se ve raro y esta bien.
+
+    El alfa se descarta a proposito: en Pango la transparencia es otro atributo
+    (`alpha=`), no parte del color, y meterla en el hex lo dejaria invalido.
+    """
+    ancho = max(len(n) for n, _, _, _ in paleta)
+    filas = [f"$pango_{nombre:<{ancho}} = ##{hexa[0:6]}"
+             for nombre, _, hexa, _ in paleta]
+    return (
+        "# GENERADO POR hypr/scripts/gen-colores.py — NO EDITAR A MANO.\n"
+        "#\n"
+        "# La paleta para el MARCADO PANGO de hyprlock (placeholder_text y\n"
+        "# fail_text), que no entiende el rgba() de hyprlang y quiere #RRGGBB.\n"
+        "#\n"
+        "# La doble almohadilla es el escape de hyprlang para una # literal: no\n"
+        "# es una errata, y sin ella el resto de la linea seria un comentario.\n"
+        "#\n"
+        "# Sin alfa a proposito: en Pango la transparencia es el atributo\n"
+        "# `alpha=`, aparte del color.\n\n" + "\n".join(filas) + "\n"
+    )
+
+
 def main() -> int:
     if not ORIGEN.exists():
         print(f"no encuentro la paleta: {ORIGEN}", file=sys.stderr)
@@ -222,7 +264,8 @@ def main() -> int:
 
     salidas = [(DESTINO, render(paleta)),
                (DESTINO_MAKO, render_mako(paleta)),
-               (DESTINO_SDDM, render_sddm(paleta))]
+               (DESTINO_SDDM, render_sddm(paleta)),
+               (DESTINO_PANGO, render_pango(paleta))]
 
     if "--check" in sys.argv:
         viejos = [d for d, nuevo in salidas

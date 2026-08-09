@@ -112,7 +112,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | Generado | Lo escribe | Desde |
 |---|---|---|
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
-| `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
+| `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml`, `hypr/conf/colores-pango.conf` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
 | `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py`, y `waybar/sensores.jsonc` + `lib/sensores.py` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
@@ -405,6 +405,30 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   alfa (`rgba(b16cffff)` → `#b16cff`), con los de fábrica como respaldo para que
   un equipo a medio instalar no se quede sin fila. Lo comprueba
   `tests/unidad/lock-info.sh` dándole una paleta verde imposible de confundir.
+- **Y hyprlang SÍ sustituye variables dentro del marcado Pango — no hacía falta
+  copiar el hex.** `placeholder_text` y `fail_text` de `hyprlock.conf` llevaban
+  el color escrito a mano porque Pango no entiende `rgba(8a7aa8ff)`, y se dio
+  por hecho que no había alternativa. **Medido en un anidado**: se pintó un
+  placeholder de verde puro por variable y salió verde. Lo que hacía falta era
+  la paleta en el formato de Pango, y eso lo genera `gen-colores.py` en
+  `hypr/conf/colores-pango.conf` (`$pango_tenue = ##8a7aa8`), que `hyprlock.conf`
+  hace `source`. **La doble almohadilla no es una errata**: en hyprlang `#` abre
+  un comentario, así que un color literal se escapa con `##` y lo que llega a
+  Pango es `#8a7aa8`. Con una sola, la variable queda **vacía** y el `<span>`
+  sale sin color — sin un solo error.
+- **Un color copiado no falla nunca: se dibuja igual, del tono de otro.** Y por
+  eso hay que vigilarlo con una prueba y no con la memoria. Cuando se escribió
+  `tests/unidad/paleta-bloqueo.sh` ya había **dos** copias separadas de la
+  paleta, las dos invisibles: `placeholder_text` ponía `#8b86a3` cuando `$tenue`
+  es `#8a7aa8`, y el velo más dos sombras usaban `090312`, que no es de nadie
+  (lo parecido es `$abismo`, `0d0418`). Para quien clona el repo es lo que
+  duele: se pone su color, y la pantalla de bloqueo se le queda a medias con el
+  violeta del autor. Los literales en `hyprlock.conf` son **inevitables**
+  —hyprlang no deriva un alfa de una variable, así que una sombra al 55% hay que
+  escribirla `rgba(b16cff8c)`—, pero lo que sí se puede exigir es que **la parte
+  RGB de cada literal sea la de algún color de la paleta**; el alfa es libre. Eso
+  es lo que comprueba la prueba, y **falla 7 de 9 contra el código anterior**,
+  listando fichero, línea y color.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
 - **Un SVG que empieza por un comentario no es una imagen para gdk-pixbuf.** El

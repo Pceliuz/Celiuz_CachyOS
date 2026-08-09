@@ -61,8 +61,10 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   escritorios. Devuelve `None`, y no `False`, cuando no puede mirar.
 - **`lock.sh` + `hyprlock.conf`** — la pantalla de bloqueo. Ver su sección abajo,
   porque hace bastante más que lanzar `hyprlock`.
-- **`gen-colores.py`** — pasa la paleta de `colores.conf` al CSS de waybar y a la
-  config de mako. Es lo que hace que el violeta esté escrito en un solo sitio.
+- **`gen-colores.py`** — pasa la paleta de `colores.conf` a los cuatro sitios que
+  no saben leer hyprlang: el CSS de waybar, la config de mako, el QML del tema de
+  SDDM y el marcado Pango del bloqueo. Es lo que hace que el violeta esté escrito
+  en un solo sitio.
 - **`sonido-notificacion.sh`** — el «toc» de las notificaciones. Busca el
   reproductor y el sonido que haya en la máquina, y se calla sin protestar si no
   hay ninguno. `--revisar` dice qué usa, o por qué no suena.
@@ -638,12 +640,36 @@ de red y memoria) pasó a la familia violeta.
 |---|---|
 | Hyprland | `source` directo de `colores.conf` |
 | hyprlock | `source` directo: habla el mismo hyprlang |
+| hyprlock, texto del campo | `hypr/conf/colores-pango.conf`, **generado** — ver abajo |
 | waybar | `waybar/colores.css`, **generado** por `hypr/scripts/gen-colores.py` |
 
 waybar es el raro: se estiliza con CSS de GTK, que no sabe leer un `.conf`. El
 generador emite un `@define-color` por variable. Si cambias un color en
 `colores.conf`, **vuelve a lanzar `gen-colores.py`** o la barra se queda con el
 viejo; `gen-colores.py --check` avisa si están desincronizados.
+
+Y hay un rincón de hyprlock que tampoco puede leer la paleta directamente: el
+texto del campo de la contraseña (`placeholder_text` y `fail_text`) es **marcado
+Pango**, y Pango quiere `#RRGGBB`, no el `rgba()` de hyprlang. Por eso el
+generador emite además `hypr/conf/colores-pango.conf` con la paleta en ese
+formato. Tú no tienes que tocarlo: **cambia el color en `colores.conf` y vuelve a
+lanzar el generador**, como con todo lo demás.
+
+> Si te asomas a ese fichero verás `$pango_tenue = ##8a7aa8`, con **dos**
+> almohadillas. No es una errata: en hyprlang `#` abre un comentario, así que un
+> color literal se escapa doblándola, y lo que le llega a Pango es `#8a7aa8`.
+> Con una sola, la variable se queda vacía y el texto sale sin color, **sin dar
+> ningún error**.
+
+**Ninguno de los colores de la pantalla de bloqueo puede salirse de la paleta**,
+y eso lo vigila `tests/unidad/paleta-bloqueo.sh`. Ahí quedan hexadecimales
+escritos a mano por narices —hyprlang no sabe sacar «`$amatista` al 55%» de una
+variable, así que una sombra translúcida hay que escribirla `rgba(b16cff8c)`—,
+pero la parte del color tiene que ser la de alguna variable de `colores.conf`; el
+alfa es libre. Sin esa prueba las copias se separan solas y no se nota: cuando se
+escribió ya había dos, y la consecuencia era que quien clonara el repo y se
+pusiera su propio tono se encontraba media pantalla de bloqueo con el violeta del
+autor.
 
 > **Dos trampas del formato de color, que muerden en direcciones opuestas:**
 >
@@ -1467,6 +1493,7 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `waybar/colores.css` | `hypr/scripts/gen-colores.py` |
 | `mako/colores` | `hypr/scripts/gen-colores.py` |
 | `sddm/celiuz/Colores.qml` | `hypr/scripts/gen-colores.py` |
+| `hypr/conf/colores-pango.conf` | `hypr/scripts/gen-colores.py` |
 | `/var/lib/sddm-celiuz/fondo.{mp4,jpg}` | `hypr/scripts/sddm-fondo.sh`, solo, al cambiar de fondo |
 | `/etc/sddm.conf.d/10-celiuz.conf` | `instalar.sh --sddm` |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
