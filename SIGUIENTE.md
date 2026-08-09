@@ -3,18 +3,29 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-09**, en el **portátil**, y fue toda de aspecto: el
+Última sesión: **2026-08-09**, en la **PC**, recogiendo lo del portátil. Se trajo
+el rediseño del bloqueo y se le pasó la pregunta de siempre —*¿esto vale para
+quien clone el repo?*—, de la que salieron **tres colores y una medida que no
+salían de donde deberían**. Ver «La paleta del bloqueo», aquí abajo.
+
+Antes, el mismo día en el **portátil**, la sesión de aspecto: el
 icono de CeliuzPaper —que llevaba sin verse en el dock—, los iconos de la barra
 más grandes, los workspaces convertidos en **puntos**, y la pantalla de bloqueo
 rediseñada a una **columna a la izquierda**. Ver abajo, que de las tres salieron
 fallos que no se veían.
 
-**TODO SUBIDO Y SINCRONIZADO en `4ade398`.** Igual que la vez anterior, el push
-se rechazó a mitad: la PC había subido dos commits (`avisos.py`, `lock.sh`,
-`personal.conf`) mientras aquí se trabajaba. Rebase, sin conflictos, y **todo
-verificado otra vez después**, que es la parte que importa: el remoto tocaba
-`lock.sh` y las mismas pruebas del bloqueo. 17 pruebas en verde,
-`instalar.sh --revisar` sin pendientes, `configerrors` vacío.
+**TODO SUBIDO Y SINCRONIZADO.** Y por tercera vez seguida el push se rechazó a
+mitad —esta vez fue el portátil el que subió estas notas mientras la PC
+trabajaba—: rebase, sin conflictos (solo tocaba este fichero), y **todo
+verificado otra vez después**. **18 pruebas** en verde, `instalar.sh --revisar`
+sin pendientes, `configerrors` vacío, y la sesión viva intacta: un solo demonio
+de cada uno con los mismos PID que antes de empezar. Respaldo en
+`~/respaldo-dotfiles-20260809/`.
+
+> Que el push se rechace ya no es un imprevisto, es **el modo normal de trabajar
+> a dos máquinas**. La costumbre que funciona: `git fetch` justo antes de
+> empujar, rebase, y volver a verificar entero — nunca dar por buena la
+> verificación de antes del rebase.
 
 > Antes del rebase se copiaron aparte los cinco generados (`dock-apps.json`,
 > `dock.jsonc`, `dock-icons.css`, `local.conf`, `local.jsonc`). No hicieron
@@ -44,7 +55,7 @@ portátil para todos los teclados.
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 17 pruebas. Deben salir todas
+./tests/run.sh          # 18 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -74,6 +85,47 @@ el huérfano se quedó gastando GPU con **1 GB de RSS**. Está contado en el
 `CLAUDE.md`.
 
 ---
+
+## La paleta del bloqueo (2026-08-09, PC)
+
+Al traer el rediseño se le pasó la pregunta de la casa —*¿esto sería correcto en
+el equipo de otra persona?*— y salieron **cuatro cosas que no venían de donde
+deberían**. Ninguna fallaba; ése es justo el problema.
+
+**Tres colores fuera de la paleta.** `placeholder_text` ponía `#8b86a3` cuando
+`$tenue` es `#8a7aa8` —una copia que ya se había separado sola—, y el velo más
+dos sombras usaban `090312`, que no es de nadie: lo parecido es `$abismo`,
+`0d0418`. Para quien clone el repo eso significa cambiar la paleta y encontrarse
+media pantalla de bloqueo con el violeta del autor.
+
+El del campo estaba copiado porque es **marcado Pango**, que no entiende el
+`rgba()` de hyprlang, y se había dado por hecho que no había alternativa. La hay,
+y se midió en el anidado antes de creérselo: **hyprlang sí sustituye variables
+dentro del marcado Pango**. Se pintó un placeholder de verde puro por variable y
+salió verde. Lo que faltaba era la paleta en formato Pango, y eso ya sabe hacerlo
+`gen-colores.py`: cuarto destino, `hypr/conf/colores-pango.conf`.
+
+> Ahí dentro se lee `$pango_tenue = ##8a7aa8`, con **dos** almohadillas. No es
+> una errata: en hyprlang `#` abre comentario, así que un color literal se escapa
+> doblándola. Con una sola, la variable queda vacía y el texto sale sin color,
+> sin dar ningún error.
+
+**Y una medida muerta.** `$lock_rounding` se calculaba, se escribía en el
+generado y se declaraba en el `.conf`… y no la leía nadie: se quedó suelta al
+pasar de la tarjeta a la columna. Mientras tanto el campo tenía un `rounding = 14`
+escrito a mano — o sea que el único redondeo visible era el único que no
+escalaba. En 1080p no cambia nada; en el portátil pasa de 14 fijo a 10.
+
+**El cerrojo es `tests/unidad/paleta-bloqueo.sh`**, y como manda la casa se
+comprobó contra el código anterior: **falla 7 de sus 9**, diciendo fichero, línea
+y color. Lo que exige es lo único exigible sin prohibir los literales —que en
+hyprlock son inevitables, porque no hay forma de escribir «`$amatista` al 55%»—:
+**la parte RGB de cada literal tiene que ser la de algún color de
+`colores.conf`**; el alfa es libre.
+
+Verificado dibujando el bloqueo con hyprlock de verdad en `tests/anidado.sh`,
+**y esta vez a 1920x1080**, con la receta de más abajo (`hyprctl keyword monitor`
+dentro del anidado): la proporción de la pantalla de casa, no la de la ventanita.
 
 ## La sesión de aspecto (2026-08-09, portátil)
 
@@ -167,8 +219,10 @@ positivo — pasó en esta sesión. Lo que separa a los dos es el
 - **El teclado sale como «Spanish», no «latam».** Es lo que reporta Hyprland como
   distribución activa (`active_keymap`), y distingue bien de «English». Para el
   código corto habría que mapearlo a mano.
-- El usuario **aún no ha visto el bloqueo nuevo en su pantalla**: está verificado
-  con hyprlock de verdad en el anidado, pero falta el `SUPER+L` real.
+- El usuario **aún no ha visto el bloqueo nuevo en su pantalla**: falta el
+  `SUPER+L` real. Ya está dibujado con hyprlock de verdad en el anidado **y a
+  1920x1080** (la sesión de la PC, 2026-08-09), así que la proporción de la
+  pantalla de casa está comprobada; lo que queda es verlo con los ojos.
 
 ## Lo último: las barras dobles eran un huérfano (2026-08-07, portátil)
 
