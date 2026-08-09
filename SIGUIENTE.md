@@ -4,8 +4,16 @@ Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
 Última sesión: **2026-08-08**, en la **PC**: llegó el historial de
-notificaciones (`SUPER+H`), la captura de la ventana con foco (`SUPER+ALT+S`) y
-se cerró el diálogo de «no responde» que asomaba sobre la pantalla de bloqueo.
+notificaciones (`SUPER+H`), la captura de la ventana con foco (`SUPER+ALT+S`),
+se cerró el diálogo de «no responde» que asomaba sobre la pantalla de bloqueo, y
+apareció `hypr/conf/personal.conf` para lo que es de una máquina y de nadie más.
+
+**TODO SUBIDO Y SINCRONIZADO en `f458260`.** La PC trajo 14 commits del portátil
+en dos tandas (la segunda llegó mientras se trabajaba, y se resolvió con rebase:
+historia lineal). Verificado después del rebase: 16 pruebas en verde,
+`instalar.sh --revisar` sin pendientes, `configerrors` vacío, un solo demonio de
+barras con sus 4 waybar, un solo `mpvpaper` y pausado con ventanas delante.
+Respaldo previo en `~/respaldo-dotfiles-20260808/`.
 
 Antes, el **2026-08-07** en el **portátil**. Se cerró el caso de las barras
 que no se ocultaban, se veían sobre el bloqueo y salían dobles al desbloquear:
@@ -25,7 +33,7 @@ portátil para todos los teclados.
 ## Lo primero al abrir el repo
 
 ```sh
-./tests/run.sh          # 15 pruebas. Deben salir todas
+./tests/run.sh          # 16 pruebas. Deben salir todas
 ./instalar.sh --revisar # no debe sacar avisos inesperados
 hyprctl configerrors    # vacío
 ```
@@ -33,6 +41,26 @@ hyprctl configerrors    # vacío
 Si las pruebas fallan **antes** de tocar nada, eso es lo que hay que arreglar
 primero: significa que algo del sistema cambió por debajo (una actualización de
 Hyprland, de mpv o de waybar).
+
+### Y si acabas de traer cambios con la sesión abierta
+
+Los demonios que ya estaban corriendo son del código **viejo**, y eso no se nota
+hasta que algo falla raro. Lo más corto y seguro es **cerrar sesión y volver a
+entrar**. Si no quieres, hay que relanzarlos a mano:
+
+```sh
+hyprctl dispatch exec "$HOME/.config/hypr/scripts/waybar-autohide.py --reiniciar"
+hyprctl dispatch exec "$HOME/.config/hypr/scripts/wallpaper.sh"
+```
+
+Van por `hyprctl dispatch exec` y no a pelo para que cuelguen de Hyprland, como
+un `exec-once`; lanzados desde una terminal se mueren con ella.
+
+**Y después comprueba que no quedó un `mpvpaper` de más** (`pgrep -c mpvpaper`
+tiene que decir 1). Al traer los canales con firma pasó justo eso: el que ya
+corría no lleva firma, el código nuevo no lo reconoce y levanta otro al lado —
+el huérfano se quedó gastando GPU con **1 GB de RSS**. Está contado en el
+`CLAUDE.md`.
 
 ---
 
@@ -507,6 +535,20 @@ NOMBRE, y eso no lo aísla ningún `$HOME`. Si dentro del anidado lanzas a mano
 algo que mate por nombre —`wallpaper.sh`, sin ir más lejos—, se llevará por
 delante lo de la sesión de fuera igual. Allí no arranca nada solo; a partir de
 ahí, ojo con lo que lanzas.
+
+## Lo primero: una comprobación que solo se hace con los ojos
+
+**Bloquea la pantalla (`SUPER+L`) y mira si vuelve a asomar el diálogo de «no
+responde».** El arreglo se hizo por la causa, no por el síntoma reproducido: en
+la sesión del 08 no se consiguió provocar el diálogo a mano —congelando una app
+con el foco puesto, 40 s, y hasta con `misc:anr_missed_pings` bajado a 1— así
+que lo único que falta es verlo con un bloqueo de verdad, del que dure minutos.
+
+Si vuelve a aparecer, **eso es lo primero que hay que contar**, porque
+significaría que el diálogo no viene por el congelado y toda la explicación de
+abajo se cae. Lo siguiente que miraría entonces: si ya estaba en pantalla antes
+de bloquear (una app colgada de verdad), porque el `xray` lo enseñaría igual y el
+arreglo no cubre ese caso.
 
 ## Lo siguiente, por orden de valor
 
