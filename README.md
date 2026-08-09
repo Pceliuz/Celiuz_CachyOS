@@ -1056,6 +1056,26 @@ día quieres montarle otra cara.
 
 ## La pantalla de bloqueo
 
+Todo vive en una **columna a la izquierda**, sobre una banda oscura: el título y
+tu usuario centrados en ella, y debajo el reloj, la fecha, el campo de la
+contraseña y una fila con la batería, el teclado y la red. Los otros dos tercios
+de la pantalla quedan limpios para que se vea el fondo.
+
+No siempre fue así: antes era una tarjeta flotando en el centro, y el problema no
+era de gusto — se plantaba justo encima de lo que estuvieras mirando.
+
+> **Si tocas las medidas**, ojo con dos cosas que el `hyprlock.conf` explica al
+> detalle. La primera: el título se centra en la banda con `halign = center` y un
+> desplazamiento **negativo** (`$lock_col_centro`), porque hyprlock centra en la
+> *pantalla* y luego suma la posición; con `halign = left` habría que saber
+> cuánto mide el texto, y eso cambia con la fuente y con los kanji. La segunda:
+> ese número y el ancho de la banda **dependen del monitor**, así que los calcula
+> `lib/pantalla.py` y no se escriben a mano.
+>
+> La fila de datos la imprime `hypr/scripts/lock-info.sh` en una sola línea con
+> marcado Pango. Una sola etiqueta y no tres porque hyprlang no sabe sumar, y así
+> además lo que no aplica —la batería en un sobremesa— desaparece sin dejar hueco.
+
 `SUPER+L` no lanza `hyprlock` a secas. `hypr/scripts/lock.sh`:
 
 1. Guarda el escritorio en el que estás y salta a uno **vacío** (el 99).
@@ -1193,9 +1213,15 @@ vacía), y su ficha dice «imagen fija» en vez de inventarse una duración —
 
 ## La pantalla de inicio de sesión (SDDM)
 
-La que sale al encender el equipo, antes de que exista tu escritorio. Es la
-hermana de la pantalla de bloqueo: misma tarjeta violeta, mismo título, mismo
-reloj y tu fondo en vídeo detrás. Vive en `sddm/celiuz/` y está escrita en QML.
+La que sale al encender el equipo, antes de que exista tu escritorio. Comparte
+paleta, título, reloj y tu fondo en vídeo con la pantalla de bloqueo. Vive en
+`sddm/celiuz/` y está escrita en QML.
+
+> Ojo, que ya **no son gemelas**: el bloqueo pasó a una columna a la izquierda y
+> aquí sigue la tarjeta violeta centrada. Es a propósito por ahora —son dos
+> ficheros que no comparten una línea de código, y el greeter es lo único que
+> pide `sudo` y lo único que puede dejarte sin arrancar—, pero si buscas por qué
+> se ven distintas, es esto y no un descuido.
 
 **Es opcional y es lo único de este repo que pide `sudo`.** Un tema de SDDM no
 tiene equivalente por usuario: tiene que copiarse a `/usr/share/sddm/themes`. Por

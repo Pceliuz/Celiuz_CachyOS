@@ -131,6 +131,16 @@ comprobar_dependencias() {
         *"MesloLGS Nerd Font"*) ;;
         *) aviso "falta la fuente de iconos: sudo pacman -S ttf-meslo-nerd" ;;
     esac
+    # Los kanji del titulo de la pantalla de bloqueo (彼岸花, y el mismo texto en
+    # el tema de SDDM). Sin esta fuente no fallan: salen como cuadrados vacios,
+    # que es peor, porque parece que la config esta rota y no que falta un
+    # paquete. Es un aviso y no un error: quien ponga un titulo en alfabeto
+    # latino no la necesita para nada.
+    case "$familias" in
+        *"Noto Sans CJK"*) ;;
+        *) aviso "falta la fuente de los kanji del bloqueo: sudo pacman -S noto-fonts-cjk"
+           gris "    sin ella, el titulo 彼岸花 sale como cuadrados (cambialo en hypr/hyprlock.conf)" ;;
+    esac
 }
 
 # --- 2. Enlaces de configuracion ---------------------------------------------

@@ -29,7 +29,7 @@ titulo "2. El fragmento para la pantalla de bloqueo"
 frag="$("$PANTALLA" --hyprlock 2>/dev/null)"
 printf '%s' "$frag" > "$TMP/frag.conf"
 cuantas=$(grep -c '^\$lock_' "$TMP/frag.conf" 2>/dev/null || echo 0)
-afirmar_igual "15" "$cuantas" "define 15 medidas"
+afirmar_igual "18" "$cuantas" "define 18 medidas"
 afirmar_contiene "$TMP/frag.conf" 'NO EDITAR' "avisa de que es generado"
 
 # Y lo que de verdad importa: que TODAS las que usa hyprlock.conf esten aqui.
@@ -74,9 +74,30 @@ print("base_factor", base["factor"])
 print("laptop_menor", int(laptop["lock_reloj"] < base["lock_reloj"]))
 print("4k_mayor", int(cuatrok["lock_reloj"] > base["lock_reloj"]))
 print("escala_cuenta", int(escalada["ancho"] == 2560))
-print("vertical_no_cero", int(vertical["lock_tarjeta_w"] > 0))
+print("vertical_no_cero", int(vertical["lock_banda_w"] > 0))
 print("legible", int(laptop["lock_reloj"] >= 20))
 print("velo_proporcional", int(abs(laptop["paper_velo"] / 768 - base["paper_velo"] / 1080) < 0.01))
+
+# La banda del bloqueo y el desplazamiento que centra el titulo dentro de ella.
+#
+# `px()` tiene un SUELO (FACTOR_MIN), asi que en una pantalla estrecha devuelve
+# mas ancho del que cabe. Medido en el Hyprland anidado con una salida de 351px:
+# la banda salia de 409 —se comia la pantalla— y lock_col_centro se volvia
+# POSITIVO, o sea que el titulo se iba a la derecha en vez de centrarse en la
+# columna. Y no falla nada: se dibuja igual, solo que al reves.
+minusculo = p.medidas(mon(351, 453))
+anchos = {"base": (base, 1920), "laptop": (laptop, 1366),
+          "4k": (cuatrok, 3840), "vertical": (vertical, 1080),
+          "minusculo": (minusculo, 351)}
+print("banda_cabe", int(all(m["lock_banda_w"] < w for m, w in anchos.values())))
+print("centro_negativo", int(all(m["lock_col_centro"] < 0 for m, _ in anchos.values())))
+# El borde derecho de la banda va SIEMPRE dos pixeles antes de su final: es un
+# shape aparte porque hyprlang no sabe restar.
+print("borde_pegado", int(all(m["lock_banda_borde_x"] == m["lock_banda_w"] - 2
+                              for m, _ in anchos.values())))
+# Y la columna tiene que empezar dentro de la banda, no fuera.
+print("columna_dentro", int(all(0 < m["lock_col_x"] < m["lock_banda_w"]
+                                for m, _ in anchos.values())))
 PY
 leer() { grep "^$1 " "$TMP/escalas.txt" | cut -d' ' -f2; }
 afirmar_igual "1.0" "$(leer base_factor)" "en 1920x1080 el factor es 1 (no cambia nada)"
@@ -86,6 +107,10 @@ afirmar_igual "1" "$(leer escala_cuenta)" "una 4K con escala 1.5 se mide como 25
 afirmar_igual "1" "$(leer vertical_no_cero)" "una pantalla vertical no da medidas en cero"
 afirmar_igual "1" "$(leer legible)" "por pequena que sea la pantalla, el reloj sigue legible"
 afirmar_igual "1" "$(leer velo_proporcional)" "el velo del selector ocupa la misma proporcion de pantalla"
+afirmar_igual "1" "$(leer banda_cabe)" "la banda del bloqueo cabe en la pantalla, por estrecha que sea"
+afirmar_igual "1" "$(leer centro_negativo)" "el titulo se centra en la banda, nunca se va a la derecha"
+afirmar_igual "1" "$(leer borde_pegado)" "el filo va pegado al borde derecho de la banda"
+afirmar_igual "1" "$(leer columna_dentro)" "la columna empieza dentro de la banda"
 
 titulo "4. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real

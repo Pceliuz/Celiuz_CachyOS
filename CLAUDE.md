@@ -376,6 +376,35 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   `j/layers` (`top` = puesta, `bottom` = escondida) en vez de recordarla: si una
   señal se pierde, el ciclo siguiente lo corrige solo. **No vuelvas a un estado
   recordado**, por barato que parezca.
+- **En hyprlock, `halign` centra en la PANTALLA, no en lo que tú creas.** Para
+  poner el título dentro de la banda izquierda del bloqueo no vale `halign =
+  center` a secas: eso lo centra en el monitor. Y `halign = left` con una x fija
+  tampoco, porque entonces la x es el **borde izquierdo** del texto y para
+  centrarlo habría que saber cuánto mide — y eso cambia con la fuente, con el
+  idioma y con los kanji. Lo que funciona es `halign = center` con un
+  desplazamiento **negativo** hasta el centro de la banda, que es
+  independiente del ancho del texto. Ese número **depende del monitor** (es la
+  diferencia entre dos centros), así que lo calcula `lib/pantalla.py` y no se
+  escribe a mano: en el sobremesa y en el portátil no vale el mismo.
+- **Y `px()` tiene un SUELO, así que en una pantalla estrecha devuelve más de lo
+  que cabe.** `FACTOR_MIN = 0.62` existe para que el reloj no quede ilegible,
+  pero eso significa que un ancho escalado puede salirse. Medido en el Hyprland
+  anidado con una salida de 351 px: la banda del bloqueo salía de 409 —se comía
+  la pantalla entera— y el desplazamiento de arriba se volvía **positivo**, o sea
+  que el título se iba a la derecha en vez de centrarse. **No falla nada**: se
+  dibuja igual, solo que al revés. Todo ancho que salga de `px()` y tenga que
+  caber en la pantalla necesita su tope contra el ancho real
+  (`min(px(...), int(ancho * 0.42))`). Lo vigila `tests/unidad/pantalla.sh` contra
+  cinco resoluciones, la minúscula incluida.
+- **Un `.desktop`, una fuente o un color escritos a mano son una copia que se
+  separa sola.** `lock-info.sh` emite marcado Pango, que no entiende los
+  `$amatista` de hyprlang, así que la tentación es copiar el hex. Sería la cuarta
+  copia de la paleta —existiendo `gen-colores.py` justo para evitarlo— y quien
+  clonara el repo con su propio tono se encontraría el violeta del autor en la
+  fila de datos. Se leen de `hypr/conf/colores.conf` en caliente, recortando el
+  alfa (`rgba(b16cffff)` → `#b16cff`), con los de fábrica como respaldo para que
+  un equipo a medio instalar no se quede sin fila. Lo comprueba
+  `tests/unidad/lock-info.sh` dándole una paleta verde imposible de confundir.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
 - **Un SVG que empieza por un comentario no es una imagen para gdk-pixbuf.** El

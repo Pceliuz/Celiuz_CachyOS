@@ -79,7 +79,7 @@ comprobar_bloqueo_normal() {
     afirmar_contiene "$medidas" 'GENERADO' "las medidas avisan de que son generadas"
     local cuantas
     cuantas=$(grep -c '^\$lock_' "$medidas" 2>/dev/null || echo 0)
-    afirmar_igual "15" "$cuantas" "define las 15 medidas que usa hyprlock.conf"
+    afirmar_igual "18" "$cuantas" "define las 18 medidas que usa hyprlock.conf"
 
     # --- El fondo ---
     afirmar "escribe el fragmento del fondo" test -s "$fragmento"
@@ -193,7 +193,7 @@ comprobar_sin_pantalla() {
         "$REPO/hypr/scripts/lock.sh" >/dev/null 2>&1
 
     afirmar_igual "1" "$(veces_llamado "$BLOQUEO")" "bloquea igual, sin sesion de Hyprland"
-    afirmar_contiene "$XDG_CACHE_HOME/celiuzpaper/lock-medidas.conf" '^\$lock_tarjeta_w = [0-9]+' \
+    afirmar_contiene "$XDG_CACHE_HOME/celiuzpaper/lock-medidas.conf" '^\$lock_banda_w = [0-9]+' \
         "las medidas salen del respaldo, no vacias"
 }
 

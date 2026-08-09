@@ -239,6 +239,30 @@ def medidas(mon=None):
     mon = mon or principal()
     ancho, alto = logico(mon)
     f = factor(mon)
+
+    # La banda del bloqueo se calcula aparte porque de ella sale otra medida.
+    #
+    # `lock_col_centro` es el desplazamiento que centra una etiqueta DENTRO de la
+    # banda, y no se puede escribir a mano. En hyprlock, `halign = center` centra
+    # el elemento en la PANTALLA y luego le suma `position`, asi que para dejarlo
+    # en el centro de la banda hay que restar la diferencia entre los dos centros.
+    # Sale negativo (la banda esta a la izquierda) y depende del ancho de la
+    # pantalla, o sea que en el sobremesa y en el portatil NO vale el mismo
+    # numero. Es justo el tipo de valor que este fichero existe para calcular.
+    #
+    # Se hace asi y no con `halign = left` porque con la etiqueta alineada a la
+    # izquierda habria que saber cuanto MIDE el texto para centrarlo, y eso
+    # cambia con la fuente, con el idioma y con los kanji del titulo.
+    # El tope contra el ancho REAL no es adorno. `px()` tiene un suelo
+    # (FACTOR_MIN), asi que en una pantalla estrecha devuelve mas de lo que cabe:
+    # medido en el Hyprland anidado, con una salida de 351px la banda salia de
+    # 409 y se comia la pantalla entera — y `lock_col_centro` se volvia POSITIVO,
+    # o sea que el titulo se iba hacia la derecha en vez de centrarse en la
+    # columna. Con el tope, la banda nunca pasa del 42% y el desplazamiento
+    # siempre es negativo. En 1366 y en 1920 no cambia nada: ahi manda px().
+    lock_banda_w = min(px(660, mon), int(ancho * 0.42))
+    lock_col_centro = lock_banda_w // 2 - ancho // 2
+
     return {
         "nombre": mon["nombre"],
         "ancho": ancho,
@@ -249,23 +273,41 @@ def medidas(mon=None):
         "factor": f,
 
         # --- Pantalla de bloqueo (hyprlock) ---
+        # El diseno es una COLUMNA pegada al borde izquierdo, sobre una banda
+        # oscura, para que el fondo se vea entero. Ya no hay tarjeta: la banda
+        # hace de fondo de todo el bloque.
+        #
         # El velo NO esta aqui: va en porcentaje dentro de hyprlock.conf, que es
-        # lo unico que garantiza que cubra la pantalla entera.
-        "lock_tarjeta_w": px(330, mon),
-        "lock_tarjeta_h": px(210, mon),
-        "lock_tarjeta_y": px(60, mon),
+        # lo unico que garantiza que cubra la pantalla entera. La banda tampoco
+        # lleva alto: tambien es 100% ahi dentro, por lo mismo.
+        #
+        # Los numeros estan pensados para 1080p y `px()` los trae a esta
+        # pantalla. Las `_y` son desplazamientos desde el CENTRO vertical, y en
+        # hyprlock el positivo va hacia ARRIBA.
+        "lock_banda_w": lock_banda_w,
+        # El filo amatista del borde derecho de la banda es un `shape` de 2px
+        # aparte, y su x sale de aqui porque hyprlang NO SABE RESTAR: dentro del
+        # .conf no se puede escribir `$lock_banda_w - 2`.
+        "lock_banda_borde_x": lock_banda_w - 2,
+        # El margen izquierdo del bloque: donde empiezan el reloj, la fecha, el
+        # campo y la fila de datos, todos alineados a la izquierda.
+        "lock_col_x": px(92, mon),
+        "lock_col_centro": lock_col_centro,
         "lock_rounding": max(8, px(18, mon)),
-        "lock_titulo": px(26, mon),
-        "lock_titulo_y": px(132, mon),
-        "lock_usuario": px(13, mon),
-        "lock_usuario_y": px(104, mon),
-        "lock_reloj": px(54, mon),
-        "lock_reloj_y": px(62, mon),
-        "lock_fecha": px(12, mon),
-        "lock_fecha_y": px(26, mon),
-        "lock_campo_w": px(330, mon),
-        "lock_campo_h": px(46, mon),
-        "lock_campo_y": px(-75, mon),
+        # El titulo y el usuario van centrados en la banda; el resto, no.
+        "lock_titulo": px(50, mon),
+        "lock_titulo_y": px(215, mon),
+        "lock_usuario": px(21, mon),
+        "lock_usuario_y": px(150, mon),
+        "lock_reloj": px(110, mon),
+        "lock_reloj_y": px(34, mon),
+        "lock_fecha": px(18, mon),
+        "lock_fecha_y": px(-72, mon),
+        "lock_campo_w": px(420, mon),
+        "lock_campo_h": px(56, mon),
+        "lock_campo_y": px(-157, mon),
+        "lock_info": px(17, mon),
+        "lock_info_y": px(-249, mon),
 
         # --- Selector de fondos (CeliuzPaper) ---
         # La tarjeta es 16:9 porque esa es la forma de un fondo de pantalla; solo
