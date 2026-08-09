@@ -293,7 +293,12 @@ def medidas(mon=None):
         # campo y la fila de datos, todos alineados a la izquierda.
         "lock_col_x": px(92, mon),
         "lock_col_centro": lock_col_centro,
-        "lock_rounding": max(8, px(18, mon)),
+        # El redondeo del campo de la contrasena, que es el unico que queda: la
+        # banda y el velo van a esquina viva. Tenia un 14 escrito a mano en el
+        # .conf mientras esta medida —que existia desde la tarjeta de antes— no
+        # la leia nadie. El suelo de 8 es para que en una pantalla pequena no se
+        # quede en una esquina practicamente recta.
+        "lock_rounding": max(8, px(14, mon)),
         # El titulo y el usuario van centrados en la banda; el resto, no.
         "lock_titulo": px(50, mon),
         "lock_titulo_y": px(215, mon),
