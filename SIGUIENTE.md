@@ -3,7 +3,31 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-09**, en la **PC**, recogiendo lo del portátil. Se trajo
+Última sesión: **2026-08-10**, en el **portátil**, recogiendo lo de la PC (la
+paleta del bloqueo y el redondeo medido). El pull entró limpio y no rompió nada
+—18 pruebas, `--revisar` sin pendientes, `configerrors` vacío—, pero verificarlo
+destapó un fallo **que ya llevaba dos sesiones ahí**: el resumen de
+`lib/pantalla.py` reventaba con `KeyError: 'lock_tarjeta_w'`, la medida que dejó
+de generarse al pasar el bloqueo de tarjeta a columna en `4ade398`.
+
+Lo que importa no es el `KeyError`, es **por qué nadie se enteró**: `instalar.sh`
+decidía si había ido bien mirando si salió texto (y un fallo a media impresión
+deja texto), la prueba comprobaba el `$?` una línea tarde —medía el `afirmar`
+anterior— y su otra afirmación pasaba en verde justamente porque el traceback
+llenaba la variable. Tres tapaderas, la sección 7 cortada por la mitad y «sin
+pendientes» al final. Está contado entero en el `CLAUDE.md`.
+
+Arreglado por los tres sitios: el resumen ya no nombra medidas que no existen y
+degrada a `?` en vez de reventar, `instalar.sh` mira el **código de salida** y
+avisa, y la prueba ejecuta la CLI de verdad (falla 6 de 27 contra el código
+anterior, y caza un renombrado por el `?`).
+
+> La costumbre que lo habría cazado antes, y que conviene mantener: **al traer
+> cambios, no te quedes en «las pruebas pasan»**. Ejecuta también lo que solo
+> mira un humano —`instalar.sh --revisar` entero, leyendo cada sección— y
+> sospecha de cualquier apartado que termine a media frase.
+
+Antes, el **2026-08-09**, en la **PC**, recogiendo lo del portátil. Se trajo
 el rediseño del bloqueo y se le pasó la pregunta de siempre —*¿esto vale para
 quien clone el repo?*—, de la que salieron **tres colores y una medida que no
 salían de donde deberían**. Ver «La paleta del bloqueo», aquí abajo.

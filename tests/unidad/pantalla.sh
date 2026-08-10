@@ -15,9 +15,15 @@ PANTALLA="$REPO/hypr/scripts/lib/pantalla.py"
 titulo "1. Sin sesion de Hyprland (respaldo)"
 # preparar_entorno ya quito HYPRLAND_INSTANCE_SIGNATURE, asi que no hay a quien
 # preguntar: tiene que caer al kernel o a los valores de reserva.
-salida="$("$PANTALLA" 2>&1)"
+# El codigo de salida se guarda EN LA MISMA LINEA y se compara aparte. Antes
+# esto era `afirmar "no revienta" test $? -eq 0` puesto detras de otro
+# `afirmar`, o sea que medía el codigo del afirmar anterior y no el de
+# pantalla.py; y como el `2>&1` mete el traceback dentro de la variable, la otra
+# comprobacion —«responde algo»— salia en verde PRECISAMENTE porque reventaba.
+# Asi se colo un KeyError que vivio dos sesiones con las pruebas en verde.
+salida="$("$PANTALLA" 2>&1)"; codigo=$?
 afirmar "responde algo aunque no haya compositor" test -n "$salida"
-afirmar "no se cuelga ni revienta" test $? -eq 0
+afirmar_igual "0" "$codigo" "no se cuelga ni revienta"
 ancho="$("$PANTALLA" ancho 2>/dev/null)"
 afirmar "da un ancho que es un numero" test -n "$ancho"
 case "$ancho" in
@@ -112,7 +118,28 @@ afirmar_igual "1" "$(leer centro_negativo)" "el titulo se centra en la banda, nu
 afirmar_igual "1" "$(leer borde_pegado)" "el filo va pegado al borde derecho de la banda"
 afirmar_igual "1" "$(leer columna_dentro)" "la columna empieza dentro de la banda"
 
-titulo "4. No toco nada de tu equipo"
+titulo "4. El resumen que ensena instalar.sh"
+# Las secciones de arriba miden `medidas()`, que es la parte que usa el
+# escritorio. Nadie ejecutaba la CLI, y ahi vive el otro consumidor de esas
+# claves: el resumen las pide UNA A UNA por su nombre. Cuando la tarjeta del
+# bloqueo paso a ser columna, `lock_tarjeta_w` dejo de generarse y el resumen
+# siguio pidiendola: KeyError, seccion 7 de `instalar.sh --revisar` cortada a la
+# mitad, y «sin pendientes» al final. Con 18 pruebas en verde.
+"$PANTALLA" > "$TMP/resumen.txt" 2> "$TMP/resumen-err.txt"; codigo=$?
+afirmar_igual "0" "$codigo" "el resumen sale con codigo 0"
+afirmar "no deja nada en stderr" test ! -s "$TMP/resumen-err.txt"
+afirmar_no_contiene "$TMP/resumen-err.txt" 'Traceback' "no suelta un traceback"
+afirmar_contiene "$TMP/resumen.txt" 'PANTALLA' "ensena la cabecera"
+afirmar_contiene "$TMP/resumen.txt" 'De ahi salen' "ensena las medidas que salen de ahi"
+afirmar_contiene "$TMP/resumen.txt" '^ +bloqueo ' "ensena la linea del bloqueo"
+afirmar_contiene "$TMP/resumen.txt" '^ +fondos ' "ensena la linea del selector de fondos"
+# El cerrojo de verdad: `_medida()` degrada a «?» para que a quien clone el repo
+# no se le lleve por delante toda la seccion, pero aqui un «?» es un fallo. Sin
+# esto, renombrar una medida volveria a pasar desapercibido — solo que en vez de
+# reventar, mentiria mas bajito.
+afirmar_no_contiene "$TMP/resumen.txt" '\?' "ninguna medida del resumen se ha quedado sin generar"
+
+titulo "5. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
 resumen

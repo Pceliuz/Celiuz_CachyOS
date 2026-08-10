@@ -603,6 +603,31 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   izquierda a derecha, así que cuando el proceso desaparece entre el glob y la
   lectura —pasa constantemente— el error sale por la terminal igual. El
   `2>/dev/null` va **delante**: `read -r x 2>/dev/null < "$d/comm"`.
+- **«¿Salió texto?» no es «¿fue bien?», y un `$?` puesto una línea tarde mide
+  otra cosa.** El resumen de `lib/pantalla.py` llevaba dos sesiones reventando
+  con un `KeyError: 'lock_tarjeta_w'` —la tarjeta del bloqueo pasó a ser columna
+  y esa medida dejó de generarse— **con las 18 pruebas en verde y `--revisar`
+  diciendo «sin pendientes»**. Lo tapaban tres cosas a la vez, y cada una por su
+  cuenta era inofensiva:
+  1. `instalar.sh` hacía `resumen=$(pantalla.py 2>/dev/null)` y decidía con
+     `[ -z "$resumen" ]`. Pero un fallo **a media impresión** deja la variable
+     con lo ya escrito, o sea **no vacía**: el aviso no saltaba y la sección 7
+     salía cortada por la mitad sin que nadie lo notara.
+  2. La prueba comprobaba `afirmar "no revienta" test $? -eq 0` **detrás de otro
+     `afirmar`**, así que medía el código de salida del `afirmar` anterior y no
+     el del programa. Lo bueno es guardarlo en la misma línea:
+     `salida="$(prog 2>&1)"; codigo=$?`.
+  3. Y la otra comprobación de esa prueba, `test -n "$salida"` sobre una captura
+     con `2>&1`, salía en verde **precisamente porque** el traceback llenaba la
+     variable. Una afirmación que el fallo hace pasar es peor que no tenerla.
+  La lección general: **una prueba que solo mira la salida estándar da por bueno
+  cualquier fallo que escriba algo antes de morir.** Si ejecutas un programa,
+  comprueba su código de salida y exige el stderr vacío. Y ojo con el reparto de
+  consumidores: `medidas()` estaba cubierto porque lo usa el escritorio, pero la
+  CLI que pide esas mismas claves **una a una por su nombre** no la ejecutaba
+  nadie, y ahí es donde vivía el fallo. Ahora `_medida()` degrada a `?` para que
+  a quien clone el repo no se le lleve por delante toda la sección, y
+  `tests/unidad/pantalla.sh` falla si aparece un solo `?`.
 - **Si desaparece el FIFO de órdenes de las barras, el escritorio se
   queda medio mudo**: seis piezas mandan órdenes por ahí (las dos
   líneas-tirador, `SUPER+C`, el panel de calendario, el gestor del dock y la

@@ -503,13 +503,24 @@ print(wp.carpeta_videos() or '')" 2>/dev/null)
 
 pantalla() {
     titulo "7. Pantalla"
-    local resumen
-    resumen=$("$REPO/hypr/scripts/lib/pantalla.py" 2>/dev/null)
+    local resumen codigo
+    # Lo que decide si esto fue bien es el CODIGO DE SALIDA, no que haya salido
+    # texto. Antes era `2>/dev/null` con un `-z` delante, y esa pareja tiene un
+    # punto ciego: un fallo A MEDIA IMPRESION deja la variable con lo ya escrito
+    # —o sea, no vacia—, asi que no saltaba el aviso, el traceback se iba al
+    # limbo y el instalador terminaba diciendo «sin pendientes» con esta seccion
+    # cortada por la mitad. Paso de verdad, y duro dos sesiones.
+    resumen=$("$REPO/hypr/scripts/lib/pantalla.py" 2>&1)
+    codigo=$?
+    [ -n "$resumen" ] && printf '%s\n' "$resumen" | sed '/^$/d' | sed 's/^/  /'
+    if [ "$codigo" -ne 0 ]; then
+        aviso "lib/pantalla.py fallo al medir (codigo $codigo): lo de arriba esta incompleto"
+        return
+    fi
     if [ -z "$resumen" ]; then
         aviso "no se pudo medir la pantalla (lib/pantalla.py)"
         return
     fi
-    printf '%s\n' "$resumen" | sed '/^$/d' | sed 's/^/  /'
     if printf '%s' "$resumen" | grep -q "NO detectada"; then
         aviso "sin pantalla detectada: se usan medidas de reserva (1920x1080)"
     fi

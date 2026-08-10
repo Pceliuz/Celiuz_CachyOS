@@ -364,6 +364,24 @@ def linea_monitor(mon=None):
 
 # --- Terminal -----------------------------------------------------------------
 
+def _medida(m, clave):
+    """Un numero del resumen, o «?» si esa medida ya no existe.
+
+    El resumen es el UNICO sitio que pide medidas por su nombre una a una, y por
+    eso se quedo pidiendo `lock_tarjeta_w` desde que la tarjeta del bloqueo se
+    convirtio en columna y esa clave dejo de generarse: reventaba con un
+    KeyError a media impresion, `instalar.sh` se tragaba el error, y la seccion
+    de la pantalla salia cortada por la mitad sin que nadie se enterara.
+
+    Que falte una medida no puede costarle al usuario el resto de la
+    informacion, que es a lo que venia. Pero tampoco puede desaparecer: sale un
+    «?» bien visible, y `tests/unidad/pantalla.sh` falla si aparece alguno, que
+    es lo que convierte esto en un aviso y no en otro fallo silencioso.
+    """
+    valor = m.get(clave)
+    return "?" if valor is None else valor
+
+
 def _resumen():
     lista = monitores()
     m = medidas()
@@ -380,10 +398,13 @@ def _resumen():
     print(f"\n  Logicos: {m['ancho']}x{m['alto']}   ·   factor {m['factor']:g} "
           f"(1 = la pantalla para la que se escribio todo, {BASE_ANCHO}x{BASE_ALTO})\n")
     print("  De ahi salen, entre otras:")
-    print(f"    bloqueo   tarjeta {m['lock_tarjeta_w']}x{m['lock_tarjeta_h']}"
-          f"   reloj {m['lock_reloj']}px   campo {m['lock_campo_w']}x{m['lock_campo_h']}")
-    print(f"    fondos    tarjeta {m['paper_tarjeta_w']}x{m['paper_tarjeta_h']}"
-          f"   velo {m['paper_velo']}px   margen {m['paper_margen']}px")
+    # El bloqueo ya no tiene tarjeta: es una banda a la izquierda con el reloj y
+    # el campo dentro, asi que lo que se ensena es el ancho de la banda.
+    print(f"    bloqueo   banda {_medida(m, 'lock_banda_w')}px"
+          f"   reloj {_medida(m, 'lock_reloj')}px"
+          f"   campo {_medida(m, 'lock_campo_w')}x{_medida(m, 'lock_campo_h')}")
+    print(f"    fondos    tarjeta {_medida(m, 'paper_tarjeta_w')}x{_medida(m, 'paper_tarjeta_h')}"
+          f"   velo {_medida(m, 'paper_velo')}px   margen {_medida(m, 'paper_margen')}px")
     if m["origen"] == "defecto":
         print("\n  ! No se pudo detectar ninguna pantalla. Se usan los valores de")
         print("    reserva; nada se rompe, pero las medidas no seran las de tu monitor.")
