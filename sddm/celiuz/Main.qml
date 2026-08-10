@@ -1,9 +1,22 @@
 // sddm/celiuz/Main.qml — la pantalla de inicio de sesion.
 //
-// Es la hermana de hypr/hyprlock.conf: misma tarjeta violeta, mismo titulo,
-// mismo reloj grande y el mismo velo sobre el fondo. La diferencia es que
-// hyprlock solo pide una contrasena y esto ademas tiene que dejarte ELEGIR
-// —cuenta, sesion, apagar el equipo— y funcionar antes de que exista tu sesion.
+// Es la hermana de hypr/hyprlock.conf y COPIA SU DISENO: una columna pegada al
+// borde izquierdo sobre una banda oscura, con el filo amatista marcando su
+// canto. Ya no hay tarjeta flotante en el centro — la tuvo, igual que el
+// bloqueo, y se quito por lo mismo: la tarjeta se plantaba justo encima del
+// personaje del fondo y no dejaba verlo. Asi el fondo se ve entero.
+//
+// LAS MEDIDAS SON LAS MISMAS, y a proposito. Los numeros de aqui abajo salen de
+// hypr/scripts/lib/pantalla.py (`medidas()`, las claves `lock_*`), pensados para
+// 1920x1080 y traidos a esta pantalla por el mismo factor. Si cambias la
+// proporcion de una de las dos pantallas, la otra se queda desparejada — y no
+// falla nada, que es como se separan siempre estas dos.
+//
+// La diferencia con hyprlock es lo que esta pantalla tiene que hacer de mas:
+// dejarte ELEGIR (cuenta, sesion, teclado, apagar) y funcionar ANTES de que
+// exista tu sesion. Nada de eso tiene sitio en el bloqueo, asi que se coloca
+// donde no estorbe: lo de entrar vive en la banda, y los botones de apagado se
+// van abajo a la derecha, lejos del campo de la contrasena.
 //
 // LO QUE MANDA AQUI: el greeter corre como el usuario `sddm`, no como tu.
 // No puede entrar en /home/tu-usuario (esta a 700), asi que ni el video ni la
@@ -19,7 +32,7 @@
 // Todo lo que se ve se degrada solo:
 //   sin video      -> fotograma quieto
 //   sin fotograma  -> degradado de la paleta, que no depende de ningun fichero
-//   sin una cuenta -> el campo de siempre, escribiendo el nombre a mano
+//   sin una cuenta -> un campo para escribir el nombre, en el hueco del usuario
 //   sin permiso para apagar -> el boton no aparece, en vez de fallar al pulsarlo
 import QtQuick
 
@@ -31,12 +44,42 @@ Rectangle {
     Colores { id: paleta }
 
     // --- Escala ---------------------------------------------------------------
-    // El mismo criterio que hypr/scripts/lib/pantalla.py: todo esta pensado para
-    // 1920x1080 y se reduce con un factor. La diferencia es que aqui no hace
-    // falta generar nada ni medir por fuera — QML sabe el tamano de la pantalla
-    // y se reajusta solo si cambias de monitor.
-    readonly property real f: Math.min(width / 1920, height / 1080)
-    function px(v) { return Math.max(1, Math.round(v * raiz.f)) }
+    // EL MISMO CRITERIO QUE hypr/scripts/lib/pantalla.py, hasta en los topes:
+    // todo esta pensado para 1920x1080, se toma el MENOR de los dos lados (si se
+    // tomara el ancho, una pantalla apaisada de portatil dejaria el bloque mas
+    // alto que el hueco) y se sujeta entre 0.62 y 2.20. El suelo existe para que
+    // el reloj no quede ilegible en una pantalla pequena.
+    //
+    // La ventaja sobre el bloqueo es que aqui no hay que generar nada: QML sabe
+    // el tamano de la pantalla y se reajusta solo al cambiar de monitor.
+    readonly property real f: Math.max(0.62, Math.min(2.20,
+        Math.min(width / 1920, height / 1080)))
+
+    // px() para TAMANOS y pxs() para DESPLAZAMIENTOS. No es lo mismo y confundirlos
+    // se ve raro sin dar ningun error: px() tiene un suelo de 1 —un ancho de cero
+    // es un elemento invisible—, y ese mismo suelo aplicado a un desplazamiento
+    // NEGATIVO lo convierte en +1, o sea que manda hacia arriba lo que tenia que
+    // ir hacia abajo. La mitad de las posiciones de esta pantalla son negativas.
+    function px(v)  { return Math.max(1, Math.round(v * raiz.f)) }
+    function pxs(v) { return Math.round(v * raiz.f) }
+
+    // --- Las medidas de la columna, las mismas que las del bloqueo -------------
+    // El tope del 42% no es adorno, y viene medido en el bloqueo: como el factor
+    // tiene suelo, en una pantalla estrecha px(660) devuelve mas de lo que cabe y
+    // la banda se come la pantalla entera. En 1366 y en 1920 no cambia nada.
+    readonly property int bandaW: Math.min(px(660), Math.floor(width * 0.42))
+    readonly property int colX:   px(92)
+    // El ancho del campo, sujeto para que no se salga de la banda. En las
+    // pantallas de verdad manda px(420) y esto no hace nada; en una diminuta
+    // evita que el campo asome por el filo.
+    readonly property int campoW: Math.min(px(420), bandaW - 2 * colX)
+    readonly property int campoH: px(56)
+    readonly property int redondeo: Math.max(8, px(14))
+
+    // Las `_y` son desplazamientos desde el CENTRO vertical, y —como en
+    // hyprlock— el POSITIVO va hacia ARRIBA. QML crece hacia abajo, asi que la
+    // conversion se hace en un solo sitio: `centro()`.
+    function centro(desp, alto) { return height / 2 - pxs(desp) - alto / 2 }
 
     // --- Ajustes de theme.conf ------------------------------------------------
     // config.loQueSea devuelve "" cuando la clave no esta, asi que cada uno lleva
@@ -45,7 +88,7 @@ Rectangle {
     readonly property string titulo:      config.titulo      || "彼岸花"
     readonly property string fuente:      config.fuente      || "MesloLGS Nerd Font"
     readonly property string fuenteTit:   config.fuenteTitulo || "Noto Sans CJK TC"
-    readonly property real   veloAlfa:    parseFloat(config.veloOpacidad || "0.36")
+    readonly property real   veloAlfa:    parseFloat(config.veloOpacidad || "0.30")
     readonly property bool   cuentasFijas: (config.mostrarCuentasSiempre || "false") === "true"
 
     // El formato de la fecha. Los NOMBRES de dia y mes salen en el idioma del
@@ -108,9 +151,10 @@ Rectangle {
         visible: status === Loader.Ready && item && item.reproduciendo
     }
 
-    // El velo, igual que en hyprlock: sin el, un fondo claro se come el texto.
-    // Va en un rectangulo aparte y no como opacidad de la tarjeta porque
-    // `opacity` en QML se hereda a los hijos, y atenuaria tambien el reloj.
+    // El velo, el mismo que en hyprlock (`$abismo` al 30%): sin el, un fondo
+    // claro se come el texto. Va en un rectangulo aparte y no como opacidad de la
+    // banda porque `opacity` en QML se hereda a los hijos, y atenuaria tambien el
+    // reloj.
     Rectangle {
         anchors.fill: parent
         color: paleta.abismo
@@ -118,10 +162,35 @@ Rectangle {
     }
 
     // =========================================================================
-    //  EL EQUIPO, arriba a la izquierda
+    //  LA BANDA DE LA IZQUIERDA
+    // =========================================================================
+    // El fondo de toda la columna. `$abismo` al 55%, esquina viva y alto
+    // completo, igual que el `shape` del bloqueo.
+    Rectangle {
+        id: banda
+        x: 0; y: 0
+        width: raiz.bandaW
+        height: parent.height
+        color: Qt.rgba(paleta.abismo.r, paleta.abismo.g, paleta.abismo.b, 0.55)
+    }
+
+    // El filo amatista del canto derecho. Son 2 pixeles SIN escalar, igual que en
+    // hyprlock (alli el `shape` lleva un `size = 2, 100%` literal): un filo de un
+    // pixel desaparece y uno escalado a 4K se convierte en una franja.
+    Rectangle {
+        x: banda.width - 2
+        y: 0
+        width: 2
+        height: parent.height
+        color: Qt.rgba(paleta.amatista.r, paleta.amatista.g, paleta.amatista.b, 0.30)
+    }
+
+    // =========================================================================
+    //  EL EQUIPO, arriba del todo dentro de la banda
     // =========================================================================
     Text {
-        x: raiz.px(40); y: raiz.px(30)
+        x: raiz.colX
+        y: raiz.px(40)
         text: sddm.hostName
         color: paleta.tenue
         font.family: raiz.fuente
@@ -129,161 +198,127 @@ Rectangle {
     }
 
     // =========================================================================
-    //  LA TARJETA
+    //  LA COLUMNA — cada pieza en el mismo sitio que en el bloqueo
     // =========================================================================
-    Column {
-        anchors.centerIn: parent
-        spacing: raiz.px(22)
+    // El titulo y el usuario van CENTRADOS EN LA BANDA; el resto alineado a la
+    // izquierda, en el margen `colX`. Es exactamente el reparto de hyprlock, solo
+    // que aqui centrar es `banda.width / 2` y no hace falta el desplazamiento
+    // negativo que allí calcula pantalla.py (`lock_col_centro`): eso existe
+    // porque hyprlang centra en la PANTALLA y luego suma, y QML no tiene esa
+    // limitacion.
 
-        Item {
-            width: tarjeta.width
-            height: tarjeta.height
-            anchors.horizontalCenter: parent.horizontalCenter
+    // --- El titulo, en +215 ---------------------------------------------------
+    // 彼岸花 (higanbana) sale de theme.conf, asi que quien clone el repo pone el
+    // suyo sin tocar QML. La fuente cae en Noto Sans CJK para los kanji.
+    Item {
+        x: 0
+        width: banda.width
+        y: raiz.centro(215, height)
+        height: tituloTxt.height
 
-            // El halo. hyprlock lo hace con shadow_passes; aqui se imita con
-            // tres rectangulos detras, cada uno mas grande y mas transparente.
-            // Se hace a mano y no con QtQuick.Effects a proposito: ese modulo es
-            // otra dependencia que puede faltar, y por un halo no merece la pena
-            // arriesgar la pantalla entera.
+        // La sombra del bloqueo (`shadow_passes`) no tiene equivalente en QML sin
+        // QtQuick.Effects, y ese modulo es otra dependencia que puede faltar — por
+        // un relieve no se arriesga la pantalla entera. Se imita con una copia
+        // detras, desplazada y en el color de sombra de la paleta.
+        Text {
+            anchors.centerIn: parent
+            anchors.horizontalCenterOffset: raiz.px(2)
+            anchors.verticalCenterOffset: raiz.px(2)
+            text: raiz.titulo
+            color: paleta.abismo
+            opacity: 0.8
+            font.family: raiz.fuenteTit
+            font.pixelSize: raiz.px(50)
+        }
+
+        Text {
+            id: tituloTxt
+            anchors.centerIn: parent
+            text: raiz.titulo
+            color: paleta.amatista
+            font.family: raiz.fuenteTit
+            font.pixelSize: raiz.px(50)
+        }
+    }
+
+    // --- El usuario, en +150 --------------------------------------------------
+    // Este hueco tiene tres caras, y son excluyentes:
+    //   una cuenta   -> su nombre, centrado en la banda (como el $USER del bloqueo)
+    //   varias       -> la lista, para elegir
+    //   ninguna      -> un campo para escribirlo, porque si no la pantalla seria
+    //                   un callejon sin salida: pediria la contrasena de un
+    //                   usuario vacio y no dejaria entrar nunca, sin decir por que.
+    Item {
+        x: 0
+        width: banda.width
+        y: raiz.centro(150, height)
+        height: raiz.px(46)
+
+        // Una sola cuenta: solo el nombre.
+        Text {
+            anchors.centerIn: parent
+            visible: !raiz.verCuentas && raiz.nCuentas > 0
+            text: raiz.usuario
+            color: paleta.tenue
+            font.family: raiz.fuente
+            font.bold: true
+            font.pixelSize: raiz.px(21)
+        }
+
+        // Varias: la lista de nombres. Se usa un Repeater sobre el modelo en vez
+        // de sacar los nombres a una lista propia: los roles de un modelo de SDDM
+        // solo se leen DENTRO del delegado, y dar la vuelta a eso con Instantiator
+        // seria maquinaria de mas para tres nombres.
+        Flow {
+            anchors.centerIn: parent
+            visible: raiz.verCuentas
+            width: banda.width - 2 * raiz.colX
+            spacing: raiz.px(14)
+
             Repeater {
-                model: 3
-                Rectangle {
-                    anchors.centerIn: parent
-                    width:  tarjeta.width  + raiz.px(6 + index * 7)
-                    height: tarjeta.height + raiz.px(6 + index * 7)
-                    radius: tarjeta.radius + raiz.px(3 + index * 3)
-                    color: "transparent"
-                    border.width: raiz.px(2)
-                    border.color: paleta.amatista
-                    opacity: 0.20 - index * 0.055
-                }
-            }
+                model: userModel
+                delegate: Text {
+                    readonly property bool elegido: model.name === raiz.usuario
+                    text: model.realName || model.name
+                    color: elegido ? paleta.luz : paleta.tenue
+                    font.family: raiz.fuente
+                    font.bold: elegido
+                    font.pixelSize: raiz.px(17)
 
-            Rectangle {
-                id: tarjeta
-                width: raiz.px(420)
-                height: contenido.height + raiz.px(52)
-                radius: raiz.px(18)
-                // $superficie al 86%, el mismo valor que la tarjeta del bloqueo.
-                color: Qt.rgba(paleta.superficie.r, paleta.superficie.g,
-                               paleta.superficie.b, 0.86)
-                border.width: raiz.px(2)
-                border.color: paleta.amatista
+                    // SDDM solo recuerda la ultima cuenta que entro, y en un
+                    // equipo recien instalado no ha entrado ninguna:
+                    // `userModel.lastUser` viene vacio. Sin esto, la primera vez
+                    // la pantalla pediria la contrasena de nadie y no dejaria
+                    // pasar. El primer delegado que se crea rellena el hueco.
+                    Component.onCompleted:
+                        if (raiz.usuario === "") raiz.usuario = model.name
 
-                Column {
-                    id: contenido
-                    anchors.centerIn: parent
-                    width: parent.width - raiz.px(44)
-                    spacing: raiz.px(6)
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: raiz.titulo
-                        color: paleta.luz
-                        font.family: raiz.fuenteTit
-                        font.pixelSize: raiz.px(26)
-                    }
-
-                    // La cuenta. Con una sola es una etiqueta; con varias, la
-                    // fila de abajo, y esta se calla para no decir lo mismo dos
-                    // veces.
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        visible: !raiz.verCuentas
-                        text: raiz.usuario
-                        color: paleta.amatista
-                        font.family: raiz.fuente
-                        font.bold: true
-                        font.pixelSize: raiz.px(13)
-                    }
-
-                    Item { width: 1; height: raiz.px(10) }
-
-                    Text {
-                        id: reloj
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        color: paleta.luz
-                        font.family: raiz.fuente
-                        font.bold: true
-                        font.pixelSize: raiz.px(54)
-                    }
-
-                    // La fecha, en el idioma DEL SISTEMA. Ni una palabra de
-                    // esto va escrita: `Qt.formatDate` con el locale por defecto
-                    // usa /etc/locale.conf, que es lo que ve el greeter. Cablear
-                    // un idioma aqui seria el mismo fallo que ya costo una tarde
-                    // en hyprlock y en el reloj de la barra.
-                    Text {
-                        id: fecha
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        color: paleta.tenue
-                        font.family: raiz.fuente
-                        font.pixelSize: raiz.px(12)
-                    }
-
-                    Item { width: 1; height: raiz.px(4); visible: raiz.verCuentas }
-
-                    // Las cuentas, una fila de nombres. Se usa un Repeater sobre
-                    // el modelo en vez de sacar los nombres a una lista propia:
-                    // los roles de un modelo de SDDM solo se leen DENTRO del
-                    // delegado, y dar la vuelta a eso con Instantiator seria
-                    // maquinaria de mas para tres nombres.
-                    Flow {
-                        visible: raiz.verCuentas
-                        width: parent.width
-                        spacing: raiz.px(14)
-                        anchors.horizontalCenter: parent.horizontalCenter
-
-                        Repeater {
-                            model: userModel
-                            delegate: Text {
-                                readonly property bool elegido: model.name === raiz.usuario
-                                text: model.realName || model.name
-                                color: elegido ? paleta.luz : paleta.tenue
-                                font.family: raiz.fuente
-                                font.bold: elegido
-                                font.pixelSize: raiz.px(13)
-
-                                // SDDM solo recuerda la ultima cuenta que entro,
-                                // y en un equipo recien instalado no ha entrado
-                                // ninguna: `userModel.lastUser` viene vacio. Sin
-                                // esto, la primera vez la pantalla pediria la
-                                // contrasena de nadie y no dejaria pasar. El
-                                // primer delegado que se crea rellena el hueco.
-                                Component.onCompleted:
-                                    if (raiz.usuario === "") raiz.usuario = model.name
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        raiz.usuario = model.name
-                                        raiz.mensaje = ""
-                                        campo.text = ""
-                                        campo.forceActiveFocus()
-                                    }
-                                }
-                            }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            raiz.usuario = model.name
+                            raiz.mensaje = ""
+                            campo.text = ""
+                            campo.forceActiveFocus()
                         }
                     }
                 }
             }
         }
 
-        // --- La cuenta, cuando no hay ninguna que ofrecer ---------------------
-        // Pasa en un sistema donde los usuarios estan ocultos para el greeter, o
-        // en uno recien instalado. Sin este campo la pantalla seria un callejon
-        // sin salida: pediria la contrasena de un usuario vacio y no dejaria
-        // entrar nunca, sin decir por que.
+        // Ninguna: se escribe a mano. Alineado a la izquierda y del ancho del
+        // campo de la contrasena, para que los dos formen una sola columna.
         Rectangle {
             visible: raiz.nCuentas === 0
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: raiz.px(420)
+            x: raiz.colX
+            anchors.verticalCenter: parent.verticalCenter
+            width: raiz.campoW
             height: raiz.px(46)
-            radius: raiz.px(14)
+            radius: raiz.redondeo
             color: Qt.rgba(paleta.superficie.r, paleta.superficie.g,
                            paleta.superficie.b, 0.86)
-            border.width: raiz.px(2)
+            border.width: 2
             border.color: paleta.apagado
 
             TextInput {
@@ -311,85 +346,122 @@ Rectangle {
                 }
             }
         }
+    }
 
-        // --- La contrasena ----------------------------------------------------
-        // Debajo de la tarjeta y en su propia caja, como en el bloqueo. El borde
-        // es el que avisa: amatista en reposo, ambar comprobando, rojo si fallas.
-        Rectangle {
-            id: caja
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: raiz.px(420)
-            height: raiz.px(46)
-            radius: raiz.px(14)
-            color: Qt.rgba(paleta.superficie.r, paleta.superficie.g,
-                           paleta.superficie.b, 0.86)
-            border.width: raiz.px(2)
-            border.color: raiz.mensaje !== "" ? paleta.alerta
-                        : raiz.comprobando    ? paleta.atencion
-                                              : paleta.amatista
+    // --- El reloj, en +34 -----------------------------------------------------
+    // Lo que se lee de lejos, y por eso es lo mas grande de la pantalla.
+    Item {
+        x: raiz.colX
+        y: raiz.centro(34, height)
+        width: banda.width - raiz.colX
+        height: reloj.height
 
-            TextInput {
-                id: campo
-                anchors.fill: parent
-                anchors.leftMargin: raiz.px(18)
-                anchors.rightMargin: raiz.px(18)
-                verticalAlignment: TextInput.AlignVCenter
-                horizontalAlignment: TextInput.AlignHCenter
-                echoMode: TextInput.Password
-                passwordCharacter: "●"
-                passwordMaskDelay: 0
-                color: paleta.luz
-                font.family: raiz.fuente
-                font.pixelSize: raiz.px(15)
-                selectByMouse: true
-                enabled: !raiz.comprobando
-
-                onAccepted: raiz.entrar()
-                onTextChanged: if (raiz.mensaje !== "") raiz.mensaje = ""
-
-                Text {
-                    anchors.centerIn: parent
-                    visible: campo.text.length === 0
-                    text: "contraseña"
-                    color: paleta.tenue
-                    font.family: raiz.fuente
-                    font.pixelSize: raiz.px(15)
-                }
-            }
+        Text {
+            x: raiz.px(2); y: raiz.px(2)
+            text: reloj.text
+            color: paleta.abismo
+            opacity: 0.8
+            font.family: raiz.fuente
+            font.bold: true
+            font.pixelSize: raiz.px(110)
         }
 
-        // Un solo renglon para todo lo que hay que decir: el fallo, el aviso de
-        // mayusculas o nada. Ocupa sitio siempre (`height` fijo) para que la
-        // tarjeta no de un salto cuando aparece.
-        Item {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: caja.width
-            height: raiz.px(18)
+        Text {
+            id: reloj
+            color: paleta.luz
+            font.family: raiz.fuente
+            font.bold: true
+            font.pixelSize: raiz.px(110)
+        }
+    }
+
+    // --- La fecha, en -72 -----------------------------------------------------
+    // En el idioma DEL SISTEMA. Ni una palabra va escrita aqui: ver refrescarHora().
+    Text {
+        id: fecha
+        x: raiz.colX
+        y: raiz.centro(-72, height)
+        color: paleta.tenue
+        font.family: raiz.fuente
+        font.pixelSize: raiz.px(18)
+    }
+
+    // --- La contrasena, en -157 -----------------------------------------------
+    // El borde es el que avisa, igual que en el bloqueo: amatista en reposo,
+    // ambar mientras comprueba, rojo si fallas.
+    Rectangle {
+        id: caja
+        x: raiz.colX
+        y: raiz.centro(-157, height)
+        width: raiz.campoW
+        height: raiz.campoH
+        radius: raiz.redondeo
+        // `$superficie` al 86%, el mismo relleno que el input-field del bloqueo.
+        color: Qt.rgba(paleta.superficie.r, paleta.superficie.g,
+                       paleta.superficie.b, 0.86)
+        border.width: 2
+        border.color: raiz.mensaje !== "" ? paleta.alerta
+                    : raiz.comprobando    ? paleta.atencion
+                                          : paleta.amatista
+
+        TextInput {
+            id: campo
+            anchors.fill: parent
+            anchors.leftMargin: raiz.px(18)
+            anchors.rightMargin: raiz.px(18)
+            verticalAlignment: TextInput.AlignVCenter
+            horizontalAlignment: TextInput.AlignHCenter
+            echoMode: TextInput.Password
+            passwordCharacter: "●"
+            passwordMaskDelay: 0
+            color: paleta.luz
+            font.family: raiz.fuente
+            font.pixelSize: raiz.px(15)
+            selectByMouse: true
+            enabled: !raiz.comprobando
+
+            onAccepted: raiz.entrar()
+            onTextChanged: if (raiz.mensaje !== "") raiz.mensaje = ""
 
             Text {
                 anchors.centerIn: parent
-                text: raiz.mensaje !== "" ? raiz.mensaje
-                    : keyboard.capsLock  ? "bloq mayús activado"
-                                         : ""
-                color: raiz.mensaje !== "" ? paleta.alerta : paleta.atencion
+                visible: campo.text.length === 0
+                text: "contraseña"
+                color: paleta.tenue
                 font.family: raiz.fuente
-                font.pixelSize: raiz.px(12)
+                font.pixelSize: raiz.px(15)
             }
         }
     }
 
-    // =========================================================================
-    //  EL PIE — sesion y teclado a la izquierda, apagado a la derecha
-    // =========================================================================
+    // --- El renglon de avisos, en -249 ----------------------------------------
+    // El hueco donde el bloqueo pone su fila de datos (bateria, teclado, red).
+    // Aqui hace falta para otra cosa: el fallo o el aviso de mayusculas. Ocupa
+    // sitio siempre, para que nada de la columna de un salto cuando aparece.
+    Text {
+        x: raiz.colX
+        y: raiz.centro(-249, height)
+        text: raiz.mensaje !== "" ? raiz.mensaje
+            : keyboard.capsLock  ? "bloq mayús activado"
+                                 : ""
+        color: raiz.mensaje !== "" ? paleta.alerta : paleta.atencion
+        font.family: raiz.fuente
+        font.pixelSize: raiz.px(17)
+    }
 
+    // =========================================================================
+    //  EL PIE DE LA BANDA — sesion y teclado
+    // =========================================================================
+    // Abajo del todo dentro de la columna, en su mismo margen. Las dos filas se
+    // callan solas cuando no hay nada que elegir, que es lo normal en un equipo
+    // con un escritorio y un teclado.
     Row {
-        x: raiz.px(40)
+        x: raiz.colX
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: raiz.px(28)
+        anchors.bottomMargin: raiz.px(40)
         spacing: raiz.px(18)
 
-        // La sesion. Se listan todas y se marca la elegida; con una sola, la
-        // fila entera se calla, que es lo normal en un equipo con un escritorio.
+        // La sesion. Se listan todas y se marca la elegida.
         Row {
             visible: raiz.nSesiones > 1
             spacing: raiz.px(12)
@@ -402,7 +474,7 @@ Rectangle {
                     color: elegida ? paleta.amatista : paleta.tenue
                     font.family: raiz.fuente
                     font.bold: elegida
-                    font.pixelSize: raiz.px(12)
+                    font.pixelSize: raiz.px(13)
 
                     MouseArea {
                         anchors.fill: parent
@@ -421,7 +493,7 @@ Rectangle {
             text: keyboard.layouts[keyboard.currentLayout].shortName
             color: paleta.tenue
             font.family: raiz.fuente
-            font.pixelSize: raiz.px(12)
+            font.pixelSize: raiz.px(13)
 
             MouseArea {
                 anchors.fill: parent
@@ -432,11 +504,17 @@ Rectangle {
         }
     }
 
+    // =========================================================================
+    //  EL APAGADO — abajo a la derecha, FUERA de la banda
+    // =========================================================================
+    // Lo unico que no vive en la columna, y por dos razones: no cabria sin
+    // apretarla, y conviene que lo que apaga el equipo quede lejos del campo
+    // donde escribes la contrasena.
     Row {
         anchors.right: parent.right
         anchors.rightMargin: raiz.px(40)
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: raiz.px(28)
+        anchors.bottomMargin: raiz.px(40)
         spacing: raiz.px(20)
 
         // Cada boton aparece SOLO si el sistema deja hacerlo. Un boton que
@@ -453,7 +531,7 @@ Rectangle {
                 text: modelData.texto
                 color: zona.containsMouse ? paleta.luz : paleta.tenue
                 font.family: raiz.fuente
-                font.pixelSize: raiz.px(12)
+                font.pixelSize: raiz.px(13)
 
                 MouseArea {
                     id: zona

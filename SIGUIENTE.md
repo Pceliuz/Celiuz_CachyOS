@@ -27,6 +27,37 @@ anterior, y caza un renombrado por el `?`).
 > mira un humano —`instalar.sh --revisar` entero, leyendo cada sección— y
 > sospecha de cualquier apartado que termine a media frase.
 
+Y después, en la misma sesión, **la pantalla de inicio de sesión se puso al día
+con la de bloqueo**. Tenía el diseño anterior —la tarjeta violeta centrada— y su
+propia cabecera lo decía: se quedó atrás cuando el bloqueo pasó a columna en
+`4ade398` y llevaba una semana así. La misma enfermedad de la mañana: **una copia
+no avisa cuando se separa de su original**, porque sigue siendo válida por su
+cuenta.
+
+Ahora `sddm/celiuz/Main.qml` es la banda de la izquierda con su filo amatista, la
+columna con título, cuenta, reloj, fecha y campo, y las **mismas medidas** —469
+de banda, 65 de margen, campo de 299x40 y redondeo 10 en esta pantalla, idénticas
+a las que da `pantalla.py`—. Lo que el bloqueo no tiene se colocó donde no
+estorba: sesión y teclado al pie de la banda, y el apagado abajo a la derecha,
+lejos del campo de la contraseña. El velo bajó de 0.36 a 0.30, que es el de
+hyprlock.
+
+> **`tests/unidad/login-bloqueo.sh` es el cerrojo nuevo**, y es el que faltaba:
+> compara las 16 medidas base, las constantes de escala y las transparencias de
+> las dos pantallas. Falla 8 de 12 contra el tema anterior, o sea que habría
+> cazado la separación el día que ocurrió.
+
+Comprobado de verdad con `sddm-greeter-qt6 --test-mode`, capturando las dos
+formas en que llega: **sin `fondo.jpg`** (que es como lo recibe quien clona el
+repo — sale el degradado de la paleta) y con él. Los números se leyeron
+enseñándolos en la propia pantalla, porque el `console.log` de QML no sale por el
+stderr del greeter.
+
+> **OJO, ESTO NO SE VE HASTA REINSTALAR EL TEMA.** Lo que sale al arrancar es la
+> copia de `/usr/share/sddm/themes/celiuz`, así que hace falta `./instalar.sh
+> --sddm` (es el único paso que pide root). Mientras no se pase, el arranque
+> sigue enseñando la tarjeta vieja.
+
 Antes, el **2026-08-09**, en la **PC**, recogiendo lo del portátil. Se trajo
 el rediseño del bloqueo y se le pasó la pregunta de siempre —*¿esto vale para
 quien clone el repo?*—, de la que salieron **tres colores y una medida que no
