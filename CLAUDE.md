@@ -310,6 +310,57 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   parte oscurecida y la clara. En el sobremesa no se notaba porque allí el
   número coincidía con la resolución. Lo que va a pantalla completa se pone en
   **porcentaje** (`size = 100%, 100%`), que hyprlock mide contra la salida.
+- **El nombre de una salida es el del CONECTOR, no el de una pantalla.**
+  `conf/monitors.conf` llevaba `monitor = HDMI-A-1, 1920x1080@100, 0x0, 1`, el
+  monitor de sobremesa del autor, con el comentario de que «en otra máquina no
+  existe ese nombre y la línea no hace nada». **Sí existe**: el HDMI de la laptop
+  se llama igual, así que al enchufar un televisor heredaba la línea entera y
+  pasaban dos cosas, las dos calladas — se le pedían 100 Hz que no tiene (cayó a
+  60 sin decir nada) y se le clavaba la posición `0x0`, o sea el ORIGEN, con lo
+  que la pantalla interna se iba sola a su derecha y el ratón salía al revés.
+  Mismo patrón que el `shape` de aquí arriba y que la ruta del sensor hwmon: un
+  valor cableado que coincide con UNA de las dos máquinas. Ahora ese fichero **no
+  nombra ninguna salida** (`monitor = , preferred, auto-right, 1`) y lo de cada
+  equipo va en `conf/personal.conf`, que no se versiona y se carga el último.
+  Ojo con `highrr` como sustituto de `preferred`: mira la tasa y **no** la
+  resolución, y ese televisor anuncia `800x600@60.32`, que tiene más refresco que
+  su `1920x1080@60.00` — lo habría dejado en 800x600.
+- **Una escala de monitor que no dé un tamaño lógico entero la RECHAZA
+  Hyprland.** En 1080p las dos cómodas son `1.5` (1280x720) y `1.25` (1536x864).
+  Hace falta escala en un televisor aunque sea 1080p: 1390 mm de ancho para 1920
+  píxeles son ~35 DPI, contra los ~102 DPI de la pantalla de la laptop.
+- **Y la imagen que se sale por los bordes de un televisor NO se arregla desde
+  aquí**: es el overscan del propio aparato y **Hyprland no tiene ninguna opción
+  de underscan**. Se quita en su menú («Tamaño de imagen» → «Punto a punto» /
+  «Just Scan» / «1:1»). Bajar la resolución para compensar es la salida falsa:
+  reduce la imagen y sigue recortándola.
+- **Waybar dibuja UNA SUPERFICIE POR SALIDA, y el demonio estaba escrito para
+  una sola pantalla** (2026-08-13, al conectar el televisor). Tres sitios a la
+  vez, y el primero es el grave:
+  1. `layer_levels()` devolvía `{namespace: nivel}` escribiéndolo dentro del
+     bucle de monitores, así que con dos salidas **ganaba la última** y las demás
+     ni se miraban. Y como waybar solo ofrece el toggle (SIGUSR1) y lo aplica a
+     **todas** sus superficies a la vez, dos superficies en niveles distintos ya
+     no se pueden juntar con señales: la señal mueve las dos y **conserva el
+     desfase entero**. Es la trampa del «toggle perdido» del 2026-08-01, pero
+     entre monitores. Se llega ahí solo con enchufar una pantalla con las barras
+     escondidas: la superficie nueva nace en `top` y las viejas están en
+     `bottom`. Lo medido: barra y dock puestos en la laptop y escondidos en el
+     televisor, para siempre. El único remedio es **relanzar** (`Bar.realinear`,
+     con freno de `REALINEO_ESPERA`), porque hace nacer todas en `top`.
+  2. `SCREEN_W/SCREEN_H` se medían **una vez al importar el módulo**, del monitor
+     enfocado. La franja del dock (`y >= SCREEN_H - 90`) salía a 678 con el alto
+     de la laptop, o sea una banda de 400 px **a media pantalla** del televisor
+     que abría el dock sola, mientras su borde de abajo de verdad no lo abría
+     nunca.
+  3. `dock_geometry()` devolvía la **primera** capa `waybar-dock` que encontrara,
+     de la pantalla que fuera, y sus coordenadas son globales.
+  La lección general: **un escritorio de varias pantallas es un solo plano de
+  coordenadas, pero cada pantalla tiene su origen y su tamaño**. Todo lo que se
+  compare contra un borde («¿está el puntero arriba del todo?») necesita saber
+  primero de qué monitor es ese punto — `monitor_en(x, y)`. Lo vigila
+  `tests/unidad/barras-multipantalla.sh`, que falla 27 de 28 contra el código
+  anterior.
 - **Un demonio que supervisa procesos NO puede apagarse porque uno se caiga.**
   `waybar-autohide.py` terminaba su bucle con
   `if not all(bar.alive()): cleanup()`, y eso convertía la caída de UNA de las

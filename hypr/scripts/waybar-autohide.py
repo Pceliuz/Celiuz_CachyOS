@@ -108,6 +108,13 @@ HIDE_DELAY = 1.5
 # quieta; la OTRA sigue funcionando, y el demonio no se apaga.
 REINTENTOS_MAX = 5
 REINTENTOS_VENTANA = 60.0
+
+# Cuanto se espera entre dos realineados de la misma barra (ver Bar.realinear).
+# Relanzar waybar tarda su rato en volver a crear las superficies, asi que sin
+# este freno un desfase que no se corrigiera al primer intento relanzaria a 10 Hz
+# — el mismo bucle de procesos que REINTENTOS_MAX evita en el supervisor. Cinco
+# segundos dan de sobra para que las cuatro instancias esten dibujando otra vez.
+REALINEO_ESPERA = 5.0
 # Periodo del bucle. 0.1 s da una reaccion inmediata a ojo y no cuesta nada.
 TICK = 0.1
 
@@ -212,18 +219,64 @@ def hypr_alcanzable():
     return socket_alcanzable(SOCKET)
 
 
-def screen_size():
-    """Tamano LOGICO del monitor enfocado, que es en lo que viene el cursor."""
+# Geometria LOGICA de cada monitor, en las MISMAS coordenadas globales en que
+# Hyprland da el cursor: un escritorio de dos pantallas es un unico plano, y la
+# de la derecha empieza donde acaba la otra (con la laptop a 1366, el cursor
+# sobre el televisor viene con x >= 1366).
+#
+# ESTO NO SE PUEDE FIJAR AL ARRANCAR, y fijarlo era el fallo (2026-08-13). Antes
+# habia un `SCREEN_W, SCREEN_H = screen_size()` a nivel de modulo, medido UNA vez
+# sobre el monitor enfocado. Enchufar una pantalla no lo cambiaba, y con dos de
+# distinto alto las zonas de raton se calculaban contra la que no era: la del
+# dock (`y >= SCREEN_H - 90`) quedaba a 678 en un televisor de 1080 de alto, o
+# sea una franja de 400 px A MEDIA PANTALLA que abria el dock sola, y a la vez
+# el borde de abajo de verdad no lo abria nunca.
+_monitores = {"lista": [], "t": -GEO_REFRESH}
+
+
+def monitores():
+    """[{x, y, w, h}] de cada monitor, en coordenadas globales. Recordado GEO_REFRESH."""
+    now = time.monotonic()
+    if now - _monitores["t"] < GEO_REFRESH and _monitores["lista"]:
+        return _monitores["lista"]
+    _monitores["t"] = now
     try:
-        monitors = json.loads(query("j/monitors"))
-        mon = next((m for m in monitors if m.get("focused")), monitors[0])
-        scale = mon.get("scale") or 1.0
-        return round(mon["width"] / scale), round(mon["height"] / scale)
-    except (ValueError, KeyError, IndexError):
-        return 1920, 1080
+        data = json.loads(query("j/monitors"))
+    except ValueError:
+        return _monitores["lista"]
+    lista = []
+    for m in data:
+        try:
+            escala = m.get("scale") or 1.0
+            lista.append({"x": m["x"], "y": m["y"],
+                          "w": round(m["width"] / escala),
+                          "h": round(m["height"] / escala)})
+        except (KeyError, TypeError):
+            continue
+    if lista:
+        _monitores["lista"] = lista
+    return _monitores["lista"]
 
 
-SCREEN_W, SCREEN_H = screen_size()
+# Con lo que se cae cuando Hyprland no contesta y no hay nada recordado todavia.
+MONITOR_RESERVA = {"x": 0, "y": 0, "w": 1920, "h": 1080}
+
+
+def monitor_en(x, y):
+    """El monitor que contiene ese punto; el primero si el punto no cae en ninguno.
+
+    Que no caiga en ninguno es normal un instante: la lista se recuerda dos
+    segundos, asi que justo despues de enchufar o desenchufar una pantalla el
+    cursor puede estar en una zona que la lista vieja no cubre.
+    """
+    lista = monitores()
+    if not lista:
+        return MONITOR_RESERVA
+    for mon in lista:
+        if (mon["x"] <= x < mon["x"] + mon["w"]
+                and mon["y"] <= y < mon["y"] + mon["h"]):
+            return mon
+    return lista[0]
 
 
 def read_state():
@@ -237,8 +290,11 @@ def read_state():
     """
     out = query("[[BATCH]]activeworkspace;cursorpos")
     windows = 0
-    # Si falla la lectura se asume "fuera de las dos barras": el centro exacto.
-    cursor_x, cursor_y = SCREEN_W // 2, SCREEN_H // 2
+    # Si falla la lectura se asume "fuera de las dos barras": el centro exacto
+    # del primer monitor, que no toca ni la franja de arriba ni la del dock.
+    mon = (monitores() or [MONITOR_RESERVA])[0]
+    cursor_x = mon["x"] + mon["w"] // 2
+    cursor_y = mon["y"] + mon["h"] // 2
     for line in out.splitlines():
         line = line.strip()
         if line.startswith("windows:"):
@@ -261,12 +317,18 @@ LAYER_TOP = 2
 
 
 def layer_levels():
-    """{namespace: nivel} de las capas vivas. Una ida y vuelta de 0,05 ms.
+    """{namespace: [nivel, ...]} de las capas vivas. Una ida y vuelta de 0,05 ms.
 
     Es la UNICA fuente fiable de si una barra esta puesta o no. Waybar solo
     ofrece un toggle (SIGUSR1), y una senal que se pierde no deja ningun rastro
     del lado del demonio: sin mirar aqui, el estado recordado se queda mintiendo
     para siempre.
+
+    ES UNA LISTA Y NO UN NUMERO PORQUE HAY UNA SUPERFICIE POR PANTALLA. Antes
+    esto era `{namespace: nivel}` y se escribia dentro del bucle de monitores,
+    asi que con dos pantallas ganaba la ULTIMA que se iterara y las demas no se
+    miraban: el demonio decidia por una y senalaba a todas. Guardarlas todas es
+    lo que permite ver el desfase (ver Bar.desalineada) en vez de arrastrarlo.
     """
     try:
         data = json.loads(query("j/layers"))
@@ -278,50 +340,75 @@ def layer_levels():
             for capa in superficies:
                 ns = capa.get("namespace")
                 if ns:
-                    niveles[ns] = int(nivel)
+                    niveles.setdefault(ns, []).append(int(nivel))
     return niveles
 
 
 def in_top_zone(x, y):
-    """La barra de arriba ocupa todo el ancho: solo importa la altura."""
-    return y < HOVER_ZONE
+    """La barra de arriba ocupa todo el ancho: solo importa la altura.
+
+    Pero la altura es RELATIVA a su monitor, no al escritorio: con una pantalla
+    colocada debajo de otra (`auto-down`), su borde superior no esta en y=0.
+    """
+    return y - monitor_en(x, y)["y"] < HOVER_ZONE
 
 
 # Geometria de la capa del dock, preguntada a Hyprland y recordada un rato.
 # Antes su ancho estaba escrito a mano aqui y tenia que coincidir con el campo
 # "width" de dock.jsonc; ahora que las apps se anaden y quitan en caliente ese
 # ancho cambia solo, asi que se lee del compositor y no hay nada que sincronizar.
-_dock_geo = {"x": 0, "y": 0, "w": 0, "h": 0, "t": -GEO_REFRESH}
+#
+# HAY UNA CAPA DEL DOCK POR MONITOR, y esa es la otra mitad del fallo de
+# 2026-08-13: esto devolvia la PRIMERA que encontrara, de la pantalla que fuera,
+# y sus coordenadas son globales. Con el dock del televisor centrado en x=2039 y
+# el de la laptop en x=396, la zona sensible acababa cayendo en la pantalla
+# equivocada — el dock no se abria al bajar el raton donde se ve, y se abria al
+# pasar por un trozo cualquiera de la otra. Ahora se guarda una por monitor.
+_dock_geo = {"por_monitor": {}, "t": -GEO_REFRESH}
 
 
 def dock_geometry():
+    """{nombre de monitor: {x, y, w, h}} de cada capa del dock."""
     now = time.monotonic()
     if now - _dock_geo["t"] < GEO_REFRESH:
-        return _dock_geo
+        return _dock_geo["por_monitor"]
     _dock_geo["t"] = now
     try:
         data = json.loads(query("j/layers"))
     except ValueError:
-        return _dock_geo
-    for monitor in data.values():
+        return _dock_geo["por_monitor"]
+    encontradas = {}
+    for nombre, monitor in data.items():
         for layers in monitor.get("levels", {}).values():
             for layer in layers:
                 if layer.get("namespace") == "waybar-dock":
-                    _dock_geo.update(x=layer["x"], y=layer["y"],
-                                     w=layer["w"], h=layer["h"])
-                    return _dock_geo
-    return _dock_geo
+                    encontradas[nombre] = {"x": layer["x"], "y": layer["y"],
+                                           "w": layer["w"], "h": layer["h"]}
+    # Solo se pisa lo recordado si se vio algo: durante un relanzamiento no hay
+    # ninguna capa un instante, y quedarse a cero apagaria la zona del dock.
+    if encontradas:
+        _dock_geo["por_monitor"] = encontradas
+    return _dock_geo["por_monitor"]
 
 
 def in_dock_zone(x, y):
-    """El dock es estrecho y centrado: hay que mirar tambien la X."""
-    geo = dock_geometry()
-    if not geo["w"]:
-        # Sin datos de la capa (aun arrancando) se cae a la franja de abajo a lo
-        # ancho: mas vale que no se esconda de mas que que no se pueda sacar.
-        return y >= SCREEN_H - 90
-    return (geo["x"] - DOCK_MARGIN <= x <= geo["x"] + geo["w"] + DOCK_MARGIN
-            and y >= geo["y"] - DOCK_MARGIN)
+    """El dock es estrecho y centrado: hay que mirar tambien la X.
+
+    Y el dock que cuenta es el de LA PANTALLA DONDE ESTA EL PUNTERO, no uno
+    cualquiera: son capas distintas, en sitios distintos del mismo plano.
+    """
+    mon = monitor_en(x, y)
+    # Se elige por geometria y no por el nombre del monitor a proposito: asi no
+    # hace falta que las dos consultas (j/monitors y j/layers) esten de acuerdo
+    # sobre quien es quien justo despues de enchufar o desenchufar algo.
+    for geo in dock_geometry().values():
+        if mon["x"] <= geo["x"] < mon["x"] + mon["w"]:
+            return (geo["x"] - DOCK_MARGIN <= x <= geo["x"] + geo["w"] + DOCK_MARGIN
+                    and y >= geo["y"] - DOCK_MARGIN)
+    # Sin datos de la capa (aun arrancando) se cae a la franja de abajo a lo
+    # ancho: mas vale que no se esconda de mas que que no se pueda sacar. La
+    # franja es la de ESTE monitor, que es lo que fallaba con un alto global.
+    return y >= mon["y"] + mon["h"] - 90
 
 
 def launch(config):
@@ -375,6 +462,10 @@ class Bar:
         self.left_at = time.monotonic()   # cuando salio el puntero de la barra
         self.caidas = []      # momentos en que se la encontro muerta sin querer
         self.rendida = False  # se dejo de reintentar, y ya se aviso
+        # Cuando se la relanzo por ultima vez para juntar sus superficies (ver
+        # realinear()). Empieza "hace mucho" para que el primer desfase que se
+        # vea se corrija ya, sin esperar.
+        self.realineado_en = -REALINEO_ESPERA
 
     def toggle(self):
         """SIGUSR1 = toggle (el valor por defecto de waybar).
@@ -471,18 +562,63 @@ class Bar:
         `bottom`, asi que el nivel dice exactamente en que estado esta. Se exigen
         las DOS superficies porque el toggle las mueve juntas: si una todavia no
         nacio, la senal la recibiria solo la otra y quedarian descuadradas.
+
+        Con varias pantallas hay varias superficies de cada una; aqui se supone
+        que estan todas igual, que es lo que garantiza desalineada() mirando
+        antes. Se lee la primera.
         """
-        nivel = capas.get(self.namespace)
-        nivel_tirador = capas.get(self.trigger_namespace)
-        if nivel is None or nivel_tirador is None:
+        niveles = capas.get(self.namespace)
+        niveles_tirador = capas.get(self.trigger_namespace)
+        if not niveles or not niveles_tirador:
             return None
-        return nivel >= LAYER_TOP
+        return niveles[0] >= LAYER_TOP
+
+    def desalineada(self, capas):
+        """True si las superficies de esta barra no estan todas al mismo nivel.
+
+        Solo pasa con mas de una pantalla, y ES UN CALLEJON SIN SALIDA si no se
+        mira: waybar unicamente ofrece el toggle, y lo aplica a TODAS sus
+        superficies a la vez, asi que una senal no acerca dos superficies
+        desfasadas — las mueve las dos y conserva el desfase ENTERO, para
+        siempre. Es la misma trampa del "toggle perdido" del 2026-08-01, pero
+        entre monitores en vez de en el tiempo.
+
+        Se produce al enchufar una pantalla con las barras escondidas: la
+        superficie nueva nace en `top` mientras las de la otra estan en
+        `bottom`. Medido el 2026-08-13 al conectar un televisor por HDMI —barra
+        y dock puestos en la laptop y escondidos en el televisor, y ningun
+        toggle podia ya juntarlos.
+        """
+        for ns in (self.namespace, self.trigger_namespace):
+            if len(set(capas.get(ns) or ())) > 1:
+                return True
+        return False
+
+    def realinear(self):
+        """Devuelve todas las superficies al mismo nivel, que es relanzando.
+
+        No hay otra via —ver desalineada()—, y relanzar las hace nacer a todas
+        en `top`. Con freno de tiempo: si el desfase siguiera ahi tras relanzar,
+        esto se llamaria a 10 Hz y seria un bucle de procesos.
+        """
+        ahora = time.monotonic()
+        if ahora - self.realineado_en < REALINEO_ESPERA:
+            return
+        self.realineado_en = ahora
+        self.reload()
 
     def update(self, windows, x, y, capas):
         if self.locked:
             # Durante el bloqueo las barras estan MUERTAS (ver command("lock")),
             # asi que aqui no hay nada que alternar: mandarles una senal seria
             # escribirle a un proceso que ya no esta.
+            return
+        if self.desalineada(capas):
+            # Sus superficies estan en niveles distintos segun la pantalla. No
+            # se puede corregir con senales, y seguir a lo tonto solo mueve el
+            # desfase de sitio: se relanza y se sale, que el ciclo siguiente ya
+            # decide sobre un estado coherente.
+            self.realinear()
             return
         if windows == 0:
             # Sin apps la barra se queda puesta, y se olvida el estado manual.
