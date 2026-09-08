@@ -325,6 +325,31 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   Ojo con `highrr` como sustituto de `preferred`: mira la tasa y **no** la
   resolución, y ese televisor anuncia `800x600@60.32`, que tiene más refresco que
   su `1920x1080@60.00` — lo habría dejado en 800x600.
+- **Y quitar esa línea dejaba a la PC sin sus 100 Hz, porque `preferred` es el
+  modo del EDID y un monitor de 100 Hz suele declarar 60.** Es la deuda que dejó
+  el arreglo de arriba: los refrescos altos viven en los modos extendidos, así
+  que «portable» se había vuelto «a 60 Hz en todas partes». Y **no se puede pedir
+  con ninguna palabra**: el wiki dice que los modos predefinidos *«cannot be
+  combined»*, o sea que «la resolución nativa **y** el mejor refresco **a esa**
+  resolución» no existe — `highres` deja el refresco sin especificar y `highrr`
+  es la trampa del 800x600. Lo pidieron en hyprwm/Hyprland#8758 y se cerró como
+  *not planned*. Pero el dato **sí está**: `hyprctl monitors -j` trae
+  `availableModes` entero, y elegir bien es aritmética sobre esa lista. Eso es
+  `scripts/monitores.py`, que arranca desde `conf/autostart.conf` con
+  `--demonio` y reacciona a `monitoradded`. Tres decisiones suyas que conviene no
+  deshacer:
+  - **agrupa por resolución primero y por refresco después**, nunca al revés (al
+    revés *es* `highrr`, y el televisor se va a 800x600);
+  - **no toca la escala**, porque depende de la distancia a la que miras y eso no
+    lo sabe ningún EDID — un televisor de 1080p a distancia de sofá son ~35 DPI y
+    quiere 1.5, un monitor de 24" en la mesa son ~92 y quiere 1;
+  - **se salta cualquier salida nombrada en `conf/personal.conf` o
+    `conf/local.conf`**. Un script que ajusta pantallas solo y pisa la línea que
+    escribiste tú es peor que no tenerlo: en este repo el orden de capas manda, y
+    personal.conf se carga el último.
+  Lo vigila `tests/unidad/monitores.sh`, que tiene la trampa del 800x600 como
+  caso de prueba y comprueba también lo contrario — que no manda ni una orden al
+  compositor cuando no hay nada que mejorar.
 - **Una escala de monitor que no dé un tamaño lógico entero la RECHAZA
   Hyprland.** En 1080p las dos cómodas son `1.5` (1280x720) y `1.25` (1536x864).
   Hace falta escala en un televisor aunque sea 1080p: 1390 mm de ancho para 1920
