@@ -3,7 +3,87 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-08-10**, en el **portátil**, recogiendo lo de la PC (la
+Última sesión: **2026-09-07**, en el **portátil**. Sesión de repaso que acabó
+en código: se revisó el repo entero, se cerró lo del 13 de agosto que llevaba
+tres semanas sin commitear, y salió una pieza nueva —`scripts/monitores.py`—.
+
+**TODO SUBIDO.** Al empezar había 1 commit sin empujar (el de la pantalla de
+inicio de sesión, del 10 de agosto) y trabajo suelto de dos días distintos.
+
+Lo que se comprobó antes de tocar nada, que es lo que conviene repetir al
+recoger esto en la otra máquina: **21 pruebas / 386 comprobaciones** en verde,
+`instalar.sh --revisar` sin pendientes y con las 8 secciones enteras,
+`configerrors` vacío, los demonios vivos y —esto es lo que casi nunca se
+mira— **el demonio de las barras corriendo el código nuevo** y no el de antes
+del reinicio (`ps -o lstart` contra la fecha del fichero).
+
+> Un aviso sobre las pruebas: `e2e/bloqueo.sh` falló una vez y **no era el
+> código**. Comprueba «no quedó ningún bloqueo vivo» con un `pgrep -x`
+> **global**, así que si bloqueas la pantalla mientras corre la suite, ve tu
+> hyprlock de verdad y lo toma por suyo. Es el patrón que el `CLAUDE.md` ya
+> documenta —`pgrep -x` no distingue de qué sesión es cada proceso— y
+> `lib/canales.sh` tiene la herramienta buena (`pids_de_esta_sesion`).
+> **Está sin arreglar**, es el primer candidato para la próxima sesión.
+
+### Lo nuevo: cada pantalla coge su mejor refresco sola
+
+Salió de una pregunta, y la pregunta era buena: al quitar de `monitors.conf` la
+línea del monitor de la PC (ver más abajo, lo del 13) se quitó también su
+`@100`, y `preferred` **es el modo del EDID** — un monitor de 100 Hz suele
+declarar 60. O sea que «portable» se había vuelto «a 60 Hz en todas partes».
+
+Y no se arregla con configuración: el wiki dice que los modos predefinidos
+*«cannot be combined»*, así que «la resolución nativa **y** el mejor refresco **a
+esa** resolución» no se puede pedir. `highres` deja el refresco sin especificar y
+`highrr` es la trampa del 800x600 del televisor. Lo pidieron en
+hyprwm/Hyprland#8758 y se cerró como *not planned*.
+
+Pero `hyprctl monitors -j` trae `availableModes` entero, así que elegir bien es
+aritmética. Eso es **`hypr/scripts/monitores.py`**, que arranca desde
+`autostart.conf` con `--demonio` y reacciona a `monitoradded`. Tres cosas suyas
+que conviene no deshacer, y están en el `CLAUDE.md`: agrupa **por resolución
+primero**; **no toca la escala** (depende de la distancia a la que miras, y eso
+no lo sabe ningún EDID); y **se salta cualquier salida nombrada en
+`personal.conf`**.
+
+> **En el portátil esto no hace nada, y está bien así**: `personal.conf` fija las
+> dos salidas porque el televisor necesita su escala 1.5. Es el cambalache
+> conocido — fijar la escala te cuesta el refresco automático. Si molesta, la
+> mejora pendiente es saltarse una salida solo cuando su línea fije **el modo**,
+> no cuando fije escala o posición.
+
+> **PENDIENTE EN LA PC (2026-09-08 por la noche).** Tras `git pull &&
+> ./instalar.sh`, cerrar sesión y volver a entrar, **no le escribas ninguna línea
+> de monitor**: debería coger sus 100 Hz sola. Se comprueba con
+> `hypr/scripts/monitores.py --ver`, que es ensayo en seco y no toca nada. Es lo
+> único de todo esto que no se ha podido verificar en la máquina que toca.
+
+### Y lo que llevaba desde el 13 de agosto sin subir
+
+Aquella sesión salió de conectar un televisor por HDMI al portátil, y destapó el
+mismo patrón de siempre: **un valor cableado que coincide con una de las dos
+máquinas**. Está contado entero en el `CLAUDE.md`; el resumen:
+
+- `conf/monitors.conf` llevaba la línea del monitor de la PC, con el comentario
+  de que «en otra máquina no existe ese nombre». **Sí existe**: el nombre de una
+  salida es el del **conector**, y el HDMI del portátil se llama igual. Al
+  enchufar el televisor heredaba los 100 Hz que no tiene y la posición `0x0` —el
+  origen—, así que la pantalla interna se iba sola a su derecha y el ratón salía
+  al revés.
+- **waybar dibuja una superficie por salida**, y `waybar-autohide.py` estaba
+  escrito para una sola pantalla en tres sitios. El grave: `layer_levels()`
+  devolvía un nivel por namespace escrito dentro del bucle de monitores, así que
+  con dos salidas **ganaba la última**. Y como waybar solo ofrece el toggle y lo
+  aplica a todas sus superficies a la vez, dos superficies desfasadas ya no se
+  juntan con señales — la señal mueve las dos y conserva el desfase. Barra y dock
+  puestos en el portátil y escondidos en el televisor, para siempre. El único
+  remedio es relanzar (`Bar.realinear`).
+
+Lo vigilan `tests/unidad/barras-multipantalla.sh` (falla 27 de 28 contra el
+código anterior) y `tests/unidad/monitores.sh`, que tiene la trampa del 800x600
+como caso de prueba.
+
+Antes, el **2026-08-10**, en el **portátil**, recogiendo lo de la PC (la
 paleta del bloqueo y el redondeo medido). El pull entró limpio y no rompió nada
 —18 pruebas, `--revisar` sin pendientes, `configerrors` vacío—, pero verificarlo
 destapó un fallo **que ya llevaba dos sesiones ahí**: el resumen de
