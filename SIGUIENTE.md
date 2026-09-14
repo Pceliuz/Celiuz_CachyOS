@@ -3,7 +3,97 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-09-07**, en el **portátil**. Sesión de repaso que acabó
+Última sesión: **2026-09-14**, en el **portátil**. Salió de un fallo de uso:
+`SUPER + L` llevaba cinco horas sin bloquear la pantalla.
+
+**El atajo no estaba roto.** Es lo primero que se descartó y conviene recordar
+cómo, porque el bind de Hyprland estaba perfecto (`hyprctl binds` lo daba con
+`modmask 64`, sin submaps ni conflictos) y aun así no pasaba nada. Lo que lo
+resolvió fue el **diario de `lock.sh`** (`~/.cache/celiuzpaper/lock.log`), que
+tenía una línea por cada pulsación:
+
+```
+=== 2026-09-14 10:20:26 lock.sh arranca (pid 45650) ===
+lock: ya hay un hyprlock corriendo en esta sesion, no hago nada
+```
+
+> **Ojo con el log de Hyprland para esto: NO apunta los `exec` de los binds.**
+> Se buscó ahí primero y no había ni rastro de `lock.sh`, lo que parecía decir
+> «el bind no dispara». Era mentira: `grep -c Executing` en el log da 0 siempre.
+> Para saber si un bind corrió, el rastro es el del propio script.
+
+### La avería: una carrera en el guardia de instancia única
+
+A las **09:15:45 entraron dos `lock.sh` en el mismo segundo** (dos pulsaciones
+seguidas). El guardia de entonces *miraba* «¿hay algún hyprlock vivo?» y
+*actuaba* después, y entre lo uno y lo otro cabe otro `lock.sh` entero: los dos
+miraron antes de que ninguno hubiera lanzado el suyo y los dos siguieron.
+
+El `ext_session_lock` de Wayland **solo lo puede tener uno**. El segundo hyprlock
+se quedó vivo sin conseguirlo —ni pintaba, ni moría— y a partir de ahí el guardia
+lo veía y salía sin bloquear. Y la segunda instancia leyó el xray que acababa de
+encender la primera, lo tomó por «el valor de antes» y al desbloquear lo dejó
+**encendido para siempre**: la fuga permanente que vigila `tests/e2e/bloqueo.sh`.
+
+### Lo que se hizo
+
+Tres piezas en `lock.sh`, en ese orden y no en otro:
+
+1. **`hyprctl locked`** en vez de contar procesos. Es el compositor diciendo un
+   hecho; «hay algo que se llama hyprlock» era la suposición que falló. Se lee
+   con **tres** respuestas —`si`, `no`, `nose`— y no con dos: `locked` **funciona
+   pero NO sale en `hyprctl --help`**, o sea que es superficie no documentada.
+   Un Hyprland que no la conozca contesta `unknown request`, y leer eso como
+   «no bloqueada» haría que el script matara un hyprlock legítimo y
+   **desbloqueara la pantalla sola**. Con `nose` no se toca nada y se bloquea
+   igual.
+2. **`flock`**: mirar y coger el turno en una sola operación atómica. Si no hay
+   `flock` (caja sin util-linux) se sigue **sin** cerrojo: tratar «no hay flock»
+   y «el turno lo tiene otro» igual dejaría una máquina sin bloquear nunca.
+   El hyprlock se lanza con `9>&-` para que no herede el cerrojo.
+3. **El huérfano se retira**, no se le cede el paso. La dirección segura de este
+   fichero es acabar bloqueando; negarse en silencio es su peor fallo posible.
+
+Un riesgo que destapó la propia prueba y casi se cuela: la primera versión salía
+en cuanto la sesión estaba bloqueada, y eso **cerraba la vía de recuperación** de
+la pantalla «you locked your screen but the lockscreen app died». Ahora, si está
+bloqueada pero sin hyprlock, **relanza para retomar** (`allow_session_lock_restore`).
+
+### Cómo se comprobó
+
+`tests/e2e/bloqueo.sh` pasa de 28 a **38 comprobaciones**. La de la carrera se
+ejecutó **contra el `lock.sh` viejo y falla** (`esperaba «1», obtuve «2»`): la
+prueba reproduce la avería, no la decora. Las otras cuatro nuevas cubren la
+pantalla muerta, un `hyprctl` sin `locked` y una caja sin `flock`.
+
+Y con hyprlock **de verdad** en `tests/anidado.sh`: dos simultáneos → uno se
+aparta; pulsar estando bloqueada → no apila; matar el hyprlock → el vigilante lo
+relanza y `locked` sigue `true`.
+
+> **Arreglado de paso** lo que esta nota tenía como «primer candidato»: el
+> `pgrep -x` **global** de `tests/e2e/bloqueo.sh` ya busca por RUTA
+> (`$FALSOS/$BLOQUEO`), así que bloquear la pantalla mientras corre la suite ya
+> no la hace fallar en falso.
+
+### Lo que queda de aquí
+
+- **`grabar.sh` es la única pieza del repo sin pruebas.** Se sube en esta tanda
+  (venía del 9 de septiembre) y en esta máquina **no se ha podido ejercitar:
+  `wf-recorder` no está instalado**, así que `SUPER + R` hoy solo avisa. El
+  instalador ya lo dice (`--revisar` lo saca como aviso).
+- **Una rama de `lock.sh` sin prueba automática**: la que retira al huérfano. Pide
+  un proceso cuyo `comm` sea exactamente `hyprlock` **con la firma de la sesión**,
+  y un falso con almohadilla-bang tiene por `comm` su intérprete. Se comprobó a
+  mano contra el huérfano real (pid 13318) antes de retirarlo.
+- **Sin explicar**: al desbloquear, `congelar.py` descongeló
+  `android-studio` cuando el bloqueo había apuntado `congeladas (0)` y lo daba
+  por salvado. La red de seguridad (barre todos los scopes, no se fía del parte)
+  hizo justo lo suyo, pero **algo lo congeló y no fue `lock.sh`**; no hubo
+  suspensión y systemd no deja rastro de las transiciones del freezer.
+
+---
+
+Sesión anterior: **2026-09-07**, en el **portátil**. Sesión de repaso que acabó
 en código: se revisó el repo entero, se cerró lo del 13 de agosto que llevaba
 tres semanas sin commitear, y salió una pieza nueva —`scripts/monitores.py`—.
 

@@ -229,6 +229,22 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
 - **`hyprctl reload` no basta** para probar cambios de `exec-once`: solo corren al
   arrancar la sesión. Y si la sesión arrancó desde un `.lua`, `reload` no cae de
   vuelta al `.conf`.
+- **El log de Hyprland NO apunta los `exec` de los binds.** `grep -c Executing`
+  sobre `$XDG_RUNTIME_DIR/hypr/<firma>/hyprland.log` da **0 siempre**, así que
+  «el script no sale en el log» NO significa que el bind no haya disparado. Costó
+  una hipótesis entera el 2026-09-14 con `SUPER+L`. Para saber si un bind corrió,
+  el rastro es el del propio script (`lock.sh` lleva diario en
+  `~/.cache/celiuzpaper/lock.log`); y para saber si el bind EXISTE, `hyprctl
+  binds`, que es la fuente autoritativa y no el `.conf`.
+- **`hyprctl locked` funciona pero NO está en `hyprctl --help`.** Dice si el
+  bloqueo de sesión (`ext_session_lock`) está puesto, que es el único modo
+  honesto de saberlo —contar procesos llamados `hyprlock` es una suposición—,
+  pero al ser superficie **no documentada** no se puede dar por hecha en la
+  versión que tenga quien clone el repo. Un Hyprland que no la conozca contesta
+  `unknown request`. Léelo con **tres** salidas (`sí` / `no` / `no lo sé`) y
+  nunca metas «no lo sé» en el mismo saco que «no»: en `lock.sh` eso significaría
+  tomar un hyprlock legítimo por un resto, matarlo y **desbloquear la pantalla
+  sola**. Mismo principio que `lib/teclas.py` con los modificadores.
 - **Un `bindr` sobre una tecla modificadora LLEVA ESE MODIFICADOR DELANTE.** En
   el instante en que sueltas `SUPER_L`, Hyprland todavía cuenta SUPER dentro del
   modmask, así que `bindr = , SUPER_L` (modmask 0) **no coincide jamás**. Y no

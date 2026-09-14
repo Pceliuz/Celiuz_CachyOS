@@ -123,14 +123,154 @@ fi
 exec 2>&1
 echo "=== $(date '+%F %T') lock.sh arranca (pid $$, modo $MODO_FONDO) ==="
 
-# Si ya hay un hyprlock corriendo, no se apilan dos. Pero solo cuenta el de ESTA
-# sesion: con `pgrep -x hyprlock` a secas, tener bloqueada otra sesion del mismo
-# usuario —otro TTY, un cambio rapido de usuario— hacia que este script se diera
-# por hecho y saliera sin bloquear NADA. O sea que pedir el bloqueo te dejaba la
-# pantalla abierta, que es el peor modo de fallo que puede tener este fichero.
-if [ -n "$(pids_de_esta_sesion hyprlock)" ]; then
-    echo "lock: ya hay un hyprlock corriendo en esta sesion, no hago nada"
+# --- 0.bis Un solo bloqueo a la vez, y ninguno a medias -----------------------
+#
+# LO QUE PASO EL 2026-09-14, QUE ES EL PORQUE DE TODO ESTE BLOQUE
+# ---------------------------------------------------------------
+# A las 09:15:45 entraron DOS lock.sh en el mismo segundo (dos pulsaciones de
+# SUPER+L seguidas). El guardia de entonces era «¿hay algun hyprlock vivo?», que
+# MIRA y luego ACTUA: entre lo uno y lo otro cabe otro lock.sh entero. Las dos
+# instancias miraron antes de que ninguna hubiera lanzado su hyprlock, las dos se
+# dieron por buenas, y de ahi salieron dos averias:
+#
+#   - El bloqueo de sesion de Wayland (ext_session_lock) SOLO lo puede tener uno.
+#     El hyprlock que llego segundo se quedo vivo sin conseguirlo: ni pintaba
+#     nada, ni se moria nunca. Y desde ese momento el guardia lo veia vivo y
+#     SUPER+L dejaba de hacer absolutamente nada, EN SILENCIO. Cinco horas
+#     despues el portatil seguia sin poder bloquearse.
+#   - La segunda instancia leyo el xray que acababa de encender la primera y lo
+#     tomo por «el valor de antes», asi que al desbloquear lo devolvio a 1. El
+#     xray se quedo encendido para siempre: la fuga permanente que vigila
+#     tests/e2e/bloqueo.sh.
+#
+# De ahi las tres piezas de abajo, en este orden y no en otro.
+
+# 1. LA PREGUNTA BUENA, Y SUS TRES RESPUESTAS. `hyprctl locked` es el compositor
+#    diciendo si el bloqueo de sesion esta puesto. Eso es un HECHO; «hay un
+#    proceso llamado hyprlock» era una suposicion, y es justo la que fallo.
+#
+#    Pero se responde con TRES valores y no con dos, y esto no es purismo: en
+#    esta version (0.56.1) `locked` FUNCIONA pero NO SALE en `hyprctl --help`, o
+#    sea que es superficie no documentada y no se puede dar por hecha en la
+#    version que tenga quien clone el repo. Un Hyprland que no la conozca
+#    contesta `unknown request`, que no es "true"... y leer eso como «no esta
+#    bloqueada» haria que la pieza 3 tomara un hyprlock LEGITIMO por un resto y
+#    LO MATARA: la pantalla se desbloquearia sola. De «no lo se» a «no» hay la
+#    misma distancia que en lib/teclas.py, y por el mismo motivo.
+#
+#    Y el hecho solo tampoco basta, porque «bloqueada» y «hay quien la dibuje»
+#    son cosas distintas. La combinacion que mas facil se pasa por alto es
+#    bloqueada SIN hyprlock: es la pantalla de «you locked your screen but the
+#    lockscreen app died», y ahi lo que toca es RELANZAR para retomar el bloqueo
+#    (a eso se dedica misc:allow_session_lock_restore), no cruzarse de brazos.
+estado_bloqueo() {
+    case "$(hyprctl locked 2>/dev/null)" in
+        true)  echo si ;;
+        false) echo no ;;
+        *)     echo nose ;;   # hyprctl viejo, sin sesion, o sin hyprctl
+    esac
+}
+
+# Atajo: si todo esta en orden, ni se coge el turno.
+if [ "$(estado_bloqueo)" = si ] && [ -n "$(pids_de_esta_sesion hyprlock)" ]; then
+    echo "lock: la sesion ya esta bloqueada y su hyprlock en pie, no hago nada"
     exit 0
+fi
+
+# 2. EL TURNO, ATOMICO. flock mira y se queda el turno en UNA sola operacion, que
+#    es exactamente lo que le faltaba al guardia viejo. Se suelta solo cuando el
+#    proceso muere, pase lo que pase, asi que no hay nada que devolver en el trap.
+#    El hyprlock se lanza mas abajo con 9>&- para que NO herede el cerrojo: si no,
+#    un hyprlock que sobreviviera a su lock.sh lo seguiria reteniendo y volveria a
+#    dejar la pantalla sin poder bloquearse.
+#
+#    Se distingue «el turno lo tiene otro» (salir) de «aqui no hay flock» (seguir
+#    sin cerrojo). Tratarlos igual seria el peor fallo posible de este fichero:
+#    una caja sin util-linux no se bloquearia NUNCA, y en silencio. flock viene en
+#    util-linux, que en Arch es del grupo base, pero este repo tambien se clona.
+CERROJO="${CERROJO_BLOQUEO:-$(canal bloqueo lock)}"
+exec 9>>"$CERROJO"
+# El nombre del programa sale de una variable por lo de siempre en este fichero:
+# para poder probar el camino de «aqui no hay flock» sin desmontar el PATH.
+FLOCK="${FLOCK_BIN:-flock}"
+if command -v "$FLOCK" >/dev/null 2>&1; then
+    if ! "$FLOCK" -n 9; then
+        echo "lock: otro lock.sh se me adelanto por un pelo, no me apilo"
+        exit 0
+    fi
+else
+    echo "lock: sin flock (util-linux); sigo SIN cerrojo, que es peor que" >&2
+    echo "lock: tenerlo pero mucho mejor que no bloquear" >&2
+fi
+
+# 3. YA CON EL TURNO EN LA MANO, se vuelve a mirar: entre la pieza 1 y esta linea
+#    ha podido cambiar todo, y ahora la respuesta si es firme porque nadie mas
+#    puede estar arrancando a la vez.
+BLOQUEADA="$(estado_bloqueo)"
+huerfanos="$(pids_de_esta_sesion hyprlock)"
+
+if [ "$BLOQUEADA" = si ] && [ -n "$huerfanos" ]; then
+    echo "lock: la sesion ya esta bloqueada y su hyprlock en pie, no hago nada"
+    exit 0
+fi
+
+if [ "$BLOQUEADA" = si ]; then
+    # Bloqueada y sin nadie que la dibuje: la pantalla del «lockscreen app died».
+    # Se sigue adelante a proposito; el hyprlock nuevo RETOMA el bloqueo que ya
+    # habia en vez de abrir uno nuevo, asi que esto no destapa la sesion.
+    echo "lock: bloqueada pero sin hyprlock (se cayo); relanzo para RETOMAR el bloqueo"
+fi
+
+if [ "$BLOQUEADA" = nose ]; then
+    # Queda dicho SIEMPRE, haya restos o no: cuando esto se tuerza, el diario de
+    # este fichero es el unico rastro que va a haber —el log de Hyprland no
+    # apunta los `exec` de los binds—, y «en esta caja no se pudo preguntar» es
+    # justo el dato que ahorra la mitad de la investigacion.
+    echo "lock: no puedo preguntar si la sesion esta bloqueada: este hyprctl no" >&2
+    echo "lock: conoce «locked». Bloqueo igual." >&2
+    if [ -n "$huerfanos" ]; then
+        # No se puede demostrar que sobren, asi que NO se tocan: matar al que si
+        # tenia el bloqueo dejaria la pantalla abierta, y eso es justo lo que
+        # este fichero existe para que no pase.
+        echo "lock:   y NO toco el/los hyprlock que hay ($(echo $huerfanos | tr '\n' ' ')):" >&2
+        echo "lock:   sin saberlo, matar al que tuviera el bloqueo lo destaparia" >&2
+    fi
+fi
+
+if [ "$BLOQUEADA" = no ] && [ -n "$huerfanos" ]; then
+    # EL HYPRLOCK HUERFANO. Consta que la sesion NO esta bloqueada, asi que
+    # cualquier hyprlock vivo es un resto que no tiene el bloqueo y que ya no lo
+    # va a coger. Antes se le cedia el paso y la pantalla se quedaba ABIERTA;
+    # ahora se retira, que es la unica direccion segura de las dos.
+    #
+    # Se mata primero al lock.sh que lo vigila y luego al hyprlock: al reves, el
+    # bucle vigilante del padre lo relanzaria antes de que diera tiempo a nada.
+    echo "lock: hyprlock huerfano (vivo pero sin el bloqueo): $(echo $huerfanos | tr '\n' ' ')" >&2
+    vigilantes=""
+    for pid in $huerfanos; do
+        padre="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+        [ -n "$padre" ] && [ "$padre" != "$$" ] \
+            && tr '\0' ' ' < "/proc/$padre/cmdline" 2>/dev/null | grep -q "lock\.sh" \
+            && vigilantes="$vigilantes $padre"
+    done
+    for padre in $vigilantes; do
+        echo "lock:   retiro su vigilante lock.sh (pid $padre)" >&2
+        kill "$padre" 2>/dev/null
+    done
+    for pid in $huerfanos; do kill "$pid" 2>/dev/null; done
+
+    # Se espera a que se vayan DE VERDAD antes de seguir: arrancar nuestro
+    # hyprlock con el viejo todavia vivo seria repetir el empate del principio.
+    for _ in $(seq 1 25); do
+        [ -z "$(pids_de_esta_sesion hyprlock)" ] && break
+        sleep 0.2
+    done
+    restantes="$(pids_de_esta_sesion hyprlock)"
+    if [ -n "$restantes" ]; then
+        echo "lock:   no se iban por las buenas, van a la fuerza: $(echo $restantes | tr '\n' ' ')" >&2
+        for pid in $restantes; do kill -9 "$pid" 2>/dev/null; done
+        sleep 0.5
+    fi
 fi
 
 # --- Utilidades ---------------------------------------------------------------
@@ -399,7 +539,9 @@ fi
 #
 # Salir con 0 es un desbloqueo de verdad (escribiste bien la contrasena).
 for intento in $(seq 1 "$REINTENTOS"); do
-    hyprlock --immediate-render
+    # `9>&-` cierra el cerrojo SOLO para el hijo: el turno lo tiene este
+    # lock.sh, y si su hyprlock le sobreviviera no debe seguir reteniendolo.
+    hyprlock --immediate-render 9>&-
     codigo=$?
     if [ "$codigo" -eq 0 ]; then
         echo "lock: desbloqueo normal"
