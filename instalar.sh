@@ -118,6 +118,14 @@ comprobar_dependencias() {
         gris "    sudo pacman -S ${sin_teclas[*]}"
     fi
 
+    # Y lo mismo con la grabacion de pantalla: SUPER+R esta puesto en
+    # keybinds.conf, pero sin wf-recorder ese bind es una tecla que no hace nada.
+    # El escritorio arranca igual, de ahi que sea un aviso y no un error.
+    if ! command -v wf-recorder >/dev/null 2>&1; then
+        aviso "SUPER+R (grabar la pantalla) no hara nada sin: wf-recorder"
+        gris "    sudo pacman -S wf-recorder"
+    fi
+
     # La fuente no es un capricho: sin ella los glifos del dock salen como
     # cuadrados vacios. Se comprueba aparte porque no es un ejecutable.
     #

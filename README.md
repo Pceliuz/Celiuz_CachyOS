@@ -102,6 +102,12 @@ sin ellas:
 sudo pacman -S wireplumber playerctl brightnessctl
 ```
 
+Y para grabar la pantalla (`SUPER + R`), que va aparte por lo mismo:
+
+```sh
+sudo pacman -S wf-recorder
+```
+
 Notas:
 
 - **`ttf-meslo-nerd`** no es opcional: las barras usan la variante
@@ -116,6 +122,10 @@ Notas:
   **y no avisa de nada**: un `exec` que no existe no da error en Hyprland. Por
   eso el instalador los comprueba y lo dice. `brightnessctl` solo se pide en un
   portátil.
+- **`wf-recorder`** es lo único que hace falta para grabar la pantalla; el
+  instalador lo comprueba aparte por la misma razón que las teclas de función. Si
+  falta, `SUPER + R` sí avisa —el script lo mira antes de nada—, pero el aviso
+  necesita que el demonio de notificaciones esté vivo.
 
 ## Instalación
 
@@ -199,6 +209,8 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + S` | Captura de una zona |
 | `SUPER + SHIFT + S` | Captura de la pantalla entera |
 | `SUPER + ALT + S` | Captura de la ventana que tengas delante |
+| `SUPER + R` | Grabar una zona en vídeo (la misma tecla la para) |
+| `SUPER + ALT + R` | Grabar el monitor entero (la misma tecla lo para) |
 | `SUPER + 1..7` | Ir al escritorio |
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
 | `SUPER + flechas` | Mover el foco |
