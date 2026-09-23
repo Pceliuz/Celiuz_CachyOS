@@ -934,7 +934,7 @@ sin Bluetooth no aparece.
 
 | | |
 |---|---|
-| clic | `bluetui` en una terminal flotante: buscar, emparejar, conectar |
+| clic | `bluetui` en una terminal flotante: buscar, emparejar, conectar (si no está instalado, te lo dice en vez de abrir una terminal que se cierra sola) |
 | clic derecho | encender / apagar (y si lo apagó la tecla de modo avión, desbloquearlo) |
 | clic central | **soltar el auricular que llevas**: entra el otro que tengas encendido |
 
@@ -980,6 +980,25 @@ recibe audio (A2DP) o que hace de manos libres. El móvil habla los mismos
 perfiles pero desde el otro lado, y ni él, ni un ratón, ni un teclado se
 bloquean ni se llaman nunca. **Y un aparato que bloqueaste tú a mano no se toca**:
 el demonio solo desbloquea lo que bloqueó él, y lo lleva apuntado.
+
+### Si no quieres el cerrojo
+
+Es un gusto, no una ley, y este repo lo usa más gente. Se apaga sin tocar nada
+versionado, en `~/.config/celiuz/bluetooth.conf`:
+
+```conf
+cerrojo = no    # deja conectar varios a la vez (unos cascos y un altavoz)
+auto = no       # no llamar a nadie: conectar es cosa tuya
+```
+
+Se relee solo al guardarlo, sin reiniciar nada. Sin ese archivo, los dos valen
+`si`. Con `cerrojo = no` el demonio suelta lo que hubiera bloqueado y se limita
+a conectar el primero que conteste; `bluetooth.py --ver` lo dice cuando no están
+los de fábrica.
+
+**Y si el equipo no tiene Bluetooth, no hay nada que apagar:** el icono no
+aparece en la barra y el demonio se queda dormido esperando. Está comprobado
+contra un BlueZ sin adaptador, no deducido del manual.
 
 ### Lo que se guarda
 
@@ -1034,6 +1053,10 @@ sitios a la vez**: al portapapeles, para pegarlas al instante, y a un archivo en
 > El script espera a que Hyprland deje de listar la capa **y además** a que
 > termine el desvanecido, que es lo que no se puede preguntar: ningún
 > compositor avisa de que una animación acabó. Por eso el plazo es fijo.
+>
+> **Si tienes las animaciones apagadas, no se espera nada**: sin desvanecido, la
+> capa se va con su proceso, y cobrar el plazo haría lento lo que en tu equipo
+> es instantáneo.
 
 ---
 

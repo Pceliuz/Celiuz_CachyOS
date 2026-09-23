@@ -540,6 +540,14 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   MISMO alfa sobre un color cuadre en zonas de contenido distinto: allí el tinte
   era `#b16cff` al 7,2 % y encajaba igual en un fondo plano gris y en una
   burbuja verde. Eso ya no puede ser contenido.
+- **El `controller` del modulo bluetooth de waybar NO sirve para simular «no hay
+  adaptador»**: si el alias no existe, waybar coge cualquier controlador, asi que
+  la barra se ve igual y la prueba da un falso verde (pasó el 2026-09-23). Para
+  probar de verdad lo que ve quien no tiene Bluetooth hay que darle un BlueZ sin
+  adaptador: `tests/anidado.sh` + `dbus-run-session` apuntando
+  `DBUS_SYSTEM_BUS_ADDRESS` al bus privado donde sirve
+  `tests/lib/bluez_falso.py servir <json> --sin-adaptador`. Asi se midio que el
+  modulo desaparece y el resto de la barra queda intacto.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
 - **Un SVG que empieza por un comentario no es una imagen para gdk-pixbuf.** El

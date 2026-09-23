@@ -3,6 +3,54 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
+Última sesión: **2026-09-23**, en el **portátil**, segunda parte: **repaso de
+portabilidad** de lo recién subido, pensando en quien clone el repo con otra
+máquina.
+
+### Lo que se cambió, y por qué
+
+- **El cerrojo del Bluetooth es configurable.** Era una decisión de uso metida
+  en código: quien tenga unos cascos y un altavoz querrá los dos a la vez. Se
+  apaga en `~/.config/celiuz/bluetooth.conf` (`cerrojo = no`, `auto = no`), que
+  **no se versiona** y se relee sola al guardarla, como `personal.conf` para
+  Hyprland.
+- **El clic de la barra pasa por `bluetooth.py gestionar`.** Antes llamaba
+  directo a `terminal.sh monitor-tui bluetui`: sin bluetui instalado eso abría
+  una terminal que se cerraba sola, sin decir nada. Ahora avisa y dice el
+  paquete.
+- **`--ver` ya no miente** sobre el demonio: si no está la unidad de systemd,
+  mira si hay un proceso suelto.
+- **Las capturas no esperan si tienes las animaciones apagadas.** Es lo que hace
+  quien va justo de recursos, y ahí no hay desvanecido que esperar.
+
+### Lo que se midió (y una trampa que casi cuela un falso verde)
+
+- **En un equipo sin Bluetooth el módulo desaparece de la barra**, y el resto
+  (el reloj al lado) queda intacto. Hasta ahora se decía fiándose del manual de
+  waybar; ahora está visto.
+- **`"controller": "un-alias-que-no-existe"` NO simula un equipo sin adaptador**:
+  waybar coge cualquier controlador y la barra se ve igual. La primera prueba
+  dio verde sin probar nada. Lo que sí vale: `tests/anidado.sh` +
+  `dbus-run-session` con `DBUS_SYSTEM_BUS_ADDRESS` apuntando al bus privado donde
+  sirve `tests/lib/bluez_falso.py servir <json> --sin-adaptador`.
+- **Sin BlueZ corriendo el demonio no se rompe**: lo dice y espera. Con BlueZ
+  pero sin radio, no llama ni bloquea a nadie.
+
+### Cuántas comprobaciones hay ahora
+
+`unidad/bluetooth` 45, `e2e/bluetooth` 77, `unidad/captura` 16. Las tres cubren
+lo nuevo: los ajustes, las dos ramas del clic, el equipo sin radio y la captura
+sin animaciones.
+
+### Un aviso que salió solo
+
+El Hyprland anidado sacó este cartel: **«you are using the .conf config format,
+support for which will be removed in Hyprland 0.57»**. Todo este repo es `.conf`.
+No corre prisa —0.56 es la que hay— pero conviene mirarlo antes de esa versión,
+porque el día que llegue no arrancaría la config entera.
+
+---
+
 Última sesión: **2026-09-23**, en el **portátil**: **el recuadro que salía
 dentro de las capturas de zona** (`SUPER + S`).
 
