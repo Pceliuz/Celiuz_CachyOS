@@ -68,6 +68,12 @@ ESPERA_SELECCION=0.3
 # respeta el plazo igual: alli tambien puede haber una transicion al cerrar.
 esperar_a_que_se_vaya_la_seleccion() {
     if command -v hyprctl >/dev/null 2>&1; then
+        # Quien tenga las animaciones apagadas —por gusto o por ahorrar en una
+        # maquina justa— no tiene desvanecido que esperar, y no tiene por que
+        # pagar el plazo. La capa se va con su proceso.
+        if hyprctl getoption animations:enabled 2>/dev/null | grep -q '^int: 0'; then
+            return 0
+        fi
         local intentos=0
         # 60 vueltas de 10 ms como tope. Es un seguro por si el compositor va
         # cargado, no el caso normal.

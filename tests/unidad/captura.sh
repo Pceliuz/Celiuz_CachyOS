@@ -106,9 +106,32 @@ else
     fallo "la captura de ventana no espera" "tardo $tardo ms"
 fi
 
-# --- 4. Cancelar no deja nada ----------------------------------------------------
+# --- 4. Con las animaciones apagadas no se espera --------------------------------
+#
+# Quien las apaga —por gusto o por ahorrar en una maquina justa— no tiene
+# desvanecido que esperar: la capa se va con su proceso. Cobrarle el plazo igual
+# seria hacerle lento lo que en su equipo es instantaneo.
 
-titulo "4. Si cancelas la seleccion no se captura nada"
+titulo "4. Sin animaciones, la captura no espera"
+: > "$REGISTRO/orden.log"
+rm -f "$REGISTRO/slurp.log" "$REGISTRO/hyprctl.log" "$REGISTRO/grim.log"
+binario_falso slurp 0 "$apuntar; echo '10,20 300x200'"
+# Este hyprctl contesta que las animaciones estan apagadas.
+binario_falso hyprctl 0 "$apuntar; echo 'int: 0'"
+bash "$SCRIPT" >/dev/null 2>&1
+t_slurp="$(momento slurp)"; t_grim="$(momento grim)"
+espera=$((t_grim - t_slurp))
+if [ "$espera" -lt 200 ]; then
+    ok "entre slurp y grim pasan solo $espera ms"
+else
+    fallo "sin animaciones no se espera" "pasaron $espera ms"
+fi
+afirmar_no_contiene "$REGISTRO/hyprctl.log" "layers" \
+    "ni se llega a preguntar por la capa"
+
+# --- 5. Cancelar no deja nada ----------------------------------------------------
+
+titulo "5. Si cancelas la seleccion no se captura nada"
 rm -f "$REGISTRO/grim.log"
 binario_falso slurp 1 "$apuntar"     # Escape o clic derecho: sale con 1
 bash "$SCRIPT" >/dev/null 2>&1
