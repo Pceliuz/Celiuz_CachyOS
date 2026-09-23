@@ -199,7 +199,10 @@
     // es de hypr/scripts/bluetooth.py (lo arranca conf/autostart.conf).
     //
     //   clic         bluetui en la terminal flotante: buscar, emparejar,
-    //                conectar (repo oficial extra; lo comprueba instalar.sh)
+    //                conectar (repo oficial extra; lo comprueba instalar.sh).
+    //                Va por bluetooth.py y no por terminal.sh a secas para que,
+    //                si bluetui no esta, lo diga en vez de abrir una terminal
+    //                que se cierra sola
     //   derecho      encender / apagar; si lo apago la tecla de modo avion,
     //                tambien lo desbloquea
     //   central      soltar el auricular que llevas puesto: entra el otro que
@@ -220,7 +223,7 @@
         "tooltip-format-connected": "{device_enumerate}\n\nclic central: soltar el auricular",
         "tooltip-format-enumerate-connected": "{device_alias}",
         "tooltip-format-enumerate-connected-battery": "{device_alias} — {device_battery_percentage}%",
-        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui bluetui",
+        "on-click": "$HOME/.config/hypr/scripts/bluetooth.py gestionar",
         "on-click-right": "$HOME/.config/hypr/scripts/bluetooth.py alternar",
         "on-click-middle": "$HOME/.config/hypr/scripts/bluetooth.py soltar"
     },

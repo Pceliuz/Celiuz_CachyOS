@@ -73,10 +73,21 @@ Lo que anuncia recibir audio (A2DP «Audio Sink») o hacer de manos libres o de
 auricular (HFP/HSP), o se presenta con un icono de audio. Un teclado, un raton o
 el movil no se tocan nunca: ni se bloquean ni se prueban.
 
+SI ESTO NO ES LO QUE QUIERES
+----------------------------
+El cerrojo es un gusto, no una ley, y este repo lo usa mas gente. Se apaga sin
+tocar nada versionado, en `$XDG_CONFIG_HOME/celiuz/bluetooth.conf`:
+
+    cerrojo = no     deja conectar varios a la vez (unos cascos y un altavoz)
+    auto = no        no llamar a nadie; conectar es cosa tuya
+
+Se relee solo al guardarlo. Sin ese fichero valen los dos en `si`.
+
 USO
 ---
     bluetooth.py --demonio   lo de arriba (lo lanza conf/autostart.conf)
     bluetooth.py --ver       el estado, sin tocar nada
+    bluetooth.py gestionar   abre bluetui (clic en la barra), o avisa si falta
     bluetooth.py conectar    conecta ya el primero que conteste
     bluetooth.py soltar      desconecta el que estes usando
     bluetooth.py alternar    enciende o apaga el Bluetooth (clic derecho en la
@@ -85,10 +96,15 @@ USO
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import time
+
+# La carpeta de los scripts, sacada de donde esta ESTE fichero (se le llama por
+# ~/.config/hypr/scripts, que es un enlace: hay que atravesarlo con realpath).
+RAIZ = os.path.dirname(os.path.realpath(__file__))
 from dataclasses import dataclass, field
 
 BLUEZ = "org.bluez"
@@ -149,6 +165,19 @@ def fichero_recuerdo():
 
 def fichero_soltados():
     return os.path.join(_dir_runtime(), "celiuz-bluetooth.json")
+
+
+def fichero_ajustes():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "celiuz", "bluetooth.conf")
+
+
+def _sello_ajustes():
+    """La fecha del fichero de ajustes, para saber si lo tocaste. 0 si no hay."""
+    try:
+        return os.stat(fichero_ajustes()).st_mtime_ns
+    except OSError:
+        return 0
 
 
 def log(mensaje):
@@ -254,6 +283,51 @@ def _escribir_json(ruta, datos):
         log("no pude guardar %s: %s" % (ruta, e))
 
 
+@dataclass
+class Ajustes:
+    """Lo unico de este demonio que se puede cambiar sin tocar el repo.
+
+    Vive en $XDG_CONFIG_HOME/celiuz/bluetooth.conf y NO se versiona, igual que
+    hypr/conf/personal.conf para Hyprland. Si no existe, valen los de fabrica:
+
+        cerrojo = si     con un auricular puesto, los demas no entran
+        auto = si        se llama solo al ultimo que usaste, y despues al resto
+
+    POR QUE SE PUEDE APAGAR EL CERROJO. Es una decision de uso, no una verdad:
+    aqui se quiere un solo auricular a la vez, pero quien tenga unos cascos y un
+    altavoz y los quiera los dos puestos pone `cerrojo = no` y el demonio deja de
+    bloquear a nadie — sigue conectando el primero que conteste, y ya esta.
+    Este repo es publico: lo que es gusto del autor se puede quitar.
+
+    Se relee sola cuando cambia el fichero, asi que no hace falta reiniciar
+    nada.
+    """
+    cerrojo: bool = True
+    auto: bool = True
+
+    @classmethod
+    def cargar(cls):
+        a = cls()
+        try:
+            with open(fichero_ajustes(), encoding="utf-8") as f:
+                texto = f.read()
+        except OSError:
+            return a
+        for linea in texto.splitlines():
+            linea = linea.split("#", 1)[0].strip()
+            if "=" not in linea:
+                continue
+            clave, _, valor = linea.partition("=")
+            clave, valor = clave.strip().lower(), valor.strip().lower()
+            # Se aceptan las dos formas para que nadie se pelee con el idioma.
+            si = valor in ("si", "sí", "yes", "true", "1", "on")
+            if clave in ("cerrojo", "lock"):
+                a.cerrojo = si
+            elif clave in ("auto", "conectar"):
+                a.auto = si
+        return a
+
+
 def por_preferencia(aparatos, recuerdo):
     """El ultimo que usaste primero. Los que nunca se usaron, al final y por
     nombre, para que el orden no cambie de una vez a otra."""
@@ -274,13 +348,14 @@ class Plan:
     candidatos: list = field(default_factory=list)   # a quien llamar, en orden
 
 
-def decidir(aparatos, recuerdo):
+def decidir(aparatos, recuerdo, ajustes=None):
     """Lo que tiene que pasar ahora mismo. No hace nada: solo lo dice.
 
     Es de nivel y no de flanco —mira como estan las cosas, no que acaba de
     cambiar—, asi que da igual el orden en que lleguen las senales o si se
     pierde una: la siguiente foto corrige.
     """
+    ajustes = ajustes or Ajustes()
     auriculares = [a for a in aparatos
                    if a.audio and a.emparejado and a.encendido]
     conectados = [a for a in auriculares if a.conectado]
@@ -293,7 +368,7 @@ def decidir(aparatos, recuerdo):
     elif conectados:
         plan.activo = por_preferencia(conectados, recuerdo)[0].mac
 
-    if plan.activo:
+    if plan.activo and ajustes.cerrojo:
         for a in auriculares:
             if a.mac == plan.activo:
                 # Conectado pero con nuestro bloqueo encima: pasa cuando se le
@@ -306,8 +381,13 @@ def decidir(aparatos, recuerdo):
                 plan.bloquear.append(a.mac)
         return plan
 
-    # Nadie en uso: fuera todos los bloqueos del cerrojo, y a buscar.
+    # Sin cerrojo, o sin nadie en uso: fuera todos los bloqueos que pusimos.
     plan.desbloquear = sorted(recuerdo.bloqueados)
+    if plan.activo or not ajustes.auto:
+        # Con uno puesto (y el cerrojo apagado) no se llama a nadie mas: que
+        # haya dos a la vez es cosa tuya, no de este demonio. Y con `auto = no`
+        # no se llama nunca.
+        return plan
     libres = [a for a in auriculares
               if not bloqueado_por_ti(a, recuerdo) and a.mac not in recuerdo.soltados]
     plan.candidatos = [a.mac for a in por_preferencia(libres, recuerdo)]
@@ -382,6 +462,8 @@ class Demonio:
         self.Gio, self.GLib = _gio()
         self.bus = bus
         self.recuerdo = Recuerdo.cargar()
+        self.ajustes = Ajustes.cargar()
+        self._ajustes_vistos = _sello_ajustes()
         self.objetos = {}
         self.presente = False
 
@@ -499,6 +581,7 @@ class Demonio:
         self._pendiente = False
         if not self.presente:
             return False
+        self._mirar_ajustes()
 
         encendido = hay_adaptador_encendido(self.objetos)
         if encendido and self._encendido is False:
@@ -511,7 +594,7 @@ class Demonio:
         self._encendido = encendido
 
         aparatos = leer_aparatos(self.objetos)
-        plan = decidir(aparatos, self.recuerdo)
+        plan = decidir(aparatos, self.recuerdo, self.ajustes)
 
         antes = self.recuerdo.activo
         if plan.activo != antes:
@@ -539,6 +622,22 @@ class Demonio:
         elif not (self._temporizador or self._cola or self._conectando):
             self._programar(self._espera)
         return False
+
+    def _mirar_ajustes(self):
+        """Relee bluetooth.conf si lo has tocado. Cuesta un stat por pasada."""
+        sello = _sello_ajustes()
+        if sello == self._ajustes_vistos:
+            return
+        self._ajustes_vistos = sello
+        antes = self.ajustes
+        self.ajustes = Ajustes.cargar()
+        if (self.ajustes.cerrojo, self.ajustes.auto) != (antes.cerrojo, antes.auto):
+            log("ajustes: cerrojo=%s auto=%s" %
+                ("si" if self.ajustes.cerrojo else "no",
+                 "si" if self.ajustes.auto else "no"))
+            # Si acabas de apagar el cerrojo, la pasada de ahora suelta lo
+            # bloqueado; si lo acabas de encender, vuelve a ponerlo.
+            self._despertar()
 
     def _poner_blocked(self, mac, valor):
         ruta = self._ruta(mac)
@@ -626,7 +725,7 @@ class Demonio:
         self._temporizador = None
         if not self.presente:
             return False
-        plan = decidir(leer_aparatos(self.objetos), self.recuerdo)
+        plan = decidir(leer_aparatos(self.objetos), self.recuerdo, self.ajustes)
         if plan.activo or not plan.candidatos:
             return False
         self._cola = list(plan.candidatos)
@@ -634,7 +733,7 @@ class Demonio:
         return False
 
     def _llamar_siguiente(self):
-        plan = decidir(leer_aparatos(self.objetos), self.recuerdo)
+        plan = decidir(leer_aparatos(self.objetos), self.recuerdo, self.ajustes)
         if plan.activo or not plan.candidatos or not self.presente:
             # Ya hay uno, o no queda a quien llamar (apagaste el Bluetooth a
             # media ronda). Cuando vuelva a haberlo, la reconciliacion programa.
@@ -774,10 +873,17 @@ def _abrir():
 
 
 def _demonio_vivo():
-    r = subprocess.run(["systemctl", "--user", "is-active", "--quiet",
-                        "celiuz-bluetooth"], stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL)
-    return r.returncode == 0
+    """Con la unidad de systemd o sin ella: quien lo lance de otra forma —a mano,
+    desde otro `exec-once`— tambien tiene un demonio, y decirle que no lo hay
+    seria mentirle."""
+    unidad = subprocess.run(["systemctl", "--user", "is-active", "--quiet",
+                             "celiuz-bluetooth"], stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    if unidad.returncode == 0:
+        return True
+    suelto = subprocess.run(["pgrep", "-f", "bluetooth.py --demonio"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return suelto.returncode == 0
 
 
 def _cuando(epoch):
@@ -792,6 +898,7 @@ def ver():
         print(error)
         return 1
     recuerdo = Recuerdo.cargar()
+    ajustes = Ajustes.cargar()
     adaptadores = [(r, i[ADAPTADOR]) for r, i in objetos.items() if ADAPTADOR in i]
     if not adaptadores:
         print("No hay ningun adaptador Bluetooth.")
@@ -802,10 +909,15 @@ def ver():
             "encendido" if p.get("Powered") else "APAGADO"))
     print("Demonio: %s" % ("en marcha" if _demonio_vivo() else
                            "PARADO (lo lanza autostart.conf al entrar en la sesion)"))
+    if not (ajustes.cerrojo and ajustes.auto):
+        print("Ajustes (%s): cerrojo=%s, conectar solo=%s" % (
+            fichero_ajustes(),
+            "si" if ajustes.cerrojo else "NO",
+            "si" if ajustes.auto else "NO"))
 
     aparatos = leer_aparatos(objetos)
     auriculares = [a for a in aparatos if a.audio and a.emparejado]
-    plan = decidir(aparatos, recuerdo)
+    plan = decidir(aparatos, recuerdo, ajustes)
     print()
     if not auriculares:
         print("No hay auriculares emparejados. Se emparejan con bluetui "
@@ -956,8 +1068,24 @@ def alternar():
     return 0
 
 
+def gestionar():
+    """Lo que abre el clic en el icono de la barra: bluetui en la terminal
+    flotante. Si no esta instalado, un `on-click` normal abriria una terminal que
+    se cierra sola y no diria nada — el fallo en silencio que este repo evita en
+    todas partes. Asi al menos se dice que falta y como se pone."""
+    if shutil.which("bluetui") is None:
+        avisar("Falta bluetui",
+               "Es lo que gestiona el Bluetooth: emparejar, conectar y quitar "
+               "aparatos.\nsudo pacman -S bluetui")
+        print("falta bluetui: sudo pacman -S bluetui", file=sys.stderr)
+        return 1
+    terminal = os.path.join(RAIZ, "terminal.sh")
+    os.execv(terminal, [terminal, "monitor-tui", "bluetui"])
+
+
 ORDENES = {
     "--demonio": demonio,
+    "gestionar": gestionar,
     "--ver": ver,
     "conectar": conectar,
     "soltar": soltar,

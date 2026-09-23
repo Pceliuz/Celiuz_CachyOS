@@ -343,6 +343,40 @@ afirmar_igual "true" "$(prop "$D" Blocked)" "D, el tuyo, sigue como lo dejaste"
 afirmar_igual "" "$(estado_recuerdo "$ESTADO" bloqueados)" "la lista del cerrojo queda vacia"
 afirmar_igual "true" "$(prop "$R" Connected)" "el raton no se entero de nada"
 
+# --- 10. Un equipo sin Bluetooth -------------------------------------------------
+#
+# Es el caso de quien clone el repo en un sobremesa sin radio, o con el servicio
+# de BlueZ parado. El demonio arranca igual (lo lanza autostart.conf en todas
+# partes) y no tiene que romperse, ni gastar, ni ensuciar el diario.
+
+titulo "10. Un equipo sin BlueZ, y otro con BlueZ pero sin adaptador"
+kill "$PID_FALSO" 2>/dev/null; wait "$PID_FALSO" 2>/dev/null; PID_FALSO=""
+"$SCRIPT" --demonio > "$TMP/sin-bluez.log" 2>&1 &
+PID_DEMONIO=$!
+sleep 2
+afirmar "el demonio sigue vivo sin BlueZ" kill -0 "$PID_DEMONIO"
+afirmar_contiene "$TMP/sin-bluez.log" "BlueZ no esta corriendo" \
+    "y dice que espera a que aparezca"
+
+# Ahora arranca BlueZ, pero en un equipo sin radio: ningun adaptador.
+python3 "$FALSO" servir "$TMP/aparatos.json" --sin-adaptador > "$TMP/falso2.log" 2>&1 &
+PID_FALSO=$!
+afirmar "el falso sin adaptador coge org.bluez" esperar_a 5 grep -q '^listo' "$TMP/falso2.log"
+antes="$(llamadas "$A")"
+sleep 3
+afirmar_igual "$antes" "$(llamadas "$A")" "no se llama a nadie: no hay radio"
+afirmar_igual "false" "$(prop "$B" Blocked)" "ni se bloquea a nadie"
+afirmar "el demonio sigue vivo" kill -0 "$PID_DEMONIO"
+
+salida_ver="$("$SCRIPT" --ver 2>&1)"
+case "$salida_ver" in
+    *"No hay ningun adaptador Bluetooth"*) ok "--ver lo dice con todas las letras" ;;
+    *) fallo "--ver dice que no hay adaptador" "$salida_ver" ;;
+esac
+
+kill -TERM "$PID_DEMONIO"; wait "$PID_DEMONIO"; PID_DEMONIO=""
+cat "$TMP/sin-bluez.log" >> "$TMP/demonio.log"
+
 titulo "El demonio no se quejo de nada raro"
 # Todo lo que escribe el demonio empieza por «bluetooth: ». Cualquier otra linea
 # es Python quejandose: un traceback, o un aviso de API obsoleta, que no rompe

@@ -140,6 +140,54 @@ p = bt.decidir(foto(dispositivo(A, "Auris A"), dispositivo(B, "Auris B", bloquea
 sal("apagado_candidatos", len(p.candidatos))
 sal("apagado_desbloquea", ",".join(p.desbloquear))
 
+# --- Los ajustes de quien clona el repo ---------------------------------------------
+#
+# El cerrojo es un gusto, no una ley: quien quiera unos cascos y un altavoz a la
+# vez tiene que poder apagarlo sin tocar nada versionado.
+import os
+os.makedirs(os.path.dirname(bt.fichero_ajustes()), exist_ok=True)
+with open(bt.fichero_ajustes(), "w") as f:
+    f.write("# lo mio\ncerrojo = no   # con comentario detras\nAUTO=Si\n")
+aj = bt.Ajustes.cargar()
+sal("ajuste_cerrojo", aj.cerrojo)
+sal("ajuste_auto", aj.auto)
+
+# Sin cerrojo: dos conectados conviven, no se echa ni se bloquea a nadie.
+p = bt.decidir(foto(dispositivo(A, "Auris A", conectado=True),
+                    dispositivo(B, "Auris B", conectado=True),
+                    dispositivo(C, "Auris C")), recuerdo(), aj)
+sal("sincerrojo_echa", ",".join(p.echar) or "nadie")
+sal("sincerrojo_bloquea", ",".join(p.bloquear) or "nadie")
+sal("sincerrojo_activo", p.activo)
+sal("sincerrojo_candidatos", ",".join(p.candidatos) or "nadie")
+
+# Y lo que el cerrojo hubiera dejado bloqueado se suelta.
+p = bt.decidir(foto(dispositivo(A, "Auris A", conectado=True),
+                    dispositivo(B, "Auris B", bloqueado=True)),
+               recuerdo(bloqueados={B}), aj)
+sal("sincerrojo_desbloquea", ",".join(p.desbloquear))
+
+# Sin cerrojo pero sin nadie puesto, sigue llamando (eso es lo otro ajuste).
+p = bt.decidir(foto(dispositivo(A, "Auris A"), dispositivo(B, "Auris B")), recuerdo(), aj)
+sal("sincerrojo_llama", ",".join(p.candidatos))
+
+# Sin auto: no se llama a nadie, pero el cerrojo sigue si lo quieres.
+solo_cerrojo = bt.Ajustes(cerrojo=True, auto=False)
+p = bt.decidir(foto(dispositivo(A, "Auris A"), dispositivo(B, "Auris B")),
+               recuerdo(), solo_cerrojo)
+sal("sinauto_candidatos", ",".join(p.candidatos) or "nadie")
+p = bt.decidir(foto(dispositivo(A, "Auris A", conectado=True),
+                    dispositivo(B, "Auris B")), recuerdo(), solo_cerrojo)
+sal("sinauto_bloquea", ",".join(p.bloquear) or "nadie")
+
+# Un fichero con basura no rompe nada: se queda con lo de fabrica.
+with open(bt.fichero_ajustes(), "w") as f:
+    f.write("esto no es una linea valida\n=\ncerrojo\n")
+aj2 = bt.Ajustes.cargar()
+sal("ajuste_basura", "%s,%s" % (aj2.cerrojo, aj2.auto))
+os.remove(bt.fichero_ajustes())
+sal("ajuste_sin_fichero", "%s,%s" % (bt.Ajustes.cargar().cerrojo, bt.Ajustes.cargar().auto))
+
 # --- Lo que se guarda --------------------------------------------------------------
 r = recuerdo(bloqueados={B}, soltados={A})
 r.guardar()
@@ -196,6 +244,22 @@ titulo "Bluetooth apagado"
 afirmar_igual "0" "$(valor apagado_candidatos)" "no se llama a nadie"
 afirmar_igual "$B" "$(valor apagado_desbloquea)" "y se suelta el cerrojo"
 
+titulo "Los ajustes de quien clona el repo"
+afirmar_igual "False" "$(valor ajuste_cerrojo)" "«cerrojo = no» se lee, con comentario detras"
+afirmar_igual "True" "$(valor ajuste_auto)" "y «AUTO=Si» tambien, sin importar mayusculas"
+afirmar_igual "nadie" "$(valor sincerrojo_echa)" "sin cerrojo no se echa a nadie"
+afirmar_igual "nadie" "$(valor sincerrojo_bloquea)" "ni se bloquea a nadie"
+afirmar_igual "$B" "$(valor sincerrojo_activo)" "se sigue sabiendo cual esta en uso"
+afirmar_igual "nadie" "$(valor sincerrojo_candidatos)" \
+    "con uno puesto no se llama a otro: conectar dos es cosa tuya"
+afirmar_igual "$B" "$(valor sincerrojo_desbloquea)" \
+    "y lo que el cerrojo habia bloqueado se suelta al apagarlo"
+afirmar_igual "$B,$A" "$(valor sincerrojo_llama)" "sin nadie puesto sigue llamando"
+afirmar_igual "nadie" "$(valor sinauto_candidatos)" "con «auto = no» no se llama a nadie"
+afirmar_igual "$B" "$(valor sinauto_bloquea)" "pero el cerrojo sigue funcionando"
+afirmar_igual "True,True" "$(valor ajuste_basura)" "un fichero con basura no rompe nada"
+afirmar_igual "True,True" "$(valor ajuste_sin_fichero)" "y sin fichero valen los de fabrica"
+
 titulo "Lo que se guarda"
 afirmar_igual "$B" "$(valor guardado_bloqueados)" "la lista del cerrojo vuelve igual"
 afirmar_igual "$A" "$(valor guardado_soltados)" "los soltados vuelven igual"
@@ -204,6 +268,42 @@ afirmar_igual "$XDG_STATE_HOME/celiuz/bluetooth.json" "$(valor fichero_estado)" 
     "el cerrojo se guarda en XDG_STATE_HOME: sobrevive a un reinicio, como Blocked"
 afirmar_igual "$XDG_RUNTIME_DIR/celiuz-bluetooth.json" "$(valor fichero_soltados)" \
     "los soltados en XDG_RUNTIME_DIR: un reinicio los olvida"
+
+# --- El clic de la barra: bluetui, o decir que falta ---------------------------------
+#
+# Un `on-click` que llama a un programa que no esta abre una terminal que se
+# cierra sola y no dice nada: es el fallo en silencio de siempre. Por eso el clic
+# pasa por `bluetooth.py gestionar`.
+
+titulo "El clic de la barra"
+COPIA="$(copiar_repo)"
+GESTOR="$COPIA/hypr/scripts/bluetooth.py"
+# La terminal flotante, falsa: lo que importa es a quien se le manda abrir.
+cat > "$COPIA/hypr/scripts/terminal.sh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$REGISTRO/terminal.log"
+EOF
+chmod +x "$COPIA/hypr/scripts/terminal.sh"
+binario_falso notify-send 0
+
+# Un PATH sin bluetui, pero con lo imprescindible para que el script arranque:
+# vaciarlo del todo deja fuera a python3 y lo que falla es el interprete, no lo
+# que se quiere probar.
+MINIMO="$TMP/minimo"; mkdir -p "$MINIMO"
+for prog in env python3 bash; do ln -sf "$(command -v $prog)" "$MINIMO/$prog"; done
+
+# 1. Sin bluetui instalado.
+salida="$(PATH="$FALSOS:$MINIMO" "$GESTOR" gestionar 2>&1)"; codigo=$?
+afirmar_igual "1" "$codigo" "sin bluetui, la orden falla en vez de fingir que fue bien"
+afirmar_contiene "$REGISTRO/notify-send.log" "Falta bluetui" "y lo avisa por pantalla"
+afirmar_contiene "$REGISTRO/notify-send.log" "pacman -S bluetui" "diciendo como se instala"
+afirmar "no se abre ninguna terminal" test ! -f "$REGISTRO/terminal.log"
+
+# 2. Con bluetui instalado.
+binario_falso bluetui 0
+PATH="$FALSOS:$MINIMO" "$GESTOR" gestionar
+afirmar_contiene "$REGISTRO/terminal.log" "monitor-tui bluetui" \
+    "con bluetui, se abre en la terminal flotante"
 
 afirmar_intacta_la_casa_real
 

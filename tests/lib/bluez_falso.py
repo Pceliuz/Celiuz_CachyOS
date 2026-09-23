@@ -2,7 +2,8 @@
 """
 tests/lib/bluez_falso.py — un BlueZ de mentira para probar hypr/scripts/bluetooth.py.
 
-    bluez_falso.py servir <aparatos.json>     se queda sirviendo org.bluez
+    bluez_falso.py servir <aparatos.json> [--sin-adaptador]
+                                              se queda sirviendo org.bluez
     bluez_falso.py <orden> [argumentos...]    le habla al que esta sirviendo
 
 SOLO EN UN BUS PRIVADO. Coge el nombre org.bluez en el bus «del sistema» que
@@ -111,9 +112,12 @@ def ruta_de(mac):
 
 
 class Falso:
-    def __init__(self, conexion, aparatos):
+    def __init__(self, conexion, aparatos, con_adaptador=True):
         self.c = conexion
         self.info = Gio.DBusNodeInfo.new_for_xml(XML)
+        # Sin adaptador se imita a un sobremesa sin Bluetooth: BlueZ corriendo
+        # pero sin ninguna radio. El demonio tiene que quedarse quieto.
+        self.con_adaptador = con_adaptador
         self.adaptador = {"Powered": True, "Address": "00:00:00:00:00:00",
                           "Alias": "falso"}
         self.aparatos = {}      # ruta -> props de Device1
@@ -137,7 +141,8 @@ class Falso:
         # manejador de propiedades (asi lo hace GDBus con NULL).
         self._registrar("/", OBJETOS)
         self._registrar("/prueba", CONTROL)
-        self._registrar(ADAPTADOR_RUTA, ADAPTADOR)
+        if con_adaptador:
+            self._registrar(ADAPTADOR_RUTA, ADAPTADOR)
         for ruta in self.aparatos:
             self._registrar(ruta, DISPOSITIVO)
 
@@ -192,7 +197,7 @@ class Falso:
     def _todo(self):
         def v(props):
             return {k: GLib.Variant(FIRMAS[k], x) for k, x in props.items()}
-        todo = {ADAPTADOR_RUTA: {ADAPTADOR: v(self.adaptador)}}
+        todo = {ADAPTADOR_RUTA: {ADAPTADOR: v(self.adaptador)}} if self.con_adaptador else {}
         for ruta, props in self.aparatos.items():
             todo[ruta] = {DISPOSITIVO: v(props)}
         return todo
@@ -286,11 +291,11 @@ class Falso:
         invocacion.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", metodo)
 
 
-def servir(fichero):
+def servir(fichero, con_adaptador=True):
     with open(fichero, encoding="utf-8") as f:
         aparatos = json.load(f)
     conexion = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
-    Falso(conexion, aparatos)
+    Falso(conexion, aparatos, con_adaptador)
     bucle = GLib.MainLoop()
     listo = threading.Event()
 
@@ -345,7 +350,7 @@ def orden(nombre, argumentos):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "servir":
-        sys.exit(servir(sys.argv[2]))
+        sys.exit(servir(sys.argv[2], "--sin-adaptador" not in sys.argv))
     if len(sys.argv) >= 2:
         sys.exit(orden(sys.argv[1], sys.argv[2:]))
     print(__doc__, file=sys.stderr)
