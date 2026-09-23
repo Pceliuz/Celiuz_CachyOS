@@ -185,6 +185,46 @@
         "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui nmtui"
     },
 
+    // --- DERECHA: Bluetooth ---
+    //
+    // El modulo de serie de waybar, sin script: el icono dice apagado, encendido
+    // o conectado, y con algo conectado su nombre y (si la informa) su bateria.
+    //
+    // En un equipo SIN Bluetooth no aparece: `format-no-controller` vacio
+    // esconde el modulo entero. Por eso esta en derecha.jsonc para todos y no
+    // se decide al instalar, como la bateria: si enchufas un adaptador USB,
+    // sale solo.
+    //
+    // Los auriculares se conectan solos y de uno en uno: eso no es del modulo,
+    // es de hypr/scripts/bluetooth.py (lo arranca conf/autostart.conf).
+    //
+    //   clic         bluetui en la terminal flotante: buscar, emparejar,
+    //                conectar (repo oficial extra; lo comprueba instalar.sh)
+    //   derecho      encender / apagar; si lo apago la tecla de modo avion,
+    //                tambien lo desbloquea
+    //   central      soltar el auricular que llevas puesto: entra el otro que
+    //                tengas encendido, y el que soltaste no vuelve solo
+    "bluetooth": {
+        "format": "<span size='150%'>󰂯</span>",
+        "format-off": "<span size='150%'>󰂲</span>",
+        "format-disabled": "<span size='150%'>󰂲</span>",
+        "format-no-controller": "",
+        "format-connected": "<span size='150%'>󰂱</span> {device_alias}",
+        "format-connected-battery": "<span size='150%'>󰂱</span> {device_alias} {device_battery_percentage}%",
+        // {status} sale en ingles («on», «off»), asi que cada estado lleva su
+        // propio texto.
+        "tooltip-format": "Bluetooth",
+        "tooltip-format-on": "Bluetooth encendido, nada conectado",
+        "tooltip-format-off": "Bluetooth apagado — clic derecho para encenderlo",
+        "tooltip-format-disabled": "Bluetooth bloqueado (modo avion) — clic derecho para encenderlo",
+        "tooltip-format-connected": "{device_enumerate}\n\nclic central: soltar el auricular",
+        "tooltip-format-enumerate-connected": "{device_alias}",
+        "tooltip-format-enumerate-connected-battery": "{device_alias} — {device_battery_percentage}%",
+        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui bluetui",
+        "on-click-right": "$HOME/.config/hypr/scripts/bluetooth.py alternar",
+        "on-click-middle": "$HOME/.config/hypr/scripts/bluetooth.py soltar"
+    },
+
     // --- DERECHA: bateria (solo en portatiles) ---
     //
     // El bloque se queda SIEMPRE aqui, tambien en un sobremesa, y no pasa nada:

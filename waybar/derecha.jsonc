@@ -5,7 +5,8 @@
 // ---------------------------
 // Es la lista de un sobremesa, y ademas la red de seguridad de quien clone el
 // repo y arranque waybar antes de pasar `./instalar.sh`: sin el, la barra se
-// quedaria sin lado derecho entero (volumen, red, notificaciones y tray).
+// quedaria sin lado derecho entero (volumen, red, Bluetooth, notificaciones
+// y tray).
 //
 // La lista con bateria no esta escrita en ninguna parte a mano: la calcula
 // `instalar.sh` a partir de ESTA, metiendo "battery" delante de las
@@ -21,5 +22,5 @@
 // comentarios de JSON. Se los quita antes, pero solo los que ocupan una linea
 // entera. Un `// ...` al final de una linea con datos rompe la lectura.
 {
-    "modules-right": ["pulseaudio", "network", "custom/notificaciones", "tray"]
+    "modules-right": ["pulseaudio", "network", "bluetooth", "custom/notificaciones", "tray"]
 }

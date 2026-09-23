@@ -152,6 +152,10 @@ preparar_entorno() {
     export XDG_CONFIG_HOME="$HOME/.config"
     export XDG_CACHE_HOME="$HOME/.cache"
     export XDG_DATA_HOME="$HOME/.local/share"
+    # Esta hace falta ponerla aunque cuelgue del HOME de mentira: si la sesion
+    # del usuario la trae definida (la del autor si), se hereda tal cual y
+    # apunta a su ~/.local/state de verdad. Asi se colaria bluetooth.py.
+    export XDG_STATE_HOME="$HOME/.local/state"
     export XDG_RUNTIME_DIR="$TMP/run"
     export FALSOS="$TMP/bin"
     export REGISTRO="$TMP/registro"

@@ -84,6 +84,7 @@ window#waybar.hidden {
 #memory,
 #pulseaudio,
 #network,
+#bluetooth,
 #battery,
 #custom-notificaciones,
 #tray,
@@ -108,6 +109,7 @@ window#waybar.hidden {
 #memory:hover,
 #pulseaudio:hover,
 #network:hover,
+#bluetooth:hover,
 #battery:hover,
 #custom-notificaciones:hover,
 #tray:hover,
@@ -284,6 +286,17 @@ window#waybar.hidden {
 #network.disconnected {
     color: @alerta;
 }
+
+/* --- Bluetooth --- */
+/* Solo brilla con algo conectado, por lo mismo que las notificaciones: tenerlo
+ * encendido sin nada, o apagado, no es una noticia. Apagado y bloqueado ya se
+ * distinguen por el icono (el tachado), asi que no gastan otro color: el
+ * @apagado de la paleta se pierde sobre un fondo oscuro, y un boton que no se
+ * ve es un boton que no se puede pulsar para encenderlo.
+ *
+ * Las clases las pone waybar: .on, .off, .disabled (rfkill) y .connected. */
+#bluetooth           { color: @tenue; }
+#bluetooth.connected { color: @amatista; }
 
 /* --- Bateria (solo aparece en portatiles) --- */
 /* El modulo existe en config.jsonc siempre, pero solo entra en la barra si

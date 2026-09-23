@@ -126,6 +126,22 @@ comprobar_dependencias() {
         gris "    sudo pacman -S wf-recorder"
     fi
 
+    # Y el Bluetooth, solo si el equipo tiene: sin adaptador el modulo de la
+    # barra se esconde solo y no hay nada que pedir. Con adaptador faltan dos
+    # cosas que no avisan: el clic en el icono abre bluetui (un on-click que no
+    # existe no da ningun error, waybar se traga su stderr), y sin el servicio
+    # de BlueZ no hay icono ni auriculares que se conecten solos.
+    if compgen -G '/sys/class/bluetooth/hci*' >/dev/null; then
+        if ! command -v bluetui >/dev/null 2>&1; then
+            aviso "el clic en el Bluetooth de la barra no hara nada sin: bluetui"
+            gris "    sudo pacman -S bluetui"
+        fi
+        if ! systemctl is-active --quiet bluetooth.service 2>/dev/null; then
+            aviso "este equipo tiene Bluetooth pero su servicio esta parado"
+            gris "    sudo systemctl enable --now bluetooth"
+        fi
+    fi
+
     # La fuente no es un capricho: sin ella los glifos del dock salen como
     # cuadrados vacios. Se comprueba aparte porque no es un ejecutable.
     #
