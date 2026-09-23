@@ -34,6 +34,7 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 |---|---|
 | `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadió el usuario |
 | `~/.cache/celiuzpaper/lock-*.conf` | fondo y medidas del bloqueo, rehechos en cada bloqueo |
+| `~/.local/state/celiuz/bluetooth.json` | cuándo se usó cada auricular y a cuáles bloqueó el cerrojo de `bluetooth.py` |
 
 **No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio
 fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: con
@@ -521,6 +522,24 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   RGB de cada literal sea la de algún color de la paleta**; el alfa es libre. Eso
   es lo que comprueba la prueba, y **falla 7 de 9 contra el código anterior**,
   listando fichero, línea y color.
+- **Una capa de Wayland NO desaparece cuando muere su proceso: se desvanece, y
+  grim la retrata.** Es lo que metía un recuadro violeta dentro de las capturas
+  de `SUPER+S` (2026-09-23): al soltar el ratón slurp termina, pero Hyprland
+  apaga su capa con `fadeLayersOut` y eso dura **90-125 ms** — medido con un
+  cliente de gtk-layer-shell que crea la misma capa (`namespace: selection`) y
+  sale solo, muestreando con `grim -g "0,0 40x40" -t ppm -` cada 30 ms. En la
+  captura del usuario el borde estaba al 42 % de opacidad, o sea a mitad de la
+  transición. **`hyprctl layers` no sirve de señal**: deja de listarla a los
+  ~10 ms, mucho antes de que deje de verse. Y en 0.56 no hay regla por capa que
+  lo evite: `noanim` da `invalid field type` (con valor y sin él) y
+  `animation none` se acepta pero solo quita el deslizamiento. Lo que queda es
+  esperar un plazo fijo, y dejarlo escrito por qué.
+- **Antes de perseguir un artefacto en una imagen, descarta que sea contenido.**
+  En esa misma captura había una línea vertical sospechosa que era el separador
+  de paneles de WhatsApp. Lo que distingue a un artefacto de una capa es que el
+  MISMO alfa sobre un color cuadre en zonas de contenido distinto: allí el tinte
+  era `#b16cff` al 7,2 % y encajaba igual en un fondo plano gris y en una
+  burbuja verde. Eso ya no puede ser contenido.
 - **waybar se traga el stderr de los `on-click`.** Un fallo ahí no deja rastro en
   el journal; por eso los lanzadores notifican.
 - **Un SVG que empieza por un comentario no es una imagen para gdk-pixbuf.** El
@@ -625,6 +644,25 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   escuchar. Hay que abrirle una conexión privada
   (`Gio.DBusConnection.new_for_address_sync`) y no la compartida de
   `Gio.bus_get_sync`, o se queda muda para el resto del proceso.
+- **El `Blocked` de BlueZ solo rechaza las conexiones que pide EL APARATO.** Una
+  pedida desde este lado (`bluetoothctl connect`, `Device1.Connect`, bluetui) se
+  pone a buscarlo igual: medido el 2026-09-21 con unos TWS bloqueados, acabó en
+  `br-connection-page-timeout` y no en un rechazo. Por eso el cerrojo de
+  `hypr/scripts/bluetooth.py` es de dos capas —bloquear de antemano y echar al
+  que se cuele—, y quitar cualquiera de las dos lo rompe por una puerta.
+- **Y `Blocked` se escribe en disco** (`/var/lib/bluetooth`), así que sobrevive a
+  reinicios y a la muerte de quien lo puso. Quien bloquee algo **apunta qué
+  bloqueó** (`~/.local/state/celiuz/bluetooth.json`) y **solo desbloquea lo
+  suyo**: el usuario puede tener aparatos bloqueados a mano, y «desbloquear todo
+  al arrancar» se los soltaría. Por la misma razón el demonio va como unidad
+  transitoria de `systemd-run` con `Restart=on-failure` y `PartOf` la sesión, y
+  no con un `exec-once` a pelo: si muere, alguien tiene que volver a repasar.
+- **«Lo desconectó el usuario» se PREGUNTA, no se deduce.** BlueZ (5.7x en
+  adelante) manda `Device1.Disconnected(motivo, mensaje)` con
+  `org.bluez.Reason.Local/Remote/Timeout/Suspend…`. Llega junto al cambio de
+  `Connected` y **no se ha medido en qué orden**, así que no conviene contar con
+  ninguno: nada que dependa del motivo se decide en el mismo ciclo en que llega
+  el `Connected: false` (el demonio espera 1 s antes de volver a llamar).
 - **Las hints de una notificación pueden traer el icono en crudo** (`image-data`,
   un array de píxeles). Guardarlas enteras son cientos de KB por aviso, y el
   registro vive en `$XDG_RUNTIME_DIR`, que es el mismo tmpfs donde está el fifo
@@ -824,6 +862,28 @@ dibujarse y por eso `run.sh` no lo recoge (solo mira `tests/unidad` y
    `tests/e2e/fondo.sh` prueba `wallpaper.sh` con un `pkill` falso — ese script
    empieza matando mpvpaper, y ejecutarlo de verdad en una prueba te dejaría sin
    fondo.
+
+Para lo que habla con un **servicio del sistema por D-Bus** (BlueZ, y lo que
+venga), la receta es la de `tests/e2e/bluetooth.sh`: la prueba se relanza dentro
+de `dbus-run-session`, apunta `DBUS_SYSTEM_BUS_ADDRESS` a ese bus privado y
+levanta un servicio falso (`tests/lib/bluez_falso.py`). Gio respeta esa variable,
+así que el script no necesita ni una variable de pruebas y el de verdad no se
+toca. Antes de arrancar nada, guardias: que el bus no es el tuyo y que el falso
+consiguió el nombre (en el bus real ya lo tiene el servicio y no podría).
+**El falso tiene que reproducir el ORDEN de las señales del real**, no solo los
+métodos: el primer falso de BlueZ desconectaba antes de marcar `Blocked` —el real
+lo hace al revés— y con eso una guardia del demonio pasaba sin haberse ejercido.
+
+Dos trampas de las pruebas que mordieron escribiendo esa:
+
+- **`esperar_a 5 test "$(algo)" = x` no espera nada.** Bash expande el `$(...)`
+  una vez, al llamar, y el sondeo repite la misma comparación con el valor
+  viejo: pasa o falla según cómo estuviera el mundo en ese instante. Lo que se
+  espera va por una función que vuelva a mirar en cada vuelta.
+- **`XDG_STATE_HOME` viene definida en la sesión del autor.** Un `$HOME` de
+  mentira no la redirige: se hereda tal cual y apunta a su `~/.local/state` de
+  verdad. `preparar_entorno` la exporta ahora; cualquier `XDG_*` nueva que use
+  un script, igual.
 
 Lo que **no** cubren: el aspecto. Que una capa GTK se dibuje donde toca o que un
 icono salga centrado sigue necesitando un Hyprland anidado y una captura.

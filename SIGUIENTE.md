@@ -3,7 +3,160 @@
 Notas para retomar el trabajo sin tener que reconstruir el contexto. Si esto se
 queda viejo, manda el `README.md` y el `CLAUDE.md`.
 
-Última sesión: **2026-09-14**, en el **portátil**. Salió de un fallo de uso:
+Última sesión: **2026-09-23**, en el **portátil**: **el recuadro que salía
+dentro de las capturas de zona** (`SUPER + S`).
+
+### El síntoma
+
+Cada captura hecha con `SUPER + S` traía un recuadro violeta dentro, del mismo
+tamaño y en el mismo sitio, daba igual lo que se seleccionara. Con
+`SUPER + SHIFT + S` (pantalla entera) no pasaba nunca.
+
+### Lo que dijo la propia captura, sin tocar nada
+
+Analizando la imagen que mandó el usuario, píxel a píxel:
+
+- La franja de arriba (`y` 0–471) tenía un **tinte amatista `#b16cff` al 7,2 %**
+  y la banda de abajo no. El mismo alfa cuadraba en colores muy distintos —el
+  fondo plano y una burbuja verde de WhatsApp—, o sea que era una **capa
+  encima**, no un cambio de contenido.
+- La línea de `y` 472 era ese borde **al 42 % de opacidad**.
+- La línea vertical de `x` 474 **no era un fallo**: es el separador de paneles
+  de WhatsApp. Conviene descartar lo que es contenido antes de perseguirlo.
+
+O sea: la capa de selección de slurp, **a mitad de apagarse**, dentro de la foto.
+
+### La causa
+
+Al soltar el botón, slurp termina — pero su capa no desaparece de golpe:
+**Hyprland la desvanece** (`fadeLayersOut`). Medido con un cliente de
+gtk-layer-shell de mentira que crea la misma capa (`namespace: selection`) y
+sale solo: la capa se sigue viendo entre **90 y 125 ms** después de que el
+proceso muere, pasando por 65 %, 55 %, 47 % y 39 % de opacidad. grim pide su
+fotograma mucho antes de eso. Por eso `--full` no lo sufría: ahí no hay slurp.
+
+### Dos caminos que NO valen (medidos, para no repetirlos)
+
+- **`layerrule = noanim ...`**: en Hyprland 0.56 da `invalid field type noanim`,
+  con valor y sin él. Solo sale en `hyprctl configerrors`.
+- **`layerrule = animation none, match:namespace selection`**: se acepta sin
+  error, pero **no apaga el desvanecido** — solo el deslizamiento. Con la regla
+  puesta, la capa seguía viéndose igual. Apagar `fadeLayersOut` global sí lo
+  arregla, pero se llevaría por delante la transición de las barras.
+- **Preguntar a `hyprctl layers` y capturar**: la capa deja de listarse a los
+  ~10 ms, mucho antes de dejar de verse. Necesario, pero no suficiente.
+
+### El arreglo
+
+`screenshot.sh` espera, y solo en el camino de la zona: primero a que Hyprland
+deje de listar la capa (el fin del proceso) y después el plazo del desvanecido
+(`ESPERA_SELECCION=0.3`, el doble del peor caso medido). No se puede preguntar
+si una animación acabó, así que esa parte es un plazo fijo y está razonado en el
+propio fichero.
+
+### Cómo se comprobó
+
+- **De punta a punta, con el script de verdad**: un `slurp` de mentira que pinta
+  una capa verde chillón con el mismo `namespace` y devuelve una geometría, más
+  un `wl-copy` que no hace nada, y `HOME` a un temporal. **Sin la espera: 4 de 4
+  capturas con la capa dentro (51–71 % de píxeles verdes). Con ella: 4 de 4
+  limpias (0,6 %, que es contenido real).** La receta está en el historial de
+  esta sesión y se rehace en dos minutos con `gtk-layer-shell`.
+- **`tests/unidad/captura.sh`** (14 comprobaciones, sin compositor): vigila la
+  secuencia —que entre slurp y grim pasen ≥ 200 ms, que se pregunte por la capa,
+  y que `--full` y `--ventana` NO paguen esa espera—. Quitando la llamada a la
+  espera, falla con «solo pasaron 17 ms».
+
+### Lo que queda de aquí
+
+1. **Confirmarlo a mano**: un `SUPER + S` de verdad y mirar que la captura salga
+   sin el recuadro. Es lo único que no se puede automatizar aquí.
+2. Si algún día alguien sube el desvanecido de las capas, `ESPERA_SELECCION` se
+   queda corta **en silencio**. La prueba no lo detecta: vigila la secuencia, no
+   el fotograma.
+
+---
+
+La sesión anterior: **2026-09-21**, en el **portátil**: **el Bluetooth**. Hasta hoy se
+manejaba solo por consola (`bluetoothctl`, unas funciones de fish y un demonio
+`auris-reconectar` que vivía fuera del repo con la MAC de unos TWS cableada).
+
+### Lo que se hizo
+
+- **Un módulo en la barra**, el `bluetooth` de serie de waybar, a la derecha de
+  la red. Clic: `bluetui` en la terminal flotante (repo oficial `extra`).
+  Derecho: encender/apagar, y quita el bloqueo de rfkill si lo hay. Central:
+  **soltar el auricular en uso**. Sin adaptador no aparece
+  (`format-no-controller` vacío).
+- **`hypr/scripts/bluetooth.py`**, que sustituye a `auris-reconectar` y ya vale
+  para cualquiera: los auriculares **se conectan solos** al que esté encendido,
+  **el último usado primero**; **con uno puesto los demás no entran** hasta
+  soltarlo (el cerrojo); y **soltar a mano no se deshace solo** — ese no vuelve
+  hasta apagar y encender el Bluetooth. Las reglas y su porqué, en su cabecera
+  y en la sección «El Bluetooth» del README.
+- Arranca desde `autostart.conf` como **unidad transitoria** (`systemd-run`,
+  `celiuz-bluetooth`): `Restart=on-failure` y `PartOf=graphical-session.target`,
+  porque deja estado en disco (ver abajo) y no puede morirse sin soltarlo.
+- `instalar.sh` pide `bluetui` y el servicio de BlueZ **solo si hay adaptador**.
+- Fuera del repo, en el portátil: `auris-reconectar` (script y unidad) **borrado
+  y deshabilitado**, y `auris` / `auris-off` / `auris-estado` de fish pasan a ser
+  envoltorios de `bluetooth.py conectar` / `soltar` / `--ver`.
+
+### Lo que se midió, y cambió el diseño
+
+**`Blocked` de BlueZ NO frena una conexión pedida desde este lado.** Con los TWS
+bloqueados, `bluetoothctl connect` (y `Device1.Connect` por D-Bus) se puso a
+buscarlos igual: acabó en `br-connection-page-timeout`, no en un rechazo. Solo
+rechaza las conexiones que inicia el aparato. Por eso el cerrojo tiene **dos
+capas**: bloquear a los demás de antemano y, si alguno se cuela (desde bluetui),
+echarlo en el acto con un aviso que dice por qué.
+
+Y `Blocked` **se guarda en disco** (`/var/lib/bluetooth`): si el equipo se apaga
+con un auricular puesto, los otros amanecen bloqueados. El demonio apunta lo que
+bloquea en `~/.local/state/celiuz/bluetooth.json` y **solo desbloquea lo suyo**:
+lo que bloquees tú a mano no lo toca nunca.
+
+«Lo soltaste tú» no se supone: BlueZ 5.87 trae el motivo de cada desconexión en
+`Device1.Disconnected` (`Local`, `Remote`, `Timeout`, `Suspend`…).
+
+### Cómo se probó
+
+- `tests/unidad/bluetooth.sh` (28): `decidir()` a pelo, con fotos inventadas.
+- `tests/e2e/bluetooth.sh` (70): el demonio de verdad contra
+  `tests/lib/bluez_falso.py`, un BlueZ de mentira en un bus de `dbus-run-session`
+  al que se apunta `DBUS_SYSTEM_BUS_ADDRESS`. **Sin ninguna variable de pruebas
+  en el script.** Tres guardias antes de arrancar nada (bus privado, nombre
+  `org.bluez` conseguido, `--ver` ve los falsos y no los tuyos).
+- **Siete mutantes** (romper a propósito una regla y ver que la prueba cae).
+  Dos sobrevivieron al principio y los dos eran de la prueba: el falso
+  desconectaba ANTES de marcar `Blocked` (el real lo hace al revés), y las caídas
+  llegaban antes de los 3 s de `MINIMO_EN_USO`, que tapaba el motivo. Ahora caen
+  todos.
+- **Falsa alarma, tres veces en la sesión:** «no tocó la caché real» falló porque
+  la pantalla se **bloqueó sola a mitad de la suite** (o se desbloqueó) y
+  `lock.sh` reescribió `lock-*`. Se confirma mirando la hora en `lock.log`.
+
+### Lo que queda de aquí
+
+1. **Probarlo con los TWS de verdad.** El demonio está corriendo en el portátil
+   desde el 2026-09-21 y con los TWS apagados da `page-timeout`, que es lo
+   esperado; falta encenderlos y ver que entran solos, soltar con el clic
+   central, y apagar/encender el Bluetooth. `bluetooth.py --ver` y
+   `journalctl --user -u celiuz-bluetooth` cuentan lo que pasa.
+2. **El cerrojo con DOS auriculares reales no se ha visto nunca**: en el
+   portátil solo hay uno emparejado. La lógica está cubierta por el e2e, pero la
+   parte de «el kernel rechaza al bloqueado sin que el audio salte» viene de la
+   documentación de BlueZ, no de una medida.
+3. **En la PC**: `git pull && ./instalar.sh`, cerrar sesión y entrar. Si no
+   tiene Bluetooth, el icono no debería salir (se fía del manual de waybar: un
+   formato vacío esconde el módulo) y el demonio se queda esperando sin gastar.
+   Mirarlo.
+4. La batería de los auriculares en la barra depende de que la informen
+   (`Battery1`); con los TWS no se ha visto.
+
+---
+
+La sesión anterior: **2026-09-14**, en el **portátil**. Salió de un fallo de uso:
 `SUPER + L` llevaba cinco horas sin bloquear la pantalla.
 
 **El atajo no estaba roto.** Es lo primero que se descartó y conviene recordar

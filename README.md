@@ -75,6 +75,9 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
   incoherencias que son config válida pero no hacen nada.
 - **`wallpaper-pause.py`** — pausa el vídeo del fondo cuando queda tapado, y lo
   mata entero mientras corra algo de la `stoplist` (juegos).
+- **`bluetooth.py`** — los auriculares Bluetooth se conectan solos al que tengas
+  encendido, y **de uno en uno**: con uno puesto, los demás no pueden entrar
+  hasta que lo sueltes. Ver su sección abajo.
 - **`teclado.py`** — la sesión lleva dos distribuciones (us y latam). Este avisa
   por notificación de cuál hay puesta: al arrancar, y cada vez que la cambias con
   `SUPER + DEL`. Ver su sección abajo.
@@ -108,6 +111,14 @@ Y para grabar la pantalla (`SUPER + R`), que va aparte por lo mismo:
 sudo pacman -S wf-recorder
 ```
 
+Y el Bluetooth, **solo si el equipo tiene** (sin adaptador el icono de la barra
+no sale y no hace falta nada):
+
+```sh
+sudo pacman -S bluez bluez-utils bluetui
+sudo systemctl enable --now bluetooth
+```
+
 Notas:
 
 - **`ttf-meslo-nerd`** no es opcional: las barras usan la variante
@@ -126,6 +137,9 @@ Notas:
   instalador lo comprueba aparte por la misma razón que las teclas de función. Si
   falta, `SUPER + R` sí avisa —el script lo mira antes de nada—, pero el aviso
   necesita que el demonio de notificaciones esté vivo.
+- **`bluetui`** es lo que abre el clic en el icono del Bluetooth: buscar,
+  emparejar y conectar, en la terminal flotante, como `nmtui` en la red. Está en
+  el repo oficial `extra`. El instalador lo pide solo si hay un adaptador.
 
 ## Instalación
 
@@ -886,7 +900,7 @@ los `on-click`).
 
 Reparto: a la izquierda los sensores (velocidad, temperatura, CPU, memoria); en
 el centro el reloj y los siete escritorios; a la derecha volumen, red,
-notificaciones y bandeja.
+Bluetooth, notificaciones y bandeja.
 
 ### La velocidad de internet
 
@@ -908,6 +922,118 @@ defecto, así que sigue funcionando si cambias de cable o pasas a wifi.
 > `interval` **es también la ventana de promediado**, porque waybar calcula la
 > velocidad entre dos lecturas; por debajo de 2 s las cifras saltan demasiado
 > para leerlas.
+
+---
+
+## El Bluetooth
+
+A la derecha de la red. Es el módulo de serie de waybar: el icono dice si está
+apagado (tachado), encendido o conectado, y con algo conectado enseña su nombre
+y su batería si la informa. **Solo se ilumina con algo conectado.** En un equipo
+sin Bluetooth no aparece.
+
+| | |
+|---|---|
+| clic | `bluetui` en una terminal flotante: buscar, emparejar, conectar |
+| clic derecho | encender / apagar (y si lo apagó la tecla de modo avión, desbloquearlo) |
+| clic central | **soltar el auricular que llevas**: entra el otro que tengas encendido |
+
+### Los auriculares se conectan solos, y de uno en uno
+
+Eso no es del módulo: es de `hypr/scripts/bluetooth.py`, que arranca con la
+sesión. Tres reglas:
+
+1. **Se conecta solo.** Con el Bluetooth encendido y ningún auricular puesto,
+   llama a los emparejados uno detrás de otro, **el último que usaste primero**,
+   y se queda con el primero que conteste — el que tengas encendido. Con dos
+   encendidos gana el de la última vez.
+2. **El cerrojo.** Con un auricular conectado, los demás **no pueden entrar**
+   hasta que lo sueltes: ni llamando ellos, ni conectándolos tú desde `bluetui`.
+   Si uno se cuela, se le echa y sale un aviso diciendo por qué.
+3. **Soltar a mano no es una caída.** Si lo desconectas tú (clic central,
+   `bluetui`, `bluetooth.py soltar`), no vuelve solo: se prueba con los demás y
+   ese se queda quieto **hasta que apagues y enciendas el Bluetooth** o lo
+   conectes tú. Si en cambio lo apagas, lo metes en el estuche o te alejas, se le
+   vuelve a buscar.
+
+O sea que **cambiar de auricular** es: enciendes el otro, clic central en el
+icono, y entra el nuevo.
+
+**Por qué hace falta un demonio.** BlueZ no persigue a nadie: *Trusted* solo
+significa que acepta la conexión si el aparato la pide, y muchos auriculares no
+la piden después de una desconexión desde este lado. Alguien tiene que llamarlos.
+
+**Cómo sabe si lo soltaste tú.** No lo supone: BlueZ trae el motivo de cada
+desconexión (`Local`, `Remote`, `Timeout`, `Suspend`…) en la señal
+`Device1.Disconnected`. Solo `Local` cuenta como soltarlo, y solo si no fue el
+propio cerrojo quien lo echó.
+
+**Por qué el cerrojo lleva dos capas.** Los demás se **bloquean** (la propiedad
+`Blocked` de BlueZ), y eso hace que el kernel rechace su llamada antes de que
+llegue a nada, sin que el audio salte. Pero se midió que `Blocked` **no frena una
+conexión pedida desde este lado**: con los auriculares bloqueados,
+`bluetoothctl connect` se puso a buscarlos igual. Por eso además se echa en el
+acto a cualquiera que se cuele.
+
+**Lo que se toca y lo que no.** Solo auriculares y altavoces: lo que anuncia que
+recibe audio (A2DP) o que hace de manos libres. El móvil habla los mismos
+perfiles pero desde el otro lado, y ni él, ni un ratón, ni un teclado se
+bloquean ni se llaman nunca. **Y un aparato que bloqueaste tú a mano no se toca**:
+el demonio solo desbloquea lo que bloqueó él, y lo lleva apuntado.
+
+### Lo que se guarda
+
+| Archivo | Qué | Por qué ahí |
+|---|---|---|
+| `~/.local/state/celiuz/bluetooth.json` | cuándo usaste cada auricular, y cuáles bloqueó el cerrojo | el `Blocked` de BlueZ se guarda en disco y sobrevive a un reinicio, así que la lista de quién lo puso también |
+| `$XDG_RUNTIME_DIR/celiuz-bluetooth.json` | los que soltaste a mano | un reinicio los olvida a propósito |
+
+Al salir de la sesión, al apagar el Bluetooth y al arrancar, el demonio suelta
+todo lo que bloqueó y no haga falta. Si se cae, systemd lo levanta (es una
+unidad transitoria, `celiuz-bluetooth`) y lo primero que hace es repasarlo.
+
+### Si algo no cuadra
+
+```sh
+hypr/scripts/bluetooth.py --ver              # el estado y quién bloqueó a quién
+journalctl --user -u celiuz-bluetooth -e     # lo que ha ido haciendo el demonio
+bluetoothctl unblock <MAC>                   # soltar uno a mano
+rfkill list bluetooth                        # si no se ve nada: ¿modo avión?
+```
+
+`bluetooth.py conectar` llama ya al primero que conteste, sin esperar la
+siguiente ronda (que se va espaciando de 10 s a 60 s cuando no contesta nadie,
+para no tener la radio buscando todo el rato: en un portátil suele ser la misma
+tarjeta que la del wifi).
+
+**Por qué no blueman.** Está en los repos oficiales, pero es GTK3 con su propio
+aspecto (no coge la paleta), deja un applet corriendo y trae su propia lógica de
+reconexión, que se pelearía con esta. Y un panel propio no compensa: lo difícil
+no es la ventana sino emparejar (los PIN, las confirmaciones), y eso `bluetui`
+ya lo hace bien.
+
+---
+
+## Las capturas
+
+`SUPER + S` recorta una zona con el ratón, `SUPER + SHIFT + S` coge la pantalla
+entera y `SUPER + ALT + S` la ventana que tengas delante. Las tres van a **dos
+sitios a la vez**: al portapapeles, para pegarlas al instante, y a un archivo en
+`~/Imágenes/capturas/`, para no perderlas si copias otra cosa después.
+
+> **Entre soltar el ratón y disparar la foto hay un tercio de segundo de espera,
+> y no es un descuido.** Cuando sueltas el botón, slurp —el que dibuja la
+> selección— termina, pero **su capa no desaparece de golpe: Hyprland la
+> desvanece**. Medido: entre 90 y 125 ms, pasando por 65 %, 55 %, 47 % y 39 % de
+> opacidad. grim pide su fotograma mucho antes de eso, así que la captura salía
+> con el relleno violeta de la selección y un trozo de su borde **dentro de la
+> imagen** — un recuadro en medio de la foto, siempre, eligieras lo que
+> eligieras. `SUPER + SHIFT + S` nunca lo sufrió, y esa fue la pista: ahí no hay
+> slurp.
+>
+> El script espera a que Hyprland deje de listar la capa **y además** a que
+> termine el desvanecido, que es lo que no se puede preguntar: ningún
+> compositor avisa de que una animación acabó. Por eso el plazo es fijo.
 
 ---
 
@@ -1410,6 +1536,9 @@ equipo del autor que en uno recién clonado. Sirven desde un TTY o por SSH.
 | `unidad/portabilidad` | que no vuelva a colarse la ruta `~/dotfiles` en el código |
 | `unidad/teclas` | que «no puedo saber si SUPER está pulsada» no se confunda con «no lo está» |
 | `unidad/sddm-fondo` | que el fondo del login se rehaga solo, y que no se marque como hecho si falló |
+| `unidad/bluetooth` | a qué auricular se llama primero, a quién bloquea el cerrojo y a quién no se toca nunca |
+| `unidad/captura` | que la captura de una zona espere a que la selección se borre, y que las otras dos no paguen esa espera |
+| `e2e/bluetooth` | el demonio entero contra un BlueZ falso en un bus privado: conectar solo, el cerrojo por las dos puertas, soltar, y no dejar nada bloqueado al salir |
 
 ### Cómo se prueba algo que te puede echar de tu sesión
 
@@ -1541,6 +1670,7 @@ Además, fuera del repo a propósito:
 | Archivo | Qué guarda |
 |---|---|
 | `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadiste tú |
+| `~/.local/state/celiuz/bluetooth.json` | cuándo usaste cada auricular y a cuáles bloqueó el cerrojo |
 
 Es de tu equipo, no del repo: en otra máquina esas rutas no existirían.
 
@@ -1551,7 +1681,8 @@ Es de tu equipo, no del repo: en otra máquina esas rutas no existirían.
 **Hecho:** monitores, teclado (dos distribuciones), barra y dock con
 auto-ocultado, lanzador, cambiador de escritorios (`SUPER+TAB`), fondo en vídeo o
 imagen con su selector propio, capturas, calendario, monitores del sistema,
-pantalla de bloqueo y auto-bloqueo, pantalla de inicio de sesión, el aspecto
+pantalla de bloqueo y auto-bloqueo, pantalla de inicio de sesión, Bluetooth
+(auriculares que se conectan solos y de uno en uno), el aspecto
 (paleta, decoración y animaciones), adaptación a la pantalla que haya,
 portabilidad a cualquier ruta de clonado, y pruebas automáticas.
 
