@@ -4,6 +4,86 @@ Este repo es el escritorio de Hyprland de Parzival (`Pceliuz/Celiuz_CachyOS`),
 sobre CachyOS. **Es público y se usa en más de un equipo**: una PC de sobremesa y
 una laptop. Casi todo lo que sigue existe por esa razón.
 
+---
+
+# Dónde va la cosa (al 2026-09-25)
+
+Lee esto primero y sabrás en qué punto está el escritorio sin tener que
+reconstruirlo. El detalle largo está en **`SIGUIENTE.md`** (por dónde seguir,
+se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, en
+**`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
+eso no caduca.
+
+**Antes de escribir nada: `./tests/run.sh`** (30 pruebas, no hace falta que
+Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
+lo que vayas a escribir tú.
+
+## Las dos máquinas
+
+| | PC de sobremesa | Laptop |
+|---|---|---|
+| Nombre | `Celiuz-CachyOS` | — |
+| GPU | **NVIDIA RTX 3050 6 GB** (GA107) | — |
+| Pantalla | HDMI-A-1, 1920x1080 **@100 Hz**, escala 1 | + televisor a la derecha, escala 1.5 |
+| Teclado | `us,latam`, perfil «sin-altgr» (Ctrl derecho hace de AltGr) | el suyo |
+| Atajos | **58** (57 del repo + `SUPER+A` suyo, de `personal.lua`) | 62 |
+
+## El estado, en cuatro frases
+
+1. **La config de Hyprland es Lua** desde el 2026-09-25 (`hypr/hyprland.lua` +
+   `hypr/lua/`), antes de que la 0.57 retire hyprlang. Esto **cambia el idioma
+   de `hyprctl`**: hay una sección entera abajo («La config es Lua») y es de
+   lectura obligada antes de escribir cualquier script que le hable a Hyprland.
+2. **Los `.conf` viejos siguen ahí a propósito** («El puente», en
+   `SIGUIENTE.md`). No se editan. Se borran cuando las dos máquinas hayan
+   entrado con Lua: **la PC ya entró; falta confirmar la laptop.**
+3. **Lo último que se añadió**: menú de salida con doble pregunta
+   (`SUPER+SHIFT+P`), historial de portapapeles con fijados y guardados
+   (`SUPER+SHIFT+V`), y el volumen a la vista con una barra abajo
+   (`hypr/scripts/osd.sh`, en las teclas de volumen).
+4. **La PC está verificada al día de hoy**: 30/30 pruebas, `hyprctl
+   configerrors` vacío, `instalar.sh --revisar` sin pendientes, los 100 Hz, el
+   tema de SDDM puesto, y el menú / portapapeles / OSD probados en vivo. **No
+   hay que repetir esa comprobación.**
+
+## Lo siguiente: el MODO GAMING
+
+Es lo que el usuario quiere construir ahora. **Está sin diseñar: pregúntale qué
+debe hacer antes de escribir nada.** Lo que sí puedes traerle hecho es el
+inventario de lo que ya existe, porque media pieza está puesta y sería absurdo
+duplicarla:
+
+- **`hypr/scripts/lib/juegos.py` ya sabe decir si algo es un juego**, por cuatro
+  capas —Steam, ananicy, flatpak de juego, pantalla completa— más las
+  excepciones a mano de `hypr/congelar-excepciones.json`. Lo usa `lock.sh` para
+  no congelarte una partida al bloquear. **Cualquier modo gaming debería
+  apoyarse aquí, no inventarse otra detección.** Míralo con:
+  `hypr/scripts/lib/juegos.py`.
+- **`hypr/scripts/wallpaper-pause.py` ya libera la GPU**: mata mpvpaper entero
+  mientras corra algo de `~/.config/mpvpaper/stoplist` (ahora mismo solo
+  `gamescope`) y lo levanta al salir — ~430 MB de RAM y la VRAM. Añadir un juego
+  al modo puede ser tan simple como añadirlo a esa lista.
+- **El bloqueo ya no te corta una partida**: `hypridle.conf` tiene
+  `ignore_dbus_inhibit = false` y `ignore_systemd_inhibit = false`, así que
+  respeta los inhibidores que levantan Steam y los reproductores.
+- **Lo que NO está hecho** y suele quererse en un modo así: barras fuera
+  (`waybar-autohide.py` es por donde mirar), avisos en «no molestar»
+  (`avisos.py`), y `hypr/lua/env.lua`, que **sigue vacío** y es el sitio de las
+  variables de Nvidia. Ojo con esto último: las listas de variables que circulan
+  por los foros llevan años obsoletas y algunas **empeoran** el rendimiento; se
+  comprueba cuál hace falta de verdad, una por una.
+
+**Y una trampa que no vive en este repo pero muerde justo aquí:** el teclado
+X820UItra (`3151:5002`) de la PC se anuncia como joystick, y por eso SDL
+enumeraba un mando fantasma que dejaba **todos** los juegos sin mando. Está
+arreglado con `/etc/udev/rules.d/99-fix-fake-joystick.rules`,
+`~/.local/share/mando-check/aplicar-fix.sh` y el comando `mando-check`. Nada de
+eso se versiona aquí: **se pierde al reinstalar el sistema.** Si un mando «deja
+de funcionar», corre `mando-check` antes de sospechar del repo, y mide **qué
+enumera SDL**, no si el device existe.
+
+---
+
 ## La regla de oro
 
 **Nada que dependa de la máquina entra en git.** Se rompió justo por aquí el
