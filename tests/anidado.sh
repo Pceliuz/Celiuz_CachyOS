@@ -31,8 +31,9 @@
 #   2. Una COPIA del repo, enlazada igual que la enlaza instalar.sh. Igual y no
 #      "parecido": los scripts sacan su raiz con realpath(), asi que atraviesan
 #      el enlace, y sin el resolverian mal.
-#   3. autostart.conf NEUTRALIZADO en la copia. Nada arranca solo. Lo que quieras
-#      dentro, lo lanzas tu con el WAYLAND_DISPLAY que imprime este script.
+#   3. autostart.conf y autostart.lua NEUTRALIZADOS en la copia. Nada arranca
+#      solo. Lo que quieras dentro, lo lanzas tu con el WAYLAND_DISPLAY que
+#      imprime este script.
 #   4. $XDG_RUNTIME_DIR propio, para que ningun FIFO ni socket pise a los de tu
 #      sesion. El socket de Wayland del PADRE se enlaza dentro, que es lo unico
 #      que hace falta de fuera para poder anidar.
@@ -175,6 +176,16 @@ cat > "$TMP/repo/hypr/conf/autostart.conf" <<'EOF'
 # imprime el script.
 EOF
 
+# Y lo mismo con la config en Lua, que es la que usa Hyprland 0.56 en cuanto
+# existe hyprland.lua (lo prefiere al .conf). Olvidarse de esta es justo la
+# trampa de arriba: el 2026-09-25, con solo autostart.conf vaciado, el primer
+# anidado con Lua arranco los ocho demonios de verdad y dejo un
+# wallpaper-pause.py huerfano de la casa desechable.
+cat > "$TMP/repo/hypr/lua/autostart.lua" <<'EOF'
+-- autostart.lua — VACIADO POR tests/anidado.sh. No es el del repo.
+-- Ver autostart.conf de al lado: aqui dentro no arranca nada solo.
+EOF
+
 # Si esta caja nunca paso el instalador no hay local.conf, y aunque un `source`
 # que falta solo deja un aviso, `$conf_maquina` sin definir dejaria el ultimo
 # source apuntando a la nada.
@@ -183,6 +194,13 @@ if [ ! -f "$TMP/repo/hypr/conf/local.conf" ]; then
 # GENERADO por tests/anidado.sh porque esta caja no tiene uno propio.
 $terminal = kitty
 $conf_maquina = $HOME/.config/hypr/conf/nada.conf
+EOF
+fi
+
+if [ ! -f "$TMP/repo/hypr/lua/local.lua" ]; then
+    cat > "$TMP/repo/hypr/lua/local.lua" <<'EOF'
+-- GENERADO por tests/anidado.sh porque esta caja no tiene uno propio.
+return { terminal = "kitty", portatil = false, motivo = "anidado sin instalador" }
 EOF
 fi
 

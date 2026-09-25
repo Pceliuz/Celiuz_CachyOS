@@ -177,6 +177,7 @@ import subprocess                                                # noqa: E402
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "lib"))
 import teclas                                                    # noqa: E402
+import hypr                                                      # noqa: E402
 
 import gi                                                        # noqa: E402
 
@@ -274,6 +275,18 @@ def _hyprctl(*args, json_=False):
     orden = ["hyprctl"] + (["-j"] if json_ else []) + list(args)
     salida = subprocess.run(orden, capture_output=True, text=True).stdout
     return json.loads(salida) if json_ else salida.strip()
+
+
+_MODO = []
+
+
+def ir_al_escritorio(numero):
+    """`dispatch workspace N` en el idioma de la config de este Hyprland (con
+    la de Lua, la forma de hyprlang es un error: ver lib/hypr.py). El modo se
+    pregunta una vez: no cambia mientras viva la ventana."""
+    if not _MODO:
+        _MODO.append(hypr.modo())
+    _hyprctl("dispatch", hypr.peticion_dispatch(_MODO[0], "workspace", str(numero)))
 
 
 def escritorio_actual():
@@ -630,7 +643,7 @@ class Vista(Gtk.Window):
         """
         destino = self.datos[self.elegido]["id"]
         apuntar(f"previsualizo {destino}")
-        _hyprctl("dispatch", "workspace", str(destino))
+        ir_al_escritorio(destino)
 
     def _clic(self, _widget, _ev, indice):
         self.elegido = indice
@@ -780,7 +793,7 @@ def main():
     # esa ventana puede traerse consigo su escritorio, deshaciendo el salto sin
     # ningun aviso (hyprctl responde "ok" igual).
     if vista.destino is not None:
-        _hyprctl("dispatch", "workspace", str(vista.destino))
+        ir_al_escritorio(vista.destino)
     return 0
 
 

@@ -1,0 +1,168 @@
+-- animations.lua — curvas bezier y animaciones de ventanas, capas y escritorios.
+--
+-- La idea, que es la misma de conf/colores.conf: si la decoracion va de LUZ, el
+-- movimiento tambien tiene que comportarse como luz. Una lampara no se enciende
+-- a velocidad constante — salta y luego se asienta. De ahi las dos reglas que
+-- ordenan todo lo de abajo:
+--
+--   1. ARRANCAR RAPIDO, FRENAR LARGO. Todas las curvas de entrada salen
+--      disparadas y aterrizan despacio. Es lo que hace que se sienta ligero:
+--      el ojo lee la velocidad del principio, no la del final.
+--   2. SALIR ES MAS RAPIDO QUE ENTRAR. Lo que se abre merece presentarse; lo
+--      que cierras ya no te interesa y no debe hacerte esperar. Por eso ningun
+--      `Out` dura mas que su `In`.
+--
+-- Las velocidades estan en decimas de segundo: speed 3 = 300ms. Nada aqui pasa
+-- de 400ms a proposito — por encima de eso una animacion deja de ser sensacion
+-- y pasa a ser espera.
+
+hl.config({ animations = { enabled = true } })
+
+-- Una animacion en una linea, como en hyprlang: nombre, velocidad, curva y,
+-- si lo lleva, estilo. Asi la tabla de abajo se lee de un vistazo.
+local function animar(nombre, velocidad, curva, estilo)
+    hl.animation({ leaf = nombre, enabled = true, speed = velocidad,
+                   bezier = curva, style = estilo })
+end
+
+local function bezier(nombre, x1, y1, x2, y2)
+    hl.curve(nombre, { type = "bezier", points = { { x1, y1 }, { x2, y2 } } })
+end
+
+-- -----------------------------------------------------------------------------
+-- CURVAS
+-- -----------------------------------------------------------------------------
+
+-- La curva de la casa (easeOutExpo). Sale a toda velocidad y frena mucho al
+-- final. Es la de casi todo: movimientos, fundidos, cambios de borde.
+bezier("neon", 0.16, 1.00, 0.30, 1.00)
+
+-- Con pasada de frenada: el cuarto valor por encima de 1.0 hace que se pase
+-- del destino y vuelva. Solo para lo que APARECE, y muy poco (1.05), lo
+-- justo para que una ventana nueva se sienta viva y no pegada con cinta.
+bezier("brote", 0.05, 0.90, 0.10, 1.05)
+
+-- La contraria: arranca lenta y se acelera al final (easeInQuad). Para lo
+-- que se va — da la sensacion de que lo absorbe el fondo en vez de
+-- desvanecerse sin mas.
+bezier("hundir", 0.50, 0.00, 0.75, 0.00)
+
+-- Lineal de verdad. Es la unica correcta para el giro del degradado: con
+-- cualquier otra el bucle tendria un tiron visible en cada vuelta, porque
+-- acabaria a una velocidad distinta de la que empieza.
+bezier("giro", 0.00, 0.00, 1.00, 1.00)
+
+-- La de la barra. Ya estaba y se queda con su nombre: los comentarios del
+-- demonio de auto-ocultado la mencionan por el.
+bezier("barSlide", 0.22, 1.00, 0.36, 1.00)
+
+
+-- -----------------------------------------------------------------------------
+-- EL NEON VIVO — la pieza principal de este archivo
+-- -----------------------------------------------------------------------------
+-- `borderangle` en estilo `loop` gira el ANGULO del degradado del borde sin
+-- parar. Como el borde activo tiene TRES paradas (violeta -> amatista -> luz),
+-- lo que se ve es el recorrido de luz dando vueltas despacio a la ventana que
+-- tienes delante. Es lo que convierte el borde de "pintado" en "encendido", y
+-- lo que hace que la via lactea se mueva.
+--
+-- Solo funciona si el borde es un DEGRADADO. Con un color plano no hay
+-- angulo que girar y la animacion no hace nada.
+--
+-- speed 80 = 8 segundos por vuelta. Es lento a proposito: a 4s marea y
+-- llama la atencion sobre si mismo, que es justo lo contrario de lo que se
+-- busca. Tiene que notarse solo cuando te paras a mirarlo.
+--
+-- COSTE: `loop` no para nunca, asi que mientras haya una ventana con foco
+-- el borde se redibuja de continuo. Da igual mientras se vea el fondo de
+-- video (que ya redibuja igual), pero con una ventana a pantalla completa
+-- sobre el video pausado, esto mantiene la GPU despierta. Si algun dia
+-- notas frames de menos jugando, esta es la primera linea que hay que
+-- probar a apagar.
+animar("borderangle", 80, "giro", "loop")
+
+-- El halo del glow gira SINCRONIZADO con el borde: misma velocidad, misma
+-- curva. Si fueran distintas se verian como dos luces separadas peleandose,
+-- en vez de una sola fuente con su resplandor.
+animar("glowangle", 80, "giro", "loop")
+
+-- El encendido y apagado del glow al cambiar de ventana. Sin esto el halo
+-- aparece de golpe; con esto la ventana se ILUMINA al recibir el foco, que
+-- es medio efecto por si solo.
+animar("fadeGlow", 3, "neon")
+
+-- El paso del borde apagado al degradado (y al reves) cuando cambias de
+-- foco. Corto: es un acento, no un viaje.
+animar("border", 3, "neon")
+
+
+-- -----------------------------------------------------------------------------
+-- VENTANAS
+-- -----------------------------------------------------------------------------
+-- `popin 92%` = nace al 92% de su tamano y crece hasta el 100%. No menos:
+-- por debajo de ~85% deja de parecer que la ventana se acerca y parece que
+-- se infla, que es un efecto mucho mas barato de aspecto.
+animar("windowsIn", 3.5, "brote", "popin 92%")
+
+-- Se va encogiendo y acelerando hacia el final (`hundir`), y en 250ms.
+animar("windowsOut", 2.5, "hundir", "popin 92%")
+
+-- Recolocarse dentro del mosaico: al abrir o cerrar algo, las vecinas se
+-- desplazan a su sitio nuevo. Sin curva de frenada esto es lo que mas canta
+-- de un tiling, porque pasa todo el rato.
+animar("windowsMove", 3, "neon")
+
+
+-- -----------------------------------------------------------------------------
+-- FUNDIDOS
+-- -----------------------------------------------------------------------------
+animar("fadeIn", 3, "neon")
+animar("fadeOut", 2.5, "hundir")
+
+-- El atenuado de la ventana sin foco (dim_strength 0.30 en decoration.lua).
+-- SIN esto el oscurecido salta de golpe al cambiar de ventana, y a 0.30 el
+-- salto es muy visible. Con el fundido, una se apaga mientras la otra se
+-- enciende: ese cruce es justo la sensacion OLED que buscabas.
+animar("fadeDim", 3, "neon")
+
+-- La sombra, que cambia de violeta a negra segun quien tenga el foco (ver
+-- decoration.lua). Va a la misma velocidad que fadeDim y fadeGlow para que
+-- los tres cambios se lean como UNO solo.
+animar("fadeShadow", 3, "neon")
+
+-- Fundido cruzado al alternar entre ventanas ya abiertas.
+animar("fadeSwitch", 2.5, "neon")
+
+-- Menus contextuales y desplegables. Rapido: son de usar y tirar, y una
+-- animacion lenta aqui se siente como lag de la aplicacion.
+animar("fadePopups", 2, "neon")
+
+
+-- -----------------------------------------------------------------------------
+-- ESCRITORIOS
+-- -----------------------------------------------------------------------------
+-- `slidefade 15%` = se desliza SOLO un 15% del ancho de pantalla mientras
+-- se funde, en vez de arrastrar el escritorio entero de lado a lado. Con 7
+-- escritorios y atajos directos (SUPER+1..7) saltas mucho y a menudo lejos:
+-- un deslizado completo obligaria a esperar el viaje cada vez. Asi se
+-- conserva la pista de hacia donde te has movido sin pagar el recorrido.
+animar("workspaces", 4, "neon", "slidefade 15%")
+
+-- El escritorio especial cae desde arriba: es una capa que se asoma sobre
+-- lo que estabas haciendo, no un sitio al que te mudas. El movimiento
+-- vertical lo dice sin necesidad de nada mas.
+animar("specialWorkspace", 4, "neon", "slidevert")
+
+
+-- -----------------------------------------------------------------------------
+-- CAPAS (barras, launcher, paneles propios)
+-- -----------------------------------------------------------------------------
+-- `layers` cubre las superficies de capa: waybar, fuzzel, el panel de
+-- calendario, el gestor del dock.
+--
+-- OJO: esto NO anima el auto-ocultado de la barra. Waybar nunca destruye su
+-- superficie al esconderse — solo le pone la clase .hidden y la baja de
+-- capa — y las reglas de animacion de capa unicamente actuan al CREAR y
+-- DESTRUIR la capa, o sea al arrancar y cerrar waybar. La animacion del
+-- auto-ocultado es el fundido CSS de waybar/style.css. Ver windowrules.lua.
+animar("layers", 4, "barSlide", "slide")

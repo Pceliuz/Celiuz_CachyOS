@@ -67,7 +67,10 @@ fi
 # animacion se queda puesta, valida y sin efecto ninguno. No es un error: es una
 # config coherente que no hace nada.
 
-borde="$(hyprctl getoption general:col.active_border -j | jq -r '.custom // ""')"
+# El campo cambia con el modo de la config: `.custom` con hyprlang y `.gradient`
+# con Lua (medido el 2026-09-25). Leer solo uno daba, en el otro modo, un borde
+# vacio y el aviso de abajo en CADA recarga.
+borde="$(hyprctl getoption general:col.active_border -j | jq -r '.custom // .gradient // ""')"
 # Cuenta solo las paradas de color (8 digitos hex); descarta el "45deg" del final.
 paradas="$(grep -oE '\b[0-9a-fA-F]{8}\b' <<<"$borde" | wc -l)"
 
@@ -95,7 +98,8 @@ fi
 # van atados: si uno cambia, el otro tambien.
 
 rounding="$(hyprctl getoption decoration:rounding -j | jq -r '.int // 0')"
-gaps="$(hyprctl getoption general:gaps_in -j | jq -r '.custom // "0"')"
+# Lo mismo aqui: `.custom` con hyprlang, `.css` con Lua ("4 4 4 4" en los dos).
+gaps="$(hyprctl getoption general:gaps_in -j | jq -r '.custom // .css // "0"')"
 gap_max="$(tr ' ' '\n' <<<"$gaps" | sort -rn | head -1)"
 
 if (( rounding > 0 && gap_max == 0 )); then

@@ -62,12 +62,23 @@ import socket
 import sys
 import time
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
+import hypr  # noqa: E402  (hablarle en Lua o en hyprlang: ver lib/hypr.py)
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
 
 # Los ficheros de esta maquina y de nadie mas. No se versionan, y lo que digan
 # manda sobre lo que decida este script.
-FICHEROS_TUYOS = ("hypr/conf/personal.conf", "hypr/conf/local.conf")
+# Donde se nombran salidas a mano, segun el idioma de la config que este
+# corriendo. Con la de Lua, lo tuyo esta en lua/personal.lua; conf/personal.conf
+# queda de la config vieja (y lo sigue leyendo una sesion que arranco con ella).
+# Mirar solo el del modo en curso importa: si quitas una pantalla de tu
+# personal.lua, la copia vieja de personal.conf no debe seguir «fijandola».
+FICHEROS_TUYOS = {
+    "lua": ("hypr/lua/personal.lua", "hypr/lua/local.lua"),
+    "conf": ("hypr/conf/personal.conf", "hypr/conf/local.conf"),
+}
 
 # Como viene cada modo en `availableModes`: "1920x1080@100.00Hz".
 MODO_RE = re.compile(r"^(\d+)x(\d+)@([\d.]+)Hz$")
@@ -76,6 +87,10 @@ MODO_RE = re.compile(r"^(\d+)x(\d+)@([\d.]+)Hz$")
 # monitors.conf (`monitor = , preferred, ...`) NO casa aqui a proposito: no fija
 # ninguna salida concreta, asi que no bloquea nada.
 FIJADA_RE = re.compile(r"^[ \t]*monitor[ \t]*=[ \t]*([^,\s]+)[ \t]*,", re.MULTILINE)
+# En Lua: `hl.monitor({ output = "HDMI-A-1", ... })`, fuera de comentarios. La
+# salida vacia (`output = ""`, la regla generica) no nombra ninguna.
+FIJADA_LUA_RE = re.compile(r'^[^\n-]*hl\.monitor\s*\(\s*\{[^}]*?output\s*=\s*"([^"]+)"',
+                           re.MULTILINE)
 
 # Dos modos con el mismo refresco de verdad pueden diferir en la tercera
 # decimal segun de donde salga el numero. Por debajo de esto son el mismo y no
@@ -166,17 +181,24 @@ def mejor_modo(modos):
     return ancho, alto, refresco
 
 
-def salidas_fijadas(raiz=RAIZ):
-    """Nombres de salida que ya configuraste tu; este script no las toca."""
+def salidas_fijadas(raiz=RAIZ, modo=""):
+    """Nombres de salida que ya configuraste tu; este script no las toca.
+
+    `modo` es el de la config que corre ("lua" o "conf"). Si no se sabe, se
+    miran los dos: saltarse de mas una pantalla es inofensivo, pisar una que
+    fijaste tu no lo es.
+    """
     fijadas = set()
-    for relativa in FICHEROS_TUYOS:
+    ficheros = FICHEROS_TUYOS.get(modo) or FICHEROS_TUYOS["lua"] + FICHEROS_TUYOS["conf"]
+    for relativa in ficheros:
         try:
             with open(os.path.join(raiz, relativa), encoding="utf-8",
                       errors="replace") as fh:
                 texto = fh.read()
         except OSError:
             continue
-        fijadas.update(FIJADA_RE.findall(texto))
+        patron = FIJADA_LUA_RE if relativa.endswith(".lua") else FIJADA_RE
+        fijadas.update(patron.findall(texto))
     return fijadas
 
 
@@ -209,7 +231,7 @@ def revisar(raiz=RAIZ):
         monitores = json.loads(query("j/monitors"))
     except ValueError:
         return []
-    fijadas = salidas_fijadas(raiz)
+    fijadas = salidas_fijadas(raiz, hypr.modo_por_respuesta(query("eval return 1")))
     salida = []
     for mon in monitores:
         nombre = mon.get("name")
@@ -222,7 +244,7 @@ def revisar(raiz=RAIZ):
             continue
         mejor = mejor_modo(parsear_modos(mon.get("availableModes")))
         if nombre in fijadas:
-            motivo = "la fijas tu en personal.conf"
+            motivo = "la fijas tu en tu personal.lua (o personal.conf)"
         elif mejor is None:
             motivo = "no anuncia ningun modo que se pueda leer"
         elif mejor[:2] != actual[:2]:
@@ -244,6 +266,10 @@ def revisar(raiz=RAIZ):
 def aplicar(raiz=RAIZ, seco=False):
     """Pone el mejor modo donde haga falta. Devuelve cuantas pantallas cambio."""
     cambiadas = 0
+    # Con la config en Lua, `keyword monitor` da error: va como `eval
+    # hl.monitor({...})`. Se pregunta el modo una vez, y solo si hay algo que
+    # cambiar (--ver no le habla al compositor mas de lo imprescindible).
+    modo = None
     for mon, actual, mejor, motivo in revisar(raiz):
         if motivo is not None:
             continue
@@ -251,7 +277,10 @@ def aplicar(raiz=RAIZ, seco=False):
         if seco:
             print("  (haria) hyprctl keyword monitor %s" % linea)
         else:
-            query("keyword monitor %s" % linea)
+            if modo is None:
+                modo = hypr.modo_por_respuesta(query("eval return 1"))
+            verbo, resto = hypr.peticion_keyword(modo, "monitor", linea)
+            query("%s %s" % (verbo, resto))
             print("monitores: %s pasa de %s Hz a %s Hz a %dx%d" % (
                 mon["name"], formatear_refresco(actual[2]),
                 formatear_refresco(mejor[2]), mejor[0], mejor[1]))

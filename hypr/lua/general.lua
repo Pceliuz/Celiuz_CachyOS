@@ -1,0 +1,48 @@
+-- general.lua — gaps, grosor de borde, layout (dwindle/master).
+
+local C = require("lua.colores")
+
+hl.config({
+    general = {
+        -- Lo que molestaba era el MARCO EXTERIOR, no la separacion entre ventanas:
+        -- por defecto Hyprland deja 20px alrededor de la pantalla (gaps_out) y 5px
+        -- entre ventanas (gaps_in), y ese marco de 20px es el que rodeaba cada app
+        -- al abrirla. Asi que gaps_out se queda en 0 — las ventanas siguen llegando
+        -- al borde de la pantalla — y gaps_in sube a 4.
+        --
+        -- Esos 4px no son estetica: son el hueco que necesita `rounding` de
+        -- decoration.lua. Con 0, las esquinas curvas de dos ventanas pegadas dejan
+        -- un agujero en forma de rombo por el que se ve el fondo. Los dos valores
+        -- van juntos: si vuelves a 0, quita tambien el rounding.
+        gaps_in = 4,
+        gaps_out = 0,
+
+        -- 2px, no 1. Un degradado de tres colores en un pixel de grosor es un color
+        -- plano: no hay sitio material donde se aprecie el recorrido. Con 2px el
+        -- borde deja de estar pintado y empieza a parecer encendido.
+        border_size = 2,
+
+        col = {
+            -- EL DEGRADADO. Tres paradas, del grave al agudo (ver conf/colores.conf):
+            -- violeta puro -> amatista de la casa -> casi blanco. A 45 grados el
+            -- recorrido cruza la ventana en diagonal, asi que cada esquina coge un
+            -- tramo distinto y se lee como un tubo de neon y no como un marco de
+            -- color.
+            --
+            -- El orden importa: el agudo (luz) va al final y en un solo tramo. Si
+            -- se repartiera por el medio, el borde se aclararia entero y perderia
+            -- el tono.
+            active_border = { colors = { C.violeta, C.amatista, C.luz }, angle = 45 },
+
+            -- Lo que no tiene el foco no emite: un violeta tan oscuro que casi es el
+            -- negro del fondo. Antes era rgba(2a1f3dcc), un gris azulado que se salia
+            -- de la familia. Su unico trabajo es decir donde acaba la ventana.
+            inactive_border = C.apagado,
+        },
+
+        -- Redimensionar arrastrando el borde con el puntero.
+        resize_on_border = true,
+
+        layout = "dwindle",
+    },
+})

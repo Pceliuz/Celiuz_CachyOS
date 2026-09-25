@@ -1,0 +1,7 @@
+-- env.lua — variables de entorno (ej. las necesarias para Nvidia en Wayland).
+-- Se llenara cuando revisemos el driver Nvidia. Vacio por ahora.
+--
+-- La forma es:  hl.env("NOMBRE", "valor")
+-- Ojo al llenarlo: muchas variables que circulan por los foros llevan años
+-- obsoletas en 0.56 y algunas empeoran el rendimiento. Se comprueba cual hace
+-- falta de verdad, no se copian listas (ver el pendiente en el README).

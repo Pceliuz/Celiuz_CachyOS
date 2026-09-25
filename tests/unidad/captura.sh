@@ -116,18 +116,25 @@ titulo "4. Sin animaciones, la captura no espera"
 : > "$REGISTRO/orden.log"
 rm -f "$REGISTRO/slurp.log" "$REGISTRO/hyprctl.log" "$REGISTRO/grim.log"
 binario_falso slurp 0 "$apuntar; echo '10,20 300x200'"
-# Este hyprctl contesta que las animaciones estan apagadas.
-binario_falso hyprctl 0 "$apuntar; echo 'int: 0'"
-bash "$SCRIPT" >/dev/null 2>&1
-t_slurp="$(momento slurp)"; t_grim="$(momento grim)"
-espera=$((t_grim - t_slurp))
-if [ "$espera" -lt 200 ]; then
-    ok "entre slurp y grim pasan solo $espera ms"
-else
-    fallo "sin animaciones no se espera" "pasaron $espera ms"
-fi
-afirmar_no_contiene "$REGISTRO/hyprctl.log" "layers" \
-    "ni se llega a preguntar por la capa"
+# Este hyprctl contesta que las animaciones estan apagadas, en los DOS formatos:
+# `"int": 0` con la config en hyprlang y `"bool": false` con la de Lua (medido
+# el 2026-09-25). Leer solo el primero hacia esperar igual en una sesion Lua.
+for respuesta in '{"option": "animations:enabled", "int": 0, "set": true }' \
+                 '{"option":"animations:enabled","bool":false,"set":true}'; do
+    : > "$REGISTRO/orden.log"
+    rm -f "$REGISTRO/hyprctl.log" "$REGISTRO/grim.log"
+    binario_falso hyprctl 0 "$apuntar; echo '$respuesta'"
+    bash "$SCRIPT" >/dev/null 2>&1
+    t_slurp="$(momento slurp)"; t_grim="$(momento grim)"
+    espera=$((t_grim - t_slurp))
+    if [ "$espera" -lt 200 ]; then
+        ok "con «$respuesta»: entre slurp y grim pasan solo $espera ms"
+    else
+        fallo "sin animaciones no se espera ($respuesta)" "pasaron $espera ms"
+    fi
+    afirmar_no_contiene "$REGISTRO/hyprctl.log" "layers" \
+        "   ni se llega a preguntar por la capa"
+done
 
 # --- 5. Cancelar no deja nada ----------------------------------------------------
 

@@ -45,6 +45,7 @@ _gris "  repo    = $REPO  (enlazado como ~/dotfiles)"
 # el escritorio actual y el valor del xray antes de tocarlos.
 binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "activeworkspace -j")               echo "{\"id\": 3, \"windows\": 2}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
   *)                                  echo "ok" ;;
@@ -96,7 +97,7 @@ comprobar_bloqueo_normal() {
 
     # --- El xray: encender y DEVOLVER ---
     afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray true' "enciende el xray"
-    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray 0' \
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray false' \
         "devuelve el xray al valor que tenia (si no, seria una fuga permanente)"
 
     afirmar_contiene "$diario" 'desbloqueo normal' "reconoce el desbloqueo normal"
@@ -107,6 +108,7 @@ comprobar_bloqueo_caido() {
     rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
     binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "activeworkspace -j")               echo "{\"id\": 5, \"windows\": 1}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 1}" ;;
   *)                                  echo "ok" ;;
@@ -127,8 +129,8 @@ esac'
     afirmar_no_contiene "$diario" 'desbloqueo normal' "NO da por bueno un desbloqueo que no hubo"
 
     # Y lo que de verdad importa: aunque todo saliera mal, el trap limpia.
-    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray 1' \
-        "aun fallando, devuelve el xray a su valor (aqui estaba en 1)"
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray true' \
+        "aun fallando, devuelve el xray a su valor (aqui estaba en true)"
     afirmar_contiene "$REGISTRO/hyprctl.log" 'dispatch workspace 5' \
         "aun fallando, te devuelve a tu escritorio"
 }
@@ -145,6 +147,7 @@ comprobar_aviso_no_responde() {
     rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
     binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "activeworkspace -j")                    echo "{\"id\": 7, \"windows\": 4}" ;;
   "getoption misc:session_lock_xray -j")   echo "{\"int\": 0}" ;;
   "getoption misc:enable_anr_dialog -j")   echo "{\"int\": 1}" ;;
@@ -163,7 +166,7 @@ esac'
 
     afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:enable_anr_dialog false' \
         "apaga el aviso de «no responde» al congelar"
-    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:enable_anr_dialog 1' \
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:enable_anr_dialog true' \
         "y lo devuelve al valor que tenia (dejarlo apagado seria una fuga)"
 
     # El ORDEN importa tanto como que ocurra. Si se apagara despues de congelar,
@@ -212,6 +215,7 @@ comprobar_dos_a_la_vez() {
     # medir. La prueba pasaria sin comprobar nada.
     binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "locked")                              echo "false" ;;
   "activeworkspace -j")                  echo "{\"id\": 7, \"windows\": 0}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -240,7 +244,7 @@ esac'
     # de encender el primero, lo tomo por «el valor de antes» y al desbloquear lo
     # dejo encendido. Si el que pierde ni siquiera llega a mirarlo, no puede
     # confundirse, y el xray se devuelve al 0 que tenia.
-    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray 0' \
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'keyword misc:session_lock_xray false' \
         "el xray vuelve a 0 y no se queda encendido para siempre"
 }
 
@@ -258,6 +262,7 @@ comprobar_bloqueada_sin_hyprlock() {
     # puerta de salida que le queda a esta pantalla.
     binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "locked")                              echo "true" ;;
   "activeworkspace -j")                  echo "{\"id\": 7, \"windows\": 0}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -295,6 +300,7 @@ comprobar_hyprctl_sin_locked() {
     # exactamente lo contrario de para lo que existe este fichero.
     binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "locked")                              echo "unknown request" ;;
   "activeworkspace -j")                  echo "{\"id\": 4, \"windows\": 1}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -327,6 +333,7 @@ comprobar_sin_flock() {
     # caja sin util-linux no bloquearia NUNCA, y encima en silencio.
     binario_falso hyprctl 0 '
 case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
   "locked")                              echo "false" ;;
   "activeworkspace -j")                  echo "{\"id\": 2, \"windows\": 3}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -345,6 +352,42 @@ esac'
     afirmar_contiene "$TMP/diario-p8.txt" 'sin flock' "y avisa de que va sin cerrojo"
     afirmar_contiene "$REGISTRO/hyprctl.log" 'dispatch workspace 2' \
         "y el trap sigue devolviendote a tu escritorio"
+}
+
+comprobar_config_lua() {
+    titulo "9. Con la config en Lua (Hyprland 0.56+): mismas ordenes, en su idioma"
+    # Medido el 2026-09-25: con hyprland.lua, `hyprctl keyword` contesta «can't
+    # work with non-legacy parsers» y `dispatch workspace 3` es un error de
+    # sintaxis Lua — el bloqueo no vaciaria el escritorio y dejaria el xray
+    # como estuviera. Y getoption devuelve `"bool": true` en vez de `"int": 1`:
+    # leer solo "int" hacia caer al valor por defecto sin avisar.
+    rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
+    binario_falso hyprctl 0 '
+case "$*" in
+  "eval return 1")                         echo "ok" ;;
+  "activeworkspace -j")                    echo "{\"id\": 4, \"windows\": 2}" ;;
+  "getoption misc:session_lock_xray -j")   echo "{\"bool\": true}" ;;
+  "getoption misc:enable_anr_dialog -j")   echo "{\"bool\": false}" ;;
+  *)                                       echo "ok" ;;
+esac'
+    binario_falso systemctl 0
+    binario_falso "$BLOQUEO" 0
+
+    LOCK_DESPEGADO=1 CONGELAR=1 MODO_FONDO=xray REINTENTOS=1 \
+    FIFO="$TMP/no-existe-pausa.fifo" FIFO_BARRAS="$TMP/no-existe-barras.fifo" \
+        "$REPO/hypr/scripts/lock.sh" > "$TMP/diario-lua.txt" 2>&1
+
+    local log="$REGISTRO/hyprctl.log"
+    afirmar_contiene "$log" '^dispatch hl\.dsp\.focus\(\{ workspace = 99 \}\)$' "salta al escritorio limpio, en Lua"
+    afirmar_contiene "$log" '^dispatch hl\.dsp\.focus\(\{ workspace = 4 \}\)$' "y vuelve al de partida"
+    afirmar_contiene "$log" '^eval hl\.config\(\{ misc = \{ session_lock_xray = true \} \}\)$' "enciende el xray con eval"
+    afirmar_contiene "$log" '^eval hl\.config\(\{ misc = \{ enable_anr_dialog = false \} \}\)$' "apaga el aviso de «no responde» con eval"
+    afirmar_no_contiene "$log" '^keyword ' "no manda ni un keyword (en Lua da error)"
+    afirmar_no_contiene "$log" '^dispatch workspace' "ni un dispatch de hyprlang"
+    # Estaba en true (bool): lo devuelve a true, no al valor por defecto.
+    afirmar_igual "2" "$(grep -c 'session_lock_xray = true' "$log")" \
+        "devuelve el xray a true, que es lo que habia (lee el bool, no se inventa el int)"
+    afirmar_contiene "$log" 'enable_anr_dialog = false \} \}\)$' "y el aviso, a false, como estaba"
 }
 
 comprobar_no_toca_nada_real() {
@@ -373,5 +416,6 @@ comprobar_dos_a_la_vez
 comprobar_bloqueada_sin_hyprlock
 comprobar_hyprctl_sin_locked
 comprobar_sin_flock
+comprobar_config_lua
 comprobar_no_toca_nada_real
 resumen

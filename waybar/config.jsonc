@@ -86,8 +86,8 @@
         "tooltip": true,
         "on-click": "activate",
         // Rueda del mouse sobre la barra para saltar de workspace.
-        "on-scroll-up": "hyprctl dispatch workspace e+1",
-        "on-scroll-down": "hyprctl dispatch workspace e-1"
+        "on-scroll-up": "$HOME/.config/hypr/scripts/despachar.sh workspace e+1",
+        "on-scroll-down": "$HOME/.config/hypr/scripts/despachar.sh workspace e-1"
     },
 
     // --- IZQUIERDA ---

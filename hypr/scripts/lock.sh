@@ -90,6 +90,17 @@ if ! . "$(dirname "$(readlink -f "$BASH_SOURCE")")/lib/canales.sh" 2>/dev/null |
     echo "lock: no encuentro lib/canales.sh; me paro antes de tocar nada" >&2
     exit 1
 fi
+# Las ordenes a Hyprland (cambiar de escritorio, el xray, el dialogo de «no
+# responde») pasan por lib/hypr.sh, que las dice en el idioma del Hyprland que
+# este corriendo: con la config en Lua, `hyprctl keyword` y `dispatch workspace`
+# dan error. Si la libreria faltara, NO se para: aqui la direccion segura es
+# acabar bloqueando, asi que se cae a las ordenes de hyprlang de siempre.
+if ! . "$(dirname "$(readlink -f "$BASH_SOURCE")")/lib/hypr.sh" 2>/dev/null \
+   || ! declare -F hypr_despachar >/dev/null; then
+    echo "lock: no encuentro lib/hypr.sh; sigo con las ordenes de hyprlang" >&2
+    hypr_despachar() { hyprctl dispatch "$*"; }
+    hypr_ajustar() { hyprctl keyword "$1" "$2"; }
+fi
 FIFO="${FIFO:-$(canal_fondo)}"
 FIFO_BARRAS="${FIFO_BARRAS:-$(canal_barras)}"
 MPV="${MPV:-$(socket_mpv)}"
@@ -405,7 +416,7 @@ despejar() {
     WS_ORIGINAL=$(hyprctl activeworkspace -j 2>/dev/null \
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null) || WS_ORIGINAL=""
     if [ -n "$WS_ORIGINAL" ]; then
-        hyprctl dispatch workspace "$WORKSPACE_LIMPIO" >/dev/null 2>&1 \
+        hypr_despachar workspace "$WORKSPACE_LIMPIO" >/dev/null 2>&1 \
             && echo "lock: escritorio $WS_ORIGINAL -> $WORKSPACE_LIMPIO"
     else
         echo "lock: aviso, no pude leer el escritorio actual; no salto" >&2
@@ -431,7 +442,7 @@ recomponer() {
         BARRAS_ESCONDIDAS=0
     fi
     if [ -n "$WS_ORIGINAL" ]; then
-        hyprctl dispatch workspace "$WS_ORIGINAL" >/dev/null 2>&1
+        hypr_despachar workspace "$WS_ORIGINAL" >/dev/null 2>&1
     fi
 }
 
@@ -444,7 +455,7 @@ limpiar() {
     trap - EXIT INT TERM HUP
 
     if [ -n "$XRAY_ORIGINAL" ]; then
-        hyprctl keyword misc:session_lock_xray "$XRAY_ORIGINAL" >/dev/null 2>&1
+        hypr_ajustar misc:session_lock_xray "$XRAY_ORIGINAL" >/dev/null 2>&1
         echo "lock: xray devuelto a $XRAY_ORIGINAL"
     fi
     if [ "$CONGELADO" -eq 1 ]; then
@@ -460,7 +471,7 @@ limpiar() {
     # se reactivara con las apps todavia paradas, el compositor las encontraria
     # mudas y sacaria justo el dialogo que se queria evitar.
     if [ -n "$ANR_ORIGINAL" ]; then
-        hyprctl keyword misc:enable_anr_dialog "$ANR_ORIGINAL" >/dev/null 2>&1
+        hypr_ajustar misc:enable_anr_dialog "$ANR_ORIGINAL" >/dev/null 2>&1
         echo "lock: aviso de «no responde» devuelto a $ANR_ORIGINAL"
     fi
     recomponer
@@ -510,9 +521,12 @@ if [ "$CONGELAR" -eq 1 ]; then
     # dura lo que dura. Se apaga el aviso entero mientras dura, y se devuelve tal
     # cual estaba en el trap (por eso se guarda el valor, y no se asume 1).
     ANR_ORIGINAL=$(hyprctl getoption misc:enable_anr_dialog -j 2>/dev/null \
-        | python3 -c 'import json,sys; print(json.load(sys.stdin)["int"])' 2>/dev/null)
-    [ -n "$ANR_ORIGINAL" ] || ANR_ORIGINAL=1
-    hyprctl keyword misc:enable_anr_dialog false >/dev/null 2>&1
+        | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d.get("bool", d.get("int")); print("true" if v in (True, 1) else "false" if v in (False, 0) else "")' 2>/dev/null)
+    # Con la config en hyprlang getoption da `"int": 1`; en Lua, `"bool": true`
+    # (medido). Se leen las dos y se guarda true/false, que entienden los dos
+    # idiomas al devolverlo.
+    [ -n "$ANR_ORIGINAL" ] || ANR_ORIGINAL=true
+    hypr_ajustar misc:enable_anr_dialog false >/dev/null 2>&1
     echo "lock: aviso de «no responde» apagado (estaba en $ANR_ORIGINAL)"
 
     echo "lock: congelando aplicaciones..."
@@ -524,9 +538,9 @@ if [ "$MODO_FONDO" = "xray" ]; then
     # Se guarda el valor de antes para devolverlo tal cual en el trap: dejarlo
     # encendido seria una fuga, porque cualquier otro bloqueo lo aprovecharia.
     XRAY_ORIGINAL=$(hyprctl getoption misc:session_lock_xray -j 2>/dev/null \
-        | python3 -c 'import json,sys; print(json.load(sys.stdin)["int"])' 2>/dev/null)
-    [ -n "$XRAY_ORIGINAL" ] || XRAY_ORIGINAL=0
-    hyprctl keyword misc:session_lock_xray true >/dev/null 2>&1
+        | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d.get("bool", d.get("int")); print("true" if v in (True, 1) else "false" if v in (False, 0) else "")' 2>/dev/null)
+    [ -n "$XRAY_ORIGINAL" ] || XRAY_ORIGINAL=false
+    hypr_ajustar misc:session_lock_xray true >/dev/null 2>&1
     echo "lock: xray encendido (estaba en $XRAY_ORIGINAL)"
     escribir_fragmento xray
 else

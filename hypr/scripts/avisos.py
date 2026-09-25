@@ -170,6 +170,18 @@ def hints_escalares(hints: dict) -> dict:
             if isinstance(valor, (str, bool, int, float))}
 
 
+def se_apunta(hints: dict) -> bool:
+    """Si un aviso entra en el historial. Los TRANSITORIOS no.
+
+    Es la hint `transient` del estandar (`notify-send -e`), que quiere decir
+    justo eso: «esto es del momento, no lo guardes». La usa el indicador de
+    volumen y brillo (osd.sh), que manda un aviso por pulsacion: sin esto, subir
+    el volumen de 20 a 80 dejaba doce avisos en el historial, y lo que de verdad
+    te habia llegado quedaba enterrado debajo.
+    """
+    return not (hints or {}).get("transient")
+
+
 def avisos(ruta: Path | None = None) -> list[dict]:
     """El historial ya plegado: cada aviso con su cierre y su acción puestos."""
     por_n: dict[int, dict] = {}
@@ -238,6 +250,8 @@ def demonio() -> int:
             except (ValueError, TypeError):
                 return None
             hints = hints_escalares(dict(hints) if hints else {})
+            if not se_apunta(hints):
+                return None
             estado["n"] += 1
             # Las acciones vienen en lista plana [id, etiqueta, id, etiqueta...].
             pares = list(acciones or [])

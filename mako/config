@@ -112,3 +112,26 @@ invisible=1
 # ha llegado. Anular la opcion desde la seccion del modo si funciona (tambien
 # comprobado).
 on-notify=none
+
+# El indicador de volumen, micro y brillo (hypr/scripts/osd.sh). Lo manda con
+# la categoria `osd`, y aqui se aparta del resto de avisos:
+#   - abajo en el centro, estrecho y centrado, que es donde se mira un
+#     indicador y no tapa los avisos de arriba a la derecha;
+#   - sin sonido: sonaria en CADA pulsacion, y mantener la tecla es una rafaga;
+#   - la barra es la `progress-color` de colores (rellena el fondo hasta el %).
+[category=osd]
+anchor=bottom-center
+width=280
+height=60
+outer-margin=0,0,90,0
+padding=12
+text-alignment=center
+format=<b>%s</b>
+group-by=none
+on-notify=none
+
+# Y en «no molestar» se sigue viendo, porque no es un aviso que te llega: es la
+# respuesta a una tecla que acabas de pulsar. Tiene que ir DESPUES de las dos
+# secciones de arriba: en mako gana la ultima que casa.
+[mode=no-molestar category=osd]
+invisible=0

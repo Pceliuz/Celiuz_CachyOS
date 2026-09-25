@@ -54,6 +54,7 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
 # importa desde scripts que ya la tienen en el path y desde otros que no.
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import canales  # noqa: E402
+import hypr  # noqa: E402
 
 # Con la firma de la sesion; ver canales.py (aqui al lado).
 MPV_SOCKET = canales.socket_mpv()
@@ -568,13 +569,20 @@ def despejar_escritorio():
     destino = next((i for i in range(1, 100) if i not in ocupados), None)
     if destino is None:
         return None
-    _hypr(f"dispatch workspace {destino}")
+    _ir_al_escritorio(destino)
     return activo.get("id")
+
+
+def _ir_al_escritorio(numero):
+    """`dispatch workspace N` en el idioma de la config de ESTE Hyprland: con la
+    de Lua, la forma de hyprlang es un error de sintaxis (ver lib/hypr.py)."""
+    modo = hypr.modo_por_respuesta(_hypr("eval return 1"))
+    _hypr("dispatch " + hypr.peticion_dispatch(modo, "workspace", str(numero)))
 
 
 def volver_al_escritorio(origen):
     if origen is not None:
-        _hypr(f"dispatch workspace {origen}")
+        _ir_al_escritorio(origen)
 
 
 def avisar_pausa(mensaje):

@@ -40,8 +40,13 @@ PATRON = re.compile(r'(\$HOME/dotfiles|~/dotfiles|["\']dotfiles/)')
 # menciona para explicarse.
 SIN_MIRAR = {".md", ".svg", ".png", ".jpg", ".jpeg", ".mp4", ".ttf", ".otf"}
 # Como empieza un comentario en cada lenguaje que hay en el repo: shell,
-# hyprlang, ini y mako con `#`; jsonc con `//`; css y qml con `/*` o `*`.
+# hyprlang, ini y mako con `#`; jsonc con `//`; css y qml con `/*` o `*`; y Lua
+# (la config de Hyprland desde 2026-09-25) con `--`. Sin este ultimo, la
+# cabecera de hyprland.lua —que se presenta con su ruta, como todos— salia como
+# ruta cableada. El `--` vale SOLO en .lua: en un script de shell, una linea
+# continuada puede empezar por `--opcion $HOME/dotfiles/...`, y eso es codigo.
 COMENTARIO = ("#", "//", "/*", "*")
+COMENTARIO_LUA = COMENTARIO + ("--",)
 
 def lineas_de_documentacion(f, src):
     """Las lineas que son comentario o docstring, que no afectan a nada."""
@@ -72,7 +77,7 @@ for f in sorted(raiz.rglob("*")):
         limpia = linea.strip()
         # Comentarios de cualquiera de los lenguajes, y prosa dentro de
         # docstrings de Python.
-        if limpia.startswith(COMENTARIO) or n in doc:
+        if limpia.startswith(COMENTARIO_LUA if f.suffix == ".lua" else COMENTARIO) or n in doc:
             continue
         # Una linea de docstring suelta (la ruta del fichero en su cabecera).
         if f.suffix == ".py" and limpia.startswith("~/dotfiles"):

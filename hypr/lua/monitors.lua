@@ -1,0 +1,60 @@
+-- monitors.lua — resolucion, posicion, escala y tasa de refresco de cada pantalla.
+--
+-- Sintaxis: hl.monitor({ output = nombre, mode = "resolucion@refresco",
+--                        position = posicion, scale = escala })
+--
+-- AQUI NO SE NOMBRA NINGUNA SALIDA A PROPOSITO. Hasta el 2026-08-13 habia una
+-- linea del equipo del autor —`HDMI-A-1, 1920x1080@100, 0x0, 1`, su monitor de
+-- sobremesa— y el nombre de una salida NO identifica una pantalla: identifica
+-- el conector. El HDMI de la laptop tambien se llama `HDMI-A-1`, asi que al
+-- enchufar un televisor heredaba la linea entera y pasaban dos cosas, las dos
+-- calladas:
+--   - se le pedian 100 Hz que no tiene (cayo a 60, sin decir nada), y
+--   - se le clavaba la posicion `0x0`, o sea el ORIGEN, con lo que la pantalla
+--     interna se iba automaticamente a su derecha. El televisor quedaba a la
+--     izquierda de la laptop pasara lo que pasara, y el raton salia al reves.
+-- Es el mismo patron que ya mordio con el sensor hwmon y con la resolucion del
+-- velo de hyprlock: un valor cableado que coincide con UNA de las dos maquinas.
+--
+-- La regla de abajo vale para cualquier equipo y no hay nada que ajustar:
+--   `preferred`   el modo nativo que declara la propia pantalla en su EDID. No
+--                 se usa `highrr` (la tasa mas alta) porque no mira la
+--                 resolucion: el televisor de las pruebas anuncia 800x600@60.32,
+--                 que tiene MAS refresco que su 1920x1080@60.00, y `highrr` lo
+--                 habria dejado en 800x600.
+--   `auto-right`  cada pantalla nueva se coloca a la derecha de la anterior, en
+--                 el orden en que aparecen. Enchufar en caliente hace lo que
+--                 esperas sin tocar nada.
+hl.monitor({ output = "", mode = "preferred", position = "auto-right", scale = 1 })
+
+-- EL REFRESCO NO SE QUEDA EN LO QUE DIGA `preferred`. Un monitor de 100 Hz suele
+-- declarar 60 como preferido —los refrescos altos viven en los modos
+-- extendidos—, asi que quedarse aqui seria dejarse la mitad de la pantalla sin
+-- usar. Y no hay ninguna palabra que pida las dos cosas: el wiki de Hyprland dice
+-- que los modos predefinidos «cannot be combined», y `highrr` a secas es la
+-- trampa del 800x600 de aqui arriba.
+--
+-- De eso se encarga `scripts/monitores.py`, que arranca desde lua/autostart.lua
+-- y no necesita que le digas nada: lee los modos que anuncia cada salida, se
+-- queda con el mejor refresco A SU RESOLUCION, y reacciona al enchufar. Para ver
+-- que haria sin que toque nada:
+--
+--   hypr/scripts/monitores.py --ver
+
+-- Si tu pantalla necesita algo distinto (una tasa concreta, escala, otra
+-- disposicion), tu linea va en `lua/personal.lua`, que no se versiona. Ahi
+-- nombras la salida y mandas tu: `monitores.py` se salta cualquier salida que
+-- aparezca nombrada en ese fichero, asi que no vas a estar peleandote con el.
+-- `hyprctl monitors` dice como se llama la tuya y que modos admite.
+--   hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = 1 })
+--
+-- La escala es siempre tuya y no se detecta a proposito: depende de la DISTANCIA
+-- a la que miras, y eso no lo sabe ningun EDID. Un televisor de 1080p a distancia
+-- de sofa son ~35 DPI y quiere 1.5; un monitor de 24" en la mesa son ~92 y quiere
+-- 1. Ojo: Hyprland RECHAZA una escala que no de un tamano logico entero — en
+-- 1080p las comodas son 1.5 (1280x720) y 1.25 (1536x864).
+--
+-- Y si lo que ves es la imagen SALIENDOSE por los bordes en un televisor, eso no
+-- se arregla aqui: es el overscan del propio televisor. Se quita en su menu
+-- ("Tamano de imagen" -> "Punto a punto" / "Just Scan" / "1:1"). Hyprland no
+-- tiene ninguna opcion de underscan con la que compensarlo.

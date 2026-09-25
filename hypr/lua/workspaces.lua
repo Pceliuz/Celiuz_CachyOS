@@ -1,0 +1,4 @@
+-- workspaces.lua — definicion y asignacion de workspaces (por monitor, reglas de default).
+-- Vacio por ahora.
+--
+-- La forma es:  hl.workspace_rule({ workspace = "3", monitor = "DP-1", ... })

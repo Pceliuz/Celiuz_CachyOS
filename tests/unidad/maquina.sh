@@ -319,7 +319,32 @@ afirmar "el valor de fabrica va ANTES de leer local.conf" test "${1:-0}" -lt "${
 afirmar_no_contiene "$REPO/hypr/conf/input.conf" '^[^#]*kb_layout = [a-z]' \
         "input.conf usa la variable y no una distribucion escrita a mano"
 
-titulo "8. No toco nada de tu equipo"
+titulo "8. Lo mismo con la config en Lua (Hyprland 0.56+)"
+# hyprland.lua manda en cuanto existe. Aqui no hay `$conf_maquina`: el modulo
+# de portatil se carga con un `if`, pero el ORDEN sigue importando igual —
+# despues de input y keybinds (los corrige) y antes de personal (que lo pisa
+# todo). Y el instalador tiene que escribir el dato del que cuelga ese `if`.
+LUA_HYPR="$REPO/hypr/hyprland.lua"
+orden_lua="$(python3 - "$LUA_HYPR" <<'PYEOF'
+import sys
+lineas = open(sys.argv[1], encoding="utf-8").read().splitlines()
+def n(texto):
+    return next((i for i, l in enumerate(lineas) if texto in l and not l.strip().startswith("--")), -1)
+print(n('require("lua.input")'), n('require("lua.keybinds")'),
+      n('require("lua.teclado-laptop")'), n('require("lua.personal")'))
+PYEOF
+)"
+read -r l_input l_binds l_laptop l_personal <<< "$orden_lua"
+afirmar "el modulo de portatil se carga despues de input.lua" test "$l_laptop" -gt "$l_input" -a "$l_input" -ge 0
+afirmar "   y despues de keybinds.lua" test "$l_laptop" -gt "$l_binds" -a "$l_binds" -ge 0
+afirmar "personal.lua va el ultimo de todos" test "$l_personal" -gt "$l_laptop"
+afirmar_contiene "$LUA_HYPR" 'if require\("lua\.maquina"\)\.portatil then' "el portatil se decide con lo que dice maquina.lua"
+afirmar_contiene "$REPO/instalar.sh" 'portatil = \$portatil,' "el instalador escribe portatil en local.lua"
+afirmar_contiene "$REPO/instalar.sh" 'terminal = \$\(lua_cadena "\$term"\)' "   y la terminal"
+afirmar_contiene "$REPO/instalar.sh" 'kb_layout = \$\(lua_cadena "\$kb_layout"\)' "   y la distribucion del teclado"
+afirmar_igual "1" "$(grep -c 'cat > "$REPO/hypr/lua/local.lua"' "$REPO/instalar.sh")" "solo hay UN sitio que escribe local.lua"
+
+titulo "9. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
 resumen

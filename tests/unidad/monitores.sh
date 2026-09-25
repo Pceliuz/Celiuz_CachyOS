@@ -37,6 +37,13 @@ preparar_entorno
 
 COPIA="$(copiar_repo)"
 SCRIPT="$COPIA/hypr/scripts/monitores.py"
+# Los ficheros de ESTA maquina fuera de la copia: copiar_repo se lleva tambien
+# lo no versionado, y el personal.lua del autor nombra su HDMI-A-1 —el mismo
+# nombre que usan los casos de abajo—. Con el dentro, la prueba dependia de en
+# que equipo se corriera: paso sola y fallo 9 de 29 en cuanto instalar.sh creo
+# ese fichero (2026-09-25).
+rm -f "$COPIA/hypr/lua/personal.lua" "$COPIA/hypr/lua/local.lua" \
+      "$COPIA/hypr/conf/personal.conf" "$COPIA/hypr/conf/local.conf"
 
 trap 'limpiar_entorno' EXIT INT TERM
 
@@ -183,6 +190,46 @@ di("baja_motivo", "si" if filas and filas[0][3] and "resolucion" in filas[0][3] 
 mod.aplicar(raiz=copia)
 di("baja_ordenes", len(estado["ordenes"]))
 
+# --- 5b. Con la config en Lua --------------------------------------------------
+# Hyprland 0.56 con hyprland.lua: `keyword monitor` es un error y la orden va
+# como `eval hl.monitor({...})`; y lo tuyo esta en lua/personal.lua. Una copia
+# vieja de personal.conf NO debe seguir fijando nada (si la quitaste de tu
+# personal.lua, es que la quieres suelta).
+def query_lua(cmd):
+    if cmd == "eval return 1":
+        return "ok"
+    if cmd == "j/monitors":
+        return json.dumps(estado["monitores"])
+    if cmd.startswith("eval hl.monitor("):
+        estado["ordenes"].append(cmd)
+        return "ok"
+    if cmd.startswith("keyword "):
+        estado["ordenes"].append("MAL: " + cmd)
+        return "keyword can't work with non-legacy parsers. Use eval."
+    return ""
+
+
+def correr_lua(monitores, personal_lua="", personal_conf=""):
+    mod.query = query_lua
+    estado["monitores"] = monitores
+    estado["ordenes"] = []
+    escribir_personal(personal_conf)
+    with open(copia + "/hypr/lua/personal.lua", "w", encoding="utf-8") as fh:
+        fh.write(personal_lua)
+    mod.aplicar(raiz=copia)
+    mod.query = query_falso
+    return estado["ordenes"]
+
+
+ordenes = correr_lua([PC])
+di("lua_orden", ordenes[0] if ordenes else "")
+di("lua_fijada", len(correr_lua([PC], 'hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "0x0", scale = 1 })\n')))
+di("lua_varias_lineas", len(correr_lua([PC], 'hl.monitor({\n    output = "HDMI-A-1",\n    scale = 1,\n})\n')))
+di("lua_comentada", len(correr_lua([PC], '-- hl.monitor({ output = "HDMI-A-1", mode = "preferred" })\n')))
+di("lua_generica", len(correr_lua([PC], 'hl.monitor({ output = "", mode = "preferred", position = "auto-right", scale = 1 })\n')))
+di("lua_conf_vieja", len(correr_lua([PC], "", "monitor = HDMI-A-1, preferred, 0x0, 1\n")))
+os.remove(copia + "/hypr/lua/personal.lua")
+
 # Sin sesion (query devuelve vacio) no se inventa nada.
 mod.query = lambda cmd: ""
 di("sin_sesion", len(mod.revisar(raiz=copia)))
@@ -242,6 +289,16 @@ afirmar_igual "HDMI-A-1" "$(valor mixta_cual)" "y es la que no estaba fijada"
 afirmar_igual "1" "$(valor sin_personal_ordenes)" \
         "sin personal.conf no hay nada fijado, y no falla"
 
+
+titulo "4b. Con la config en Lua: la orden en su idioma, y lo tuyo en personal.lua"
+afirmar_igual 'eval hl.monitor({ output = "HDMI-A-1", mode = "1920x1080@100", position = "0x0", scale = 1 })' \
+        "$(valor lua_orden)" "la orden va como eval hl.monitor (keyword da error en Lua)"
+afirmar_igual "0" "$(valor lua_fijada)" "una salida nombrada en personal.lua no se toca"
+afirmar_igual "0" "$(valor lua_varias_lineas)" "   aunque el hl.monitor ocupe varias lineas"
+afirmar_igual "1" "$(valor lua_comentada)" "comentada con -- no fija nada"
+afirmar_igual "1" "$(valor lua_generica)" "la generica (output vacio) no fija nada"
+afirmar_igual "1" "$(valor lua_conf_vieja)" \
+        "en modo Lua, un personal.conf viejo ya no fija nada (manda tu personal.lua)"
 
 titulo "5. Lo que a proposito NO hace"
 afirmar_igual "si" "$(valor baja_motivo)" \

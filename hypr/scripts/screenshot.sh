@@ -71,7 +71,9 @@ esperar_a_que_se_vaya_la_seleccion() {
         # Quien tenga las animaciones apagadas —por gusto o por ahorrar en una
         # maquina justa— no tiene desvanecido que esperar, y no tiene por que
         # pagar el plazo. La capa se va con su proceso.
-        if hyprctl getoption animations:enabled 2>/dev/null | grep -q '^int: 0'; then
+        # `"int": 0` con la config en hyprlang, `"bool": false` con la de Lua.
+        if hyprctl getoption animations:enabled -j 2>/dev/null \
+                | grep -qE '"int": *0\b|"bool": *false'; then
             return 0
         fi
         local intentos=0

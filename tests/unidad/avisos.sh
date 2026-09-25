@@ -70,6 +70,12 @@ r["deja_los_escalares"] = all(k in limpias for k in
     ("urgency", "category", "sender-pid",
      "x-canonical-private-synchronous", "silencioso", "escala"))
 
+# --- Los transitorios no se apuntan -----------------------------------------
+# El volumen y el brillo (osd.sh) mandan un aviso por pulsacion con `-e`.
+r["transitorio_fuera"] = not avisos.se_apunta({"transient": True})
+r["normal_dentro"] = avisos.se_apunta({"urgency": 1}) and avisos.se_apunta({})
+r["transient_falso_dentro"] = avisos.se_apunta({"transient": False})
+
 # --- El plegado del registro -------------------------------------------------
 def linea(d):
     with sesion.open("a", encoding="utf-8") as f:
@@ -138,6 +144,11 @@ titulo "2. Ni un icono en crudo dentro del registro"
 afirmar_igual "1" "$(leer quita_el_array)"      "una hint con la imagen en pixeles se descarta"
 afirmar_igual "1" "$(leer quita_los_bytes)"     "y una hint de bytes tambien"
 afirmar_igual "1" "$(leer deja_los_escalares)"  "las hints utiles siguen estando"
+
+titulo "2b. Lo transitorio (volumen, brillo) no llena el historial"
+afirmar_igual "1" "$(leer transitorio_fuera)"      "un aviso con transient no se apunta"
+afirmar_igual "1" "$(leer normal_dentro)"          "uno normal si"
+afirmar_igual "1" "$(leer transient_falso_dentro)" "y transient=false cuenta como normal"
 
 titulo "3. El registro se pliega bien, y una linea rota no lo tumba"
 afirmar_igual "1" "$(leer lee_los_dos)"         "lee los avisos apuntados"

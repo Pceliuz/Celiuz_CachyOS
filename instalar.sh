@@ -222,12 +222,36 @@ desplegar() {
     # preguntar que llego hoy sin saber donde esta clonado este repo.
     enlazar "$REPO/hypr/scripts/avisos.py" "$HOME/.local/bin/avisos"
 
-    # Hyprland 0.56 busca hyprland.lua ANTES que hyprland.conf. Si aparece uno
-    # —lo repone cualquier reinstalacion de CachyOS— nuestra config queda
-    # ignorada en silencio, con un solo "Lua config not found" de diferencia en
-    # el log. Se comprueba siempre, no solo al enlazar.
-    if [ -e "$CONFIG/hypr/hyprland.lua" ]; then
-        aviso "hay un hyprland.lua en $CONFIG/hypr: Hyprland lo usara EN LUGAR de hyprland.conf"
+    # La config es LUA desde el 2026-09-25 (hypr/hyprland.lua): Hyprland 0.56 la
+    # prefiere a hyprland.conf, y la 0.57 retira la de hyprlang. Un Hyprland mas
+    # viejo no sabe leerla y arrancaria con la de hyprlang que queda de puente
+    # (o sin nada, cuando el puente se borre), asi que se comprueba la version.
+    comprobar_hyprland_lua
+}
+
+# comprobar_hyprland_lua — que el Hyprland instalado lee Lua, y en que idioma
+# esta la sesion abierta.
+comprobar_hyprland_lua() {
+    local version
+    version="$(Hyprland --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+    if [ -z "$version" ]; then
+        aviso "no pude saber la version de Hyprland; esta config necesita la 0.56 o mas nueva (Lua)"
+    elif ! printf '%s\n' "0.56" "$version" | sort -V -C; then
+        aviso "tienes Hyprland $version y esta config es Lua: hace falta la 0.56 o mas nueva"
+        gris "    (sudo pacman -Syu). Mientras tanto se usa la config de hyprlang de puente."
+    else
+        gris "  Hyprland $version: lee la config en Lua (hypr/hyprland.lua)"
+    fi
+
+    # Si hay sesion abierta, se le pregunta en que idioma arranco: la que ya
+    # estaba al traer los cambios sigue en hyprlang hasta cerrar sesion.
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
+        case "$(hyprctl eval 'return 1' 2>/dev/null)" in
+            ok) gris "  la sesion abierta ya usa la config en Lua" ;;
+            *only\ supported\ with\ the\ lua*)
+                aviso "tu sesion abierta aun usa la config vieja (hyprlang): cierra sesion y vuelve a entrar"
+                gris "    para pasar a la de Lua. Hasta entonces todo sigue funcionando igual." ;;
+        esac
     fi
 }
 
@@ -271,6 +295,15 @@ dock() {
     fi
 }
 
+# lua_cadena <texto> — un literal de cadena de Lua (para escribir local.lua).
+lua_cadena() {
+    local t="$1"
+    t="${t//\\/\\\\}"
+    t="${t//\"/\\\"}"
+    t="${t//$'\n'/ }"
+    printf '"%s"' "$t"
+}
+
 # --- 5. Lo de esta maquina ----------------------------------------------------
 #
 # Un solo escritor para local.conf, a proposito: si la terminal y el tipo de
@@ -310,7 +343,7 @@ maquina_local() {
     if [ "$tipo" = "laptop" ]; then
         conf_maquina='$HOME/.config/hypr/conf/teclado-laptop.conf'
         echo "  equipo: portatil  ($motivo)"
-        gris "    se carga conf/teclado-laptop.conf: touchpad, tapa, brillo y el"
+        gris "    se carga lua/teclado-laptop.lua: touchpad, tapa, brillo y el"
         gris "    perfil de teclado «completo» (kb_options vacio, o sea que el"
         gris "    Ctrl derecho sigue siendo Ctrl en TODOS los teclados)"
         echo "  teclado: $kb_layout  (la primera arranca activa; SUPER+DEL alterna)"
@@ -326,8 +359,8 @@ maquina_local() {
         # sola —un teclado se enchufa y se desenchufa, y kb_options se lee al
         # arrancar—, asi que lo que toca es AVISAR.
         gris "    perfil de teclado «sin-altgr»: el Ctrl derecho hace de AltGr"
-        gris "    (si tu teclado ya tiene AltGr no te hace falta: pon"
-        gris "    kb_options = vacio en conf/input.conf)"
+        gris "    (si tu teclado ya tiene AltGr no te hace falta: pon en tu"
+        gris "    lua/personal.lua  hl.config({ input = { kb_options = \"\" } })"
     fi
 
     if [ "$SOLO_REVISAR" -eq 0 ]; then
@@ -361,7 +394,41 @@ maquina_local() {
 \$kb_layout = $kb_layout
 \$kb_variant = $kb_variant
 EOF
-        hecho "  escrito hypr/conf/local.conf"
+        hecho "  escrito hypr/conf/local.conf (el de la config vieja, de puente)"
+
+        # Lo mismo para la config en Lua, que es la que usa Hyprland 0.56+.
+        # local.conf se sigue escribiendo mientras exista el puente de hyprlang:
+        # una sesion que arranco con el lo relee al recargar.
+        local portatil=false
+        [ "$tipo" = "laptop" ] && portatil=true
+        cat > "$REPO/hypr/lua/local.lua" <<EOF
+-- hypr/lua/local.lua — GENERADO por instalar.sh. NO se versiona.
+--
+-- Lo de esta maquina y solo de esta. Lo lee lua/maquina.lua, que pone los
+-- valores de fabrica para lo que falte aqui.
+--
+-- Si algo no es lo tuyo, cambialo aqui y recarga con SUPER+SHIFT+R; el siguiente
+-- ./instalar.sh lo volvera a calcular.
+return {
+    -- La terminal de SUPER+RETURN (scripts/lib/apps.py).
+    terminal = $(lua_cadena "$term"),
+
+    -- Portatil o sobremesa, segun el DMI de la BIOS (scripts/lib/maquina.py).
+    -- Con true se carga lua/teclado-laptop.lua: touchpad, tapa, brillo y el
+    -- teclado «completo».
+    -- Detectado aqui: $tipo — $motivo
+    portatil = $portatil,
+    motivo = $(lua_cadena "$tipo — $motivo"),
+
+    -- La distribucion del teclado de ESTA maquina. La primera es la que arranca
+    -- activa; SUPER+DEL alterna entre las dos. Los nombres validos salen de:
+    -- localectl list-x11-keymap-layouts
+    -- $motivo_layout
+    kb_layout = $(lua_cadena "$kb_layout"),
+    kb_variant = $(lua_cadena "$kb_variant"),
+}
+EOF
+        hecho "  escrito hypr/lua/local.lua"
     fi
 
     # --- Tu fichero, el que el repo no toca nunca ---
@@ -392,6 +459,52 @@ EOF
         fi
     else
         gris "  hypr/conf/personal.conf ya esta (no se toca)"
+    fi
+
+    # --- Lo tuyo, en la config Lua ---
+    #
+    # lua/personal.lua es el personal.conf de la config en Lua: tuyo, sin
+    # versionar, cargado el ultimo. Si no existe y tu personal.conf tiene algo,
+    # se TRADUCE (lib/migrar_personal.py): sin esto, al volver a entrar con la
+    # config en Lua perderias en silencio lo que tuvieras — en la laptop del
+    # autor, la escala 1.5 del televisor. Lo que no se sabe traducir se deja
+    # comentado y se avisa. personal.conf NO se toca: la sesion que arranco con
+    # la config vieja lo sigue leyendo hasta cerrar sesion.
+    local personal_lua="$REPO/hypr/lua/personal.lua"
+    local personal_conf="$REPO/hypr/conf/personal.conf"
+    if [ -e "$personal_lua" ]; then
+        gris "  hypr/lua/personal.lua ya esta (no se toca)"
+    elif [ "$SOLO_REVISAR" -ne 0 ]; then
+        aviso "falta hypr/lua/personal.lua (lo crea el instalador)"
+    elif [ -e "$personal_conf" ] && grep -qvE '^[[:space:]]*(#|$)' "$personal_conf"; then
+        local avisos_migracion
+        if avisos_migracion="$(python3 "$REPO/hypr/scripts/lib/migrar_personal.py" \
+                "$personal_conf" 2>&1 >"$personal_lua.nuevo")"; then
+            mv "$personal_lua.nuevo" "$personal_lua"
+            hecho "  traducido tu conf/personal.conf a hypr/lua/personal.lua"
+            if [ -n "$avisos_migracion" ]; then
+                aviso "hay lineas de personal.conf que no se tradujeron solas; estan comentadas en lua/personal.lua:"
+                sed 's/^/      /' <<<"$avisos_migracion"
+            fi
+        else
+            rm -f "$personal_lua.nuevo"
+            aviso "no pude traducir conf/personal.conf: $avisos_migracion"
+        fi
+    else
+        cat > "$personal_lua" <<'EOF'
+-- hypr/lua/personal.lua — TUYO. No se versiona, y el repo no lo pisa nunca.
+--
+-- Se carga el ULTIMO de todos, asi que aqui puedes anadir lo que quieras y
+-- tambien pisar cualquier ajuste o atajo del repo: gana el ultimo que habla.
+--
+--   hl.on("hyprland.start", function() hl.exec_cmd("mi-programa") end)
+--   hl.bind("SUPER + G", hl.dsp.exec_cmd("otra-cosa"))
+--   hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = 1 })
+--   hl.config({ input = { kb_options = "" } })
+--
+-- Mas ejemplos, con su porque, en los modulos de hypr/lua/.
+EOF
+        hecho "  creado hypr/lua/personal.lua (vacio, para tus cosas)"
     fi
 
     # --- El lado derecho de la barra, y el sensor de temperatura ---

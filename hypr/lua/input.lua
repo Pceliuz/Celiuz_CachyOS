@@ -1,0 +1,96 @@
+-- input.lua — teclado, mouse, touchpad.
+
+local M = require("lua.maquina")
+
+hl.config({
+    input = {
+        -- DOS distribuciones a la vez. La activa es la #0 al arrancar y se alterna
+        -- con SUPER+DEL, que avisa por notificacion en cual acabas de quedarte
+        -- (scripts/teclado.py, atajo en keybinds.lua).
+        --
+        -- POR QUE DEJO DE SER SOLO latam (teclado Attack Shark X820, 2026-07-31):
+        -- el X820 es un teclado ANSI de 75%, y latam es una distribucion ISO de 105
+        -- teclas. Faltan fisicamente dos teclas que latam da por hechas:
+        --   - <LSGT>, la de `<` `>` entre el Shift izquierdo y la Z. En latam, `<` y
+        --     `>` viven SOLO ahi (Shift+, y Shift+. dan `;` y `:`), asi que en este
+        --     teclado eran imposibles de escribir.
+        --   - RALT (AltGr). Verificado pulsando el teclado entero con
+        --     `xkbcli interactive-wayland`: no existe. Y en latam `@` `\` `~` `^`
+        --     estan TODOS en el tercer nivel, o sea detras de AltGr.
+        -- Resultado: seis simbolos basicos de terminal y de codigo, inalcanzables.
+        --
+        -- `us(altgr-intl)` arregla eso de raiz porque es la distribucion para la que
+        -- esta serigrafiado el teclado: lo que dice la tecla es lo que sale, y
+        -- `@ \ ~ ^ < > |` salen directos o con Shift, sin tercer nivel. La variante
+        -- altgr-intl no cambia nada del nivel base; solo anade acentos y `ñ` en el
+        -- tercer nivel, asi que no se pierde nada por usarla en vez de `us` pelado.
+        --
+        -- latam se queda de segunda para escribir en espanol con la memoria muscular
+        -- de siempre (la `ñ` donde esta impreso `;:`, tildes con la tecla `[{`).
+        --
+        -- TODO ESO ES CIERTO DEL TECLADO DEL AUTOR, Y DE NINGUN OTRO. En un portatil
+        -- las teclas estan serigrafiadas en otra cosa —aqui, latam— y entonces esta
+        -- misma linea hace justo lo contrario de lo que pretende: la `ñ`, los tildes
+        -- y los simbolos salen donde no toca, y hay que corregir a mano con SUPER+DEL
+        -- en cada sesion. Por eso los valores ya no se escriben aqui:
+        --
+        --   kb_layout / kb_variant   valor de fabrica en lua/maquina.lua (el del
+        --                            autor), y en un PORTATIL los pisa lua/local.lua
+        --                            con la distribucion que se eligio al instalar
+        --                            el sistema.
+        --
+        -- Un sobremesa se queda con la del autor a proposito: /etc/vconsole.conf no
+        -- dice que teclado hay enchufado AHORA (el del autor pone `latam` y su
+        -- teclado es ANSI us), asi que ahi deducirlo seria peor que no hacerlo. El
+        -- razonamiento entero esta en scripts/lib/maquina.py, en perfil_teclado().
+        kb_layout = M.kb_layout,
+        kb_variant = M.kb_variant,
+        kb_model = "",
+
+        -- Ctrl DERECHO hace de AltGr (el nombre oficial de esta opcion en xkb es
+        -- "Right Ctrl", confirmado en /usr/share/X11/xkb/rules/evdev.lst).
+        -- Hace falta porque este teclado no tiene Alt derecho, y sin un tercer nivel
+        -- en alguna tecla no hay forma de escribir `ñ` ni tildes en us, ni
+        -- `@ \ ~ ^` cuando estas en latam.
+        --
+        -- EL COSTE, que es real: el Ctrl derecho deja de ser Ctrl. Los atajos de
+        -- Ctrl siguen todos en el izquierdo, y los juegos usan el izquierdo, asi que
+        -- en la practica no se nota — pero si algun dia un Ctrl "no responde",
+        -- es este el motivo y no un fallo.
+        --
+        -- OJO: este bloque `input` es GLOBAL, se lo come todo teclado conectado.
+        -- Se ve en `hyprctl devices`, donde hasta el `power-button` sale con
+        -- `o "lv3:switch"`. En un portatil eso sobra —su teclado interno SI tiene
+        -- AltGr y SI tiene la tecla `<>`—, asi que lua/teclado-laptop.lua lo vacia
+        -- otra vez, tambien en el bloque global (gana el ultimo que habla, y ese
+        -- modulo se carga despues). Solo se carga si estamos en un portatil; lo
+        -- decide instalar.sh preguntando a scripts/lib/maquina.py.
+        --
+        -- SI CLONAS ESTE REPO EN UN SOBREMESA y tu teclado SI tiene AltGr —o sea,
+        -- casi cualquier teclado completo de 105 teclas—, esta linea no te hace
+        -- falta y te quita el Ctrl derecho a cambio de nada: ponla vacia en tu
+        -- lua/personal.lua (`hl.config({ input = { kb_options = "" } })`). El
+        -- sobremesa es el caso por defecto del repo y aqui se conserva el teclado
+        -- del autor, que es ANSI de 75% y no tiene AltGr; no se detecta sola porque
+        -- un teclado se enchufa y se desenchufa, y esto se lee al arrancar la
+        -- sesion (el porque largo, en lib/maquina.py).
+        kb_options = "lv3:switch",
+
+        kb_rules = "",
+
+        -- El X820 no tiene bloque numerico, asi que esto ya solo decide el LED.
+        numlock_by_default = true,
+
+        -- Repeticion de teclas al mantener presionadas (util viviendo en terminal/tmux).
+        repeat_rate = 40,
+        repeat_delay = 250,
+
+        follow_mouse = 1,
+        sensitivity = 0,          -- -1.0 a 1.0, 0 = sin curva extra (mejor para gaming/apuntar)
+        accel_profile = "flat",   -- sin aceleracion, input crudo — recomendado para gaming
+
+        touchpad = {
+            natural_scroll = false,
+        },
+    },
+})
