@@ -22,11 +22,13 @@ si su contenido sería correcto en el equipo de otra persona:
 | `waybar/dock-apps.json` | las apps del dock son de cada equipo |
 | `waybar/dock.jsonc` | generado de lo anterior |
 | `waybar/dock-icons.css` | generado, con rutas absolutas de iconos |
-| `hypr/conf/local.conf` | la terminal de cada equipo, y si es portátil |
+| `hypr/lua/local.lua` | la terminal de cada equipo, si es portátil y su teclado |
+| `hypr/lua/personal.lua` | lo del usuario, cargado el último (traducido de su `personal.conf`) |
+| `hypr/conf/local.conf` | lo mismo para la config vieja de hyprlang, mientras dure el puente |
 | `waybar/local.jsonc` | el lado derecho de la barra: batería solo si hay |
 | `hypr/wallpapers/*` | vídeos: pesan y no son redistribuibles |
 
-Los cinco los crea `./instalar.sh`.
+Todos los crea `./instalar.sh`.
 
 Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 
@@ -114,7 +116,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 |---|---|---|
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
 | `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml`, `hypr/conf/colores-pango.conf` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
-| `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
+| `hypr/lua/local.lua` y `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
 | `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py`, y `waybar/sensores.jsonc` + `lib/sensores.py` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
 
@@ -146,7 +148,7 @@ Para lanzar cosas:
   propio scope de systemd y avisa por notificación si no está instalada.
 - `hypr/scripts/terminal.sh <clase> <cmd>` — ventanas flotantes (btop, nmtui, el
   aviso de recarga). Cada terminal nombra la opción de clase distinto y la tabla
-  está solo ahí. La clase no es decorativa: es lo que activa `windowrules.conf`.
+  está solo ahí. La clase no es decorativa: es lo que activa `lua/windowrules.lua`.
   Con `--sin-uwsm` delante se salta el prefijo de systemd, para quien ya lo pone.
 
 Una app del dock con `Terminal=true` en su `.desktop` sale por los dos a la vez:
@@ -187,6 +189,64 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   <ruta>` abre una ventana normal. Un tema roto deja el arranque sin pantalla; se
   sale por `Ctrl+Alt+F2` y borrando el drop-in.
 
+## La config es Lua (desde 2026-09-25), y lo que eso cambia
+
+Hyprland 0.56 trae config en Lua y avisa de que la 0.57 retira hyprlang. La
+config vive en `hypr/hyprland.lua` + `hypr/lua/*.lua`, con los mismos módulos y
+comentarios que los `.conf`. Se verificó contra la vieja en cuatro anidados
+(conf/lua × portátil/sobremesa): 354 opciones, atajos con su acción, animaciones,
+monitores, teclado por dispositivo y reglas de ventana con ventanas reales. El
+volcado y el comparador se rehacen en un rato; la receta está en SIGUIENTE.md.
+
+Lo que hay que saber, todo MEDIDO:
+
+- **`hyprctl` habla el idioma de la config con que ARRANCÓ la sesión**, no el
+  del repo. Con Lua, `hyprctl dispatch workspace 3` es un error de sintaxis Lua
+  y `hyprctl keyword` contesta «can't work with non-legacy parsers. Use eval»;
+  con hyprlang, `dispatch 'hl.dsp...'` da «Invalid dispatcher». Se distingue con
+  `hyprctl eval 'return 1'` (`ok` en Lua; «eval is only supported with the lua
+  config manager» en hyprlang). **Nada del repo manda un dispatch o un keyword a
+  pelo**: pasa por `lib/hypr.py` / `lib/hypr.sh` (gemelos, comparados por
+  `tests/unidad/hypr-compat.sh`) o por `scripts/despachar.sh`. Con tres salidas
+  de modo, no dos: «no lo sé» no es «hyprlang».
+- **`getoption` devuelve otros campos en Lua**: `"bool": true` en vez de `"int":
+  1`, `"gradient"` y `"css"` en vez de `"custom"`. `lock.sh` leía `["int"]` y en
+  Lua caía al valor por defecto sin avisar (devolvía el xray a lo que no era);
+  `recargar.sh` leía `.custom` y avisaba en CADA recarga de que el borde no era
+  un degradado. Quien lea getoption, que mire los dos.
+- **El `require` de Hyprland aguanta los fallos**: un módulo con un error sale en
+  `configerrors` con fichero y línea y los demás se cargan; lo registrado antes
+  del fallo se queda. Cada recarga empieza con un estado Lua NUEVO (los módulos
+  se vuelven a ejecutar). `hl.on("hyprland.start", ...)` es el `exec-once`: una
+  vez por sesión, no en cada recarga.
+- **Los atajos de ratón salen con `"mouse": false` en `hyprctl binds`, y NO es
+  un fallo**: el arrastre lo hace la acción (`hl.dsp.window.drag/resize`), no la
+  bandera. Medido arrastrando y redimensionando con un ratón de mentira por
+  uinput, con `{ mouse = true }` y sin nada. Y como en Lua la acción de un atajo
+  sale como `__lua`, cada atajo lleva `description` (la orden, en los de exec):
+  es lo único que dice desde fuera qué hace.
+- **Un `exec` de hyprlang expandía `$HOME` al LEER la config; `hl.exec_cmd` lo
+  deja y lo expande el shell al ejecutar.** Equivalente, pero al comparar binds
+  entre los dos modos las rutas salen distintas.
+
+### El puente: NO borrar los .conf con sesiones viejas vivas
+
+Hyprland recarga solo cuando cambian los ficheros de su config. Una sesión que
+arrancó con hyprlang y ve DESAPARECER `hyprland.conf` y sus módulos (un `git
+pull` que los borre) **se queda sin atajos** —medido en anidado: de 62 a 6— y
+además **regenera un `hyprland.conf` de fábrica dentro del repo**. Por eso los
+`.conf` se quedan congelados hasta que las dos máquinas hayan entrado con Lua;
+modificarlos sí es inofensivo (la sesión recarga la config entera, que sigue
+completa). Todo lo nuevo va SOLO en `hypr/lua/`. Borrarlos es un pendiente con
+fecha en SIGUIENTE.md; `instalar.sh --revisar` dice si la sesión aún es vieja.
+
+### Y el anidado tiene que vaciar `autostart.lua`
+
+`tests/anidado.sh` vaciaba `autostart.conf`; el primer anidado con config Lua
+arrancó los NUEVE demonios de verdad (los `systemctl --user` tocan las unidades
+reales) y dejó un `wallpaper-pause.py` huérfano de la casa desechable. Ahora
+vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
+
 ## Trampas comprobadas (no las redescubras)
 
 - **Un `import` que falla en QML tumba el fichero ENTERO**, no solo esa línea. Si
@@ -218,9 +278,11 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   carpeta real: crea el enlace *dentro* (`~/.config/hypr/hypr`) y la config no se
   despliega, **sin dar ningún error**. En CachyOS esa carpeta existe. Por eso hay
   instalador y no cuatro `ln` en el README.
-- **`hyprland.lua` gana a `hyprland.conf`.** Hyprland 0.56 lo busca primero y
-  CachyOS trae el suyo en Lua. Si reaparece, esta config queda ignorada en
-  silencio. `instalar.sh` avisa.
+- **`hyprland.lua` gana a `hyprland.conf`**, y desde el 2026-09-25 el `.lua` es
+  EL NUESTRO (ver «La config es Lua» abajo). Lo que queda en `hypr/conf/` es el
+  puente congelado. Si un día CachyOS repusiera su propio `hyprland.lua` en
+  `~/.config/hypr` —solo puede pasar si esa carpeta deja de ser el enlace al
+  repo—, sería el suyo el que mandara.
 - **`source` con ruta RELATIVA no funciona en hyprlang, y falla en silencio.**
   `source = conf/trozo.conf` desde `hyprland.conf` no carga nada: las variables
   del fichero quedan sin definir y **`configerrors` sale vacío** (medido en un
@@ -279,7 +341,7 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   ./tests/anidado.sh                        # se queda abierto; Ctrl+C lo tumba
   ```
   **No levantes Hyprland a pelo para esto.** Un anidado suelto NO es un cajón de
-  arena: usa TU `$HOME`, así que corre TU `autostart.conf`, y ahí hay
+  arena: usa TU `$HOME`, así que corre TU arranque (`lua/autostart.lua`), y ahí hay
   `exec-once` que muerden a la sesión de fuera. El peor es `wallpaper.sh`, que
   empieza con `pkill -x mpvpaper` y `pkill -f wallpaper-paus[e].py` —matan por
   NOMBRE, sin mirar de qué sesión es cada proceso—, así que te deja el
@@ -289,7 +351,7 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   El script aísla lo que se puede aislar: `$HOME` desechable (que es lo que
   redirige el árbol entero, porque el repo se referencia por
   `$HOME/.config/hypr/...`), una copia del repo enlazada igual que la enlaza
-  `instalar.sh`, `autostart.conf` vaciado, `$XDG_RUNTIME_DIR` propio, y al salir
+  `instalar.sh`, `autostart.lua` y `autostart.conf` vaciados, `$XDG_RUNTIME_DIR` propio, y al salir
   barre los procesos que se quedaron con la firma de esa instancia y borra la
   casa. Lo que **no** puede aislar es un `pkill` por nombre que lances tú a mano
   ahí dentro.
@@ -338,7 +400,7 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   Mismo patrón que el `shape` de aquí arriba y que la ruta del sensor hwmon: un
   valor cableado que coincide con UNA de las dos máquinas. Ahora ese fichero **no
   nombra ninguna salida** (`monitor = , preferred, auto-right, 1`) y lo de cada
-  equipo va en `conf/personal.conf`, que no se versiona y se carga el último.
+  equipo va en `lua/personal.lua` (antes `conf/personal.conf`), que no se versiona y se carga el último.
   Ojo con `highrr` como sustituto de `preferred`: mira la tasa y **no** la
   resolución, y ese televisor anuncia `800x600@60.32`, que tiene más refresco que
   su `1920x1080@60.00` — lo habría dejado en 800x600.
@@ -352,7 +414,7 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   es la trampa del 800x600. Lo pidieron en hyprwm/Hyprland#8758 y se cerró como
   *not planned*. Pero el dato **sí está**: `hyprctl monitors -j` trae
   `availableModes` entero, y elegir bien es aritmética sobre esa lista. Eso es
-  `scripts/monitores.py`, que arranca desde `conf/autostart.conf` con
+  `scripts/monitores.py`, que arranca desde `lua/autostart.lua` con
   `--demonio` y reacciona a `monitoradded`. Tres decisiones suyas que conviene no
   deshacer:
   - **agrupa por resolución primero y por refresco después**, nunca al revés (al
@@ -360,8 +422,9 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   - **no toca la escala**, porque depende de la distancia a la que miras y eso no
     lo sabe ningún EDID — un televisor de 1080p a distancia de sofá son ~35 DPI y
     quiere 1.5, un monitor de 24" en la mesa son ~92 y quiere 1;
-  - **se salta cualquier salida nombrada en `conf/personal.conf` o
-    `conf/local.conf`**. Un script que ajusta pantallas solo y pisa la línea que
+  - **se salta cualquier salida nombrada en tu `personal.lua` o `local.lua`**
+    (con la config vieja, en `personal.conf`/`local.conf`; mira solo los del
+    idioma en que corre la sesión, para que una copia vieja no fije nada). Un script que ajusta pantallas solo y pisa la línea que
     escribiste tú es peor que no tenerlo: en este repo el orden de capas manda, y
     personal.conf se carga el último.
   Lo vigila `tests/unidad/monitores.sh`, que tiene la trampa del 800x600 como
@@ -420,7 +483,7 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
   colgado, y cuando algo lo mata por tiempo, su `cleanup()` **se lleva las cuatro
   waybar y borra el FIFO**: escritorio sin barra y sin dock, exactamente el
   estado que el supervisor existe para evitar. Pasó el 2026-08-05. Para
-  recuperarlo, como lo levanta `autostart.conf`:
+  recuperarlo, como lo levanta el arranque de la sesión:
   `setsid nohup hypr/scripts/waybar-autohide.py >/dev/null 2>&1 </dev/null &`.
   Y para probar un cambio de config sin esto, el camino es el bind `SUPER+SHIFT+C`
   o mandarle `reload` por el FIFO.
@@ -900,6 +963,13 @@ Cuidado con lo que ya mordió: los generadores sacan su destino de la ruta de su
 propio `.py`, así que una prueba que los ejecute reescribe el repo de verdad. Usa
 `copiar_repo`, que deja una copia entera en el temporal.
 
+Y `copiar_repo` se lleva TAMBIÉN lo no versionado de la máquina que corre la
+prueba (`lua/personal.lua`, `local.lua`...). `tests/unidad/monitores.sh` pasó
+suelta y falló 9 de 29 en cuanto `instalar.sh` creó el `personal.lua` del autor,
+que nombra `HDMI-A-1` como los casos de la prueba. **Una prueba que lea ficheros
+de la máquina los borra de su copia al empezar**, y la suite se comprueba
+también en una copia con solo lo versionado (lo que tendría quien clona).
+
 ## Antes de dar algo por terminado
 
 1. `./tests/run.sh` en verde.
@@ -913,9 +983,11 @@ propio `.py`, así que una prueba que los ejecute reescribe el repo de verdad. U
 6. Si tocaste el tema de SDDM: `sddm-greeter-qt6 --test-mode --theme <ruta>` y
    míralo de verdad. Y pruébalo **también sin `fondo.mp4` y sin `fondo.jpg`**,
    que es como llega a quien clona el repo.
-7. Si tocaste el teclado o `conf/teclado-laptop.conf`: `Hyprland --verify-config`
-   con `$conf_maquina` apuntando **a los dos sitios**, no solo al de esta caja.
-   Es lo único que prueba el camino de la máquina que no tienes delante.
+7. Si tocaste el teclado o `lua/teclado-laptop.lua`: `tests/unidad/config-lua.sh`
+   ya carga la config como portátil Y como sobremesa (con un `hl` de mentira);
+   y para verla de verdad, `tests/anidado.sh` con un `lua/local.lua` de cada
+   tipo. Es lo único que prueba el camino de la máquina que no tienes delante.
+   `Hyprland --verify-config -c hypr/hyprland.lua` tambien vale para Lua.
 8. Prueba pensando en **la otra máquina**, no solo en esta.
 
 ## Cómo subir cambios

@@ -1,9 +1,10 @@
 # Celiuz_CachyOS — dotfiles de Hyprland
 
 Mi escritorio de **Hyprland sobre CachyOS** (base Arch), escrito desde cero: sin
-dotfiles ajenos, sin shells prearmadas y sin la config que trae la distro. Todo
-en **hyprlang** (`.conf`), no en Lua, para poder seguir la wiki y los foros sin
-traducir sintaxis.
+dotfiles ajenos, sin shells prearmadas y sin la config que trae la distro. La
+config de Hyprland está en **Lua** (`hyprland.lua`, desde el 2026-09-25): la 0.56
+la trae nativa y la 0.57 retira la de hyprlang (`.conf`). Se pasó módulo a módulo
+y se verificó contra la vieja opción por opción; ver «La config es Lua» abajo.
 
 No es un tema para instalar y ya: es *mi* escritorio, con cosas hechas a medida
 (el auto-ocultado de las barras, el dock generado, el panel de calendario, la app
@@ -15,8 +16,9 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 
 | Carpeta | Qué es |
 |---|---|
-| `hypr/` | Hyprland. `hyprland.conf` solo hace `source` de los módulos de `conf/`. |
-| `hypr/conf/` | Un módulo por asunto: monitores, teclado, atajos, reglas de ventana… `colores.conf` va el primero, porque define la paleta que usan los demás, y `teclado-laptop.conf` el último, y solo si estás en un portátil. |
+| `hypr/` | Hyprland. `hyprland.lua` solo carga los módulos de `lua/`. Aquí viven también `hyprlock.conf` y `hypridle.conf`, que siguen en hyprlang (la 0.57 no les afecta). |
+| `hypr/lua/` | La config de Hyprland, un módulo por asunto: monitores, teclado, atajos, reglas de ventana… `colores.lua` y `maquina.lua` van los primeros porque los demás los usan, `teclado-laptop.lua` solo si estás en un portátil, y tu `personal.lua` el último. |
+| `hypr/conf/` | `colores.conf`, **la paleta** (la leen la config Lua, hyprlock y `gen-colores.py`), y la config vieja en hyprlang, **congelada de puente** hasta que las dos máquinas entren con Lua. No se edita. |
 | `hypr/scripts/` | Todo lo hecho a medida (ver abajo). |
 | `hypr/scripts/lib/` | Bibliotecas compartidas por los scripts y por la CLI. |
 | `waybar/` | Barra de arriba y dock de abajo. Cuatro instancias de waybar. |
@@ -81,6 +83,17 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`teclado.py`** — la sesión lleva dos distribuciones (us y latam). Este avisa
   por notificación de cuál hay puesta: al arrancar, y cada vez que la cambias con
   `SUPER + DEL`. Ver su sección abajo.
+- **`sesion.sh`** — el menú de salida de `SUPER + SHIFT + P`: bloquear,
+  suspender, cerrar sesión, reiniciar o apagar, y lo que no tiene vuelta atrás
+  **pregunta otra vez**. Ver su sección abajo.
+- **`portapapeles.py`** — el historial del portapapeles (`SUPER + SHIFT + V`),
+  con cosas **fijadas** (hasta cerrar sesión) y **guardadas** (para siempre).
+  Ver su sección abajo.
+- **`osd.sh`** — las teclas de volumen, micro y brillo hacen el cambio **y lo
+  enseñan**: un aviso abajo con el valor y una barra.
+- **`lib/hypr.py` + `lib/hypr.sh`** (y `despachar.sh`) — le hablan a Hyprland en
+  el idioma de su config: con la de Lua, `hyprctl dispatch workspace 3` y
+  `hyprctl keyword` dan **error**. Ver «La config es Lua».
 
 ---
 
@@ -121,6 +134,10 @@ sudo systemctl enable --now bluetooth
 
 Notas:
 
+- **Hyprland 0.56 o más nuevo**: la config es Lua, y una versión anterior no la
+  sabe leer. El instalador lo comprueba.
+- **`lua`** solo lo usan las pruebas (`tests/unidad/config-lua.sh` ejecuta la
+  config sin Hyprland); si no está, esa prueba se salta y lo dice.
 - **`ttf-meslo-nerd`** no es opcional: las barras usan la variante
   `MesloLGS Nerd Font Propo` para los iconos del dock (en la variante normal cada
   icono mide 24 px lógicos aunque dibuje 46, y salen descentrados).
@@ -172,19 +189,22 @@ tocar nada. Lo que hace:
   **apartando antes** lo que hubiera. Esto último importa: `ln -sfn` sobre una
   carpeta que ya existe crea el enlace *dentro* de ella y la config no se
   despliega, sin dar ningún error. En CachyOS `~/.config/hypr` ya existe.
-- Avisa si aparece un `hyprland.lua`: Hyprland 0.56 lo prefiere antes que
-  `hyprland.conf`, así que si CachyOS repone el suyo, esta config queda ignorada
-  en silencio.
+- Comprueba que tu Hyprland lee Lua (**0.56 o más nuevo**) y, si hay sesión
+  abierta, te dice si aún corre con la config vieja (hasta que cierres sesión).
 - Instala CeliuzPaper (binario, `.desktop` e icono) y refresca las cachés.
 - **Crea el dock de esta máquina** con tu terminal y tu navegador
   predeterminado, averiguados en el sistema. Solo esos dos: el resto los pones
   tú con el clic derecho sobre cualquier icono del dock. El repo no trae apps de
   nadie a propósito — las del autor serían iconos muertos en tu equipo.
-- Escribe `hypr/conf/local.conf` con tu terminal, que es la que abre
-  `SUPER + RETURN`.
+- Escribe `hypr/lua/local.lua` con lo de esta máquina: tu terminal (la de
+  `SUPER + RETURN`), si es un portátil y la distribución del teclado. (Y el
+  `hypr/conf/local.conf` de la config vieja, mientras exista el puente.)
+- Crea `hypr/lua/personal.lua`, **tu** fichero. Si tenías un
+  `hypr/conf/personal.conf` con algo dentro, lo **traduce** a Lua; lo que no
+  sepa traducir lo deja comentado y te avisa.
 
-Cuando termine, **cierra la sesión y vuelve a entrar**: los `exec-once` de
-Hyprland solo corren al arrancar la sesión, así que recargar con
+Cuando termine, **cierra la sesión y vuelve a entrar**: lo que arranca con la
+sesión (`lua/autostart.lua`) solo corre al arrancarla, así que recargar con
 `SUPER + SHIFT + R` no basta la primera vez.
 
 Después, dos cosas que el repo **no** trae y hay que poner a mano:
@@ -201,6 +221,49 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 
 ---
 
+## La config es Lua (y el puente con hyprlang)
+
+Hyprland 0.56 trae la config en **Lua** y avisa al arrancar de que la de
+hyprlang (`hyprland.conf`) **deja de estar soportada en la 0.57**. Esta se pasó
+el 2026-09-25: los mismos módulos, con sus mismos comentarios, en `hypr/lua/`.
+
+**Cómo se comprobó que es la misma.** Se levantaron cuatro Hyprland anidados
+—config vieja y nueva, como portátil y como sobremesa— y se compararon **las 354
+opciones** una a una, los atajos (tecla, modificadores, banderas y lo que
+hacen), las animaciones y sus curvas, los monitores, el teclado de cada
+dispositivo y las reglas de ventana (abriendo ventanas de verdad con cada
+clase). Iguales. Arrastrar y redimensionar con el ratón se probó a mano, con
+un ratón de mentira por uinput.
+
+**Lo que cambia para ti:**
+
+- Lo tuyo va en `hypr/lua/personal.lua` (el instalador te traduce tu
+  `personal.conf`), y lo de la máquina en `hypr/lua/local.lua`.
+- **`hyprctl` habla otro idioma** con la config en Lua, y esto es lo que más
+  puede morder: `hyprctl dispatch workspace 3` y `hyprctl keyword ...` dan
+  **error**. En Lua es `hyprctl dispatch 'hl.dsp.focus({ workspace = 3 })'` y
+  `hyprctl eval 'hl.config({ misc = { ... } })'`. Los scripts del repo pasan por
+  `lib/hypr.py` / `lib/hypr.sh`, que preguntan en qué idioma está la sesión y lo
+  dicen en ese; desde un bind o una terminal, `hypr/scripts/despachar.sh
+  workspace 3` hace lo mismo.
+- `hyprctl getoption` también devuelve otros campos (`"bool": true` en vez de
+  `"int": 1`, `"gradient"`/`"css"` en vez de `"custom"`). Quien lo lea tiene que
+  mirar los dos.
+- Los errores de la config salen igual en `hyprctl configerrors` y en
+  `SUPER + SHIFT + R`, con fichero y línea, y **el resto se carga igual**: un
+  módulo roto no te deja sin atajos.
+
+**El puente.** Los `.conf` de `hypr/conf/` se quedan **congelados** una
+temporada, y no por nostalgia: Hyprland recarga solo cuando cambian sus
+ficheros, y una sesión abierta con la config vieja **que los viera desaparecer
+se quedaría sin atajos** (medido en un anidado: de 62 a 6, y encima regeneró un
+`hyprland.conf` de fábrica dentro del repo). Con el puente, un `git pull` con la
+sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
+(lo prefiere). Cuando las dos máquinas hayan entrado con Lua, el puente se borra.
+**No se editan**: todo lo nuevo va en `hypr/lua/`.
+
+---
+
 ## Atajos
 
 | Tecla | Qué hace |
@@ -210,7 +273,6 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + V` | Flotante / anclada |
 | `SUPER + B` | Lanzador de aplicaciones |
 | `SUPER + SHIFT + B` | Lanzador en modo "ejecutar binario" |
-| `SUPER + A` | Panel de Celiuz (abre y cierra con la misma tecla) |
 | `SUPER + C` | Sacar la barra y el dock |
 | `SUPER + SHIFT + C` | Reiniciar el demonio de las barras |
 | `SUPER + N` | Descartar la notificación de arriba |
@@ -220,11 +282,14 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + H` | Historial: todo lo que llegó en esta sesión, con su hora |
 | `SUPER + SHIFT + R` | Recargar la config (y avisar de verdad si falla) |
 | `SUPER + L` | Bloquear la pantalla |
+| `SUPER + SHIFT + D` | Encender la pantalla (rescate si se quedó en negro) |
 | `SUPER + S` | Captura de una zona |
 | `SUPER + SHIFT + S` | Captura de la pantalla entera |
 | `SUPER + ALT + S` | Captura de la ventana que tengas delante |
 | `SUPER + R` | Grabar una zona en vídeo (la misma tecla la para) |
 | `SUPER + ALT + R` | Grabar el monitor entero (la misma tecla lo para) |
+| `SUPER + SHIFT + V` | Historial del portapapeles (Enter copia, Ctrl+F fija, Ctrl+G guarda, Ctrl+D borra) |
+| Volumen, silencio, micro, brillo | Lo cambian **y enseñan** cómo queda (abajo, con una barra) |
 | `SUPER + 1..7` | Ir al escritorio |
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
 | `SUPER + flechas` | Mover el foco |
@@ -232,7 +297,7 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
 | `SUPER + TAB` | Cambiar de escritorio manteniendo SUPER, viendo cada uno de verdad |
 | `SUPER + SHIFT + TAB` | Lo mismo, hacia atrás |
 | `SUPER + DEL` | Cambiar de distribución de teclado (us ⇄ latam) |
-| `SUPER + SHIFT + P` | Salir de Hyprland |
+| `SUPER + SHIFT + P` | Menú de salida: bloquear, suspender, cerrar sesión, reiniciar, apagar (lo último pregunta otra vez) |
 
 ---
 
@@ -350,7 +415,7 @@ entorno sin duplicarlo, y duplicarlo cambia justo lo que se está midiendo. Las
 marcas van con **milisegundos y PID**, porque lo que se diagnostica aquí son
 carreras de ~15 ms.
 
-Los colores no están escritos en el script: lee `conf/colores.conf` en caliente y
+Los colores no están escritos en el script: lee `conf/colores.conf` (la paleta) en caliente y
 arma su CSS con la paleta, así que si cambia el amatista, esta pantalla cambia
 sola.
 
@@ -374,7 +439,7 @@ Con latam en este teclado, esos **seis símbolos eran imposibles de escribir**.
 Además la serigrafía mentía en casi toda la fila de símbolos: la tecla que dice
 `;:` daba `ñ`, la de `'"` daba `{[`.
 
-La solución tiene tres partes, todas en `conf/input.conf`:
+La solución tiene tres partes, todas en `lua/input.lua`:
 
 | | |
 |---|---|
@@ -396,14 +461,14 @@ responde", es esto y no un fallo.
 El problema de tener dos distribuciones no es cambiar: es no saber en cuál estás
 hasta que escribes mal. Por eso `teclado.py` **avisa siempre**:
 
-- Al arrancar la sesión (`exec-once` en `autostart.conf`), diciendo con cuál
+- Al arrancar la sesión (en `lua/autostart.lua`), diciendo con cuál
   empiezas y recordando el atajo.
 - Cada vez que pulsas `SUPER + DEL`.
 
 Dos detalles que no son adorno:
 
 - El aviso de arranque **espera a que mako coja el bus** antes de mandarse.
-  `exec-once` no garantiza orden, y una notificación mandada antes de que exista
+  el arranque no garantiza orden, y una notificación mandada antes de que exista
   el demonio se pierde sin dejar rastro — justo el fallo que este script existe
   para no tener.
 - Los avisos llevan la etiqueta `x-canonical-private-synchronous`, que mako
@@ -427,7 +492,7 @@ lo aplica a todo teclado conectado. Se ve en `hyprctl devices`, donde hasta el
 repo se quedaba sin Ctrl derecho por un teclado que no ha visto en su vida.
 
 Ahora `instalar.sh` pregunta en qué clase de equipo está y **solo en un portátil**
-carga `conf/teclado-laptop.conf`, que corrige lo que haga falta.
+carga `lua/teclado-laptop.lua`, que corrige lo que haga falta.
 
 Quién decide qué es `hypr/scripts/lib/maquina.py`, y se le puede preguntar:
 
@@ -468,7 +533,7 @@ La tuya queda la primera y `us(altgr-intl)` la segunda, para alternar con
 > en una torre. Por eso un sobremesa no la mira y se queda con la del autor —
 > deducirlo de ahí arreglaría el portátil y rompería la PC.
 
-Lo escribe `instalar.sh` en `hypr/conf/local.conf`, que no se versiona, y ahí se
+Lo escribe `instalar.sh` en `hypr/lua/local.lua`, que no se versiona, y ahí se
 puede cambiar a mano si te lo detectó mal:
 
 ```sh
@@ -476,10 +541,10 @@ hypr/scripts/lib/maquina.py layout      # latam,us
 localectl list-x11-keymap-layouts       # los nombres válidos
 ```
 
-`hyprland.conf` trae el valor de fábrica **antes** de leer `local.conf`, así que
-quien clone el repo y arranque sin instalar no se come un error de hyprlang por
-una variable sin definir — que además le dejaría sin teclado con el que
-arreglarlo.
+`lua/maquina.lua` pone el valor de fábrica y solo lo pisa con lo que diga
+`local.lua` si existe, así que quien clone el repo y arranque sin instalar tiene
+teclado igual (y terminal: se la pregunta a `lib/apps.py`) — sin él se quedaría
+sin teclado con el que arreglarlo.
 
 | | Sobremesa | Portátil |
 |---|---|---|
@@ -494,7 +559,7 @@ arreglarlo.
 > queda con el teclado del autor, que es ANSI de 75% y no tiene AltGr — o sea
 > que **tu Ctrl derecho pasará a hacer de AltGr**. Con un teclado completo de
 > 105 teclas eso no te hace falta y solo te quita una tecla: la vuelta atrás es
-> poner `kb_options =` (vacío) en `hypr/conf/input.conf`. `./instalar.sh
+> poner `hl.config({ input = { kb_options = "" } })` en tu `hypr/lua/personal.lua`. `./instalar.sh
 > --revisar` te lo recuerda al detectar un sobremesa. No se decide sola a
 > propósito: un teclado se enchufa y se desenchufa, y `kb_options` se lee al
 > arrancar la sesión (el porqué largo está en `lib/maquina.py`).
@@ -588,7 +653,7 @@ sobremesa con un SAI conectado por USB enseña una batería en
 touchpad. Un SAI no tiene tapa.
 
 `maquina.py` dice siempre **por qué** ha decidido lo que ha decidido, y ese
-motivo queda escrito dentro del `local.conf` generado. Cuando alguien reporte
+motivo queda escrito dentro del `local.lua` generado. Cuando alguien reporte
 «me detectó mal», es lo primero que hay que mirar.
 
 ### Por qué se decide al instalar y no al arrancar
@@ -597,18 +662,15 @@ Al revés que `pantalla.py`, que se mide en caliente. La diferencia: los monitor
 cambian —conectas un proyector, giras la pantalla—, pero **la caja no**. Un
 portátil no amanece siendo un sobremesa.
 
-Y encima hyprlang **no tiene condicionales**: no hay forma de escribir «carga
-esto solo si...» dentro de un `.conf`. Lo que sí se puede es que el `source` del
-final apunte a una variable. Así que `instalar.sh` escribe en `local.conf` a
-dónde apunta `$conf_maquina`, y en un sobremesa apunta a `conf/nada.conf`, que
-está **vacío a propósito**: «no cargar nada» hay que escribirlo como «cargar un
-fichero que no tiene nada dentro».
+Con hyprlang esto obligaba a un truco —no tenía condicionales, así que «no
+cargar nada» se escribía como «cargar un fichero vacío» (`conf/nada.conf`)—. En
+Lua es un `if`: `instalar.sh` escribe `portatil = true` o `false` en
+`local.lua`, y `hyprland.lua` carga `lua/teclado-laptop.lua` solo si toca.
 
-Ese `source` va **el último de todos** en `hyprland.conf`, y ahí está el detalle
-que se puede romper sin querer: son *correcciones* sobre `input.conf` y
-`keybinds.conf`, y en hyprlang gana el último que habla. Cargarlo antes lo
-dejaría pisado, y el síntoma sería «puse el fichero y no hace nada». Hay una
-prueba que lo vigila.
+Lo que no cambia es el **orden**, y ahí está el detalle que se puede romper sin
+querer: son *correcciones* sobre `input.lua` y `keybinds.lua`, y gana el último
+que habla. Cargarlo antes lo dejaría pisado, y el síntoma sería «puse el
+fichero y no hace nada». Hay una prueba que lo vigila (`tests/unidad/maquina.sh`).
 
 > **Si mueves el disco de un equipo a otro**, vuelve a pasar `./instalar.sh`. Es
 > el mismo trato que ya tiene el dock.
@@ -627,9 +689,10 @@ porque lo de al lado es negro de verdad y no gris.
 
 ### La paleta
 
-Está en `hypr/conf/colores.conf`, que se hace `source` **el primero** en
-`hyprland.conf` — las variables de hyprlang son sustitución de texto, así que
-tienen que existir antes de que alguien las use.
+Está en `hypr/conf/colores.conf`, en hyprlang, y es **la única fuente**: la lee
+la config Lua (`lua/colores.lua`, sin copiarla), la hace `source` hyprlock y la
+reparte `gen-colores.py` a los demás. Por eso sigue en ese formato aunque la
+config de Hyprland ya sea Lua.
 
 | Variable | Color | Su papel |
 |---|---|---|
@@ -798,7 +861,8 @@ alrededor de un vatio.
 > dejó de moverse, no está roto: pulsa `SUPER + flecha` y arranca.
 >
 > Para apagarlo del todo:
-> `hyprctl keyword animation 'borderangle,0,80,giro,loop'`.
+> comenta la línea `animar("borderangle", ...)` de `hypr/lua/animations.lua` (o
+> ponla en tu `personal.lua` con `hl.animation({ leaf = "borderangle", enabled = false })`).
 
 > **`hyprctl reload` contesta `ok` aunque la config tenga errores**, y el ajuste
 > simplemente no se aplica sin decir nada. Por eso existe
@@ -849,7 +913,7 @@ sigue funcionando y el demonio no se apaga.
 > waybar caída mataba a las otras tres y al propio demonio, y ya no quedaba
 > nadie que las levantara — ni el atajo de reinicio servía, porque lo primero
 > que hace es hablar con el demonio. La única salida era cerrar sesión, que es
-> cuando `exec-once` vuelve a correr. Lo cubre
+> cuando el arranque vuelve a correr. Lo cubre
 > `tests/unidad/barras-supervisor.sh`.
 
 Y **solo manda un demonio a la vez**: al arrancar echa a cualquier otro que esté
@@ -1057,6 +1121,98 @@ sitios a la vez**: al portapapeles, para pegarlas al instante, y a un archivo en
 > **Si tienes las animaciones apagadas, no se espera nada**: sin desvanecido, la
 > capa se va con su proceso, y cobrar el plazo haría lento lo que en tu equipo
 > es instantáneo.
+
+---
+
+## El menú de salida (SUPER + SHIFT + P)
+
+Antes era un `exit` a secas, y rozarlo **cerró la sesión con todo abierto** más
+de una vez. Ahora abre un menú (fuzzel, con la paleta de siempre):
+
+| | |
+|---|---|
+| Bloquear | el mismo `lock.sh` de `SUPER + L` |
+| Suspender | el bloqueo lo pone hypridle al dormir |
+| Cerrar sesión | **pregunta otra vez** |
+| Reiniciar | **pregunta otra vez** |
+| Apagar | **pregunta otra vez** |
+
+En la pregunta, **«No» es la primera línea**, y fuzzel preselecciona la primera:
+un Enter por inercia —que es justo el accidente del que venimos— vuelve atrás en
+vez de apagar. Escape cancela en los dos menús.
+
+Cerrar sesión se le pide a **uwsm** si la sesión es suya (la de CachyOS), para
+que las unidades de la sesión se apaguen en orden; si no, el `exit` de Hyprland.
+Lo vigila `tests/unidad/sesion.sh`, con un fuzzel de mentira: nada se apaga de
+verdad.
+
+---
+
+## El portapapeles (SUPER + SHIFT + V)
+
+Lo que copias se apunta solo, texto o imagen, y `SUPER + SHIFT + V` lo saca en
+un menú. Tres listas:
+
+| | Dura | Para |
+|---|---|---|
+| **Historial** | 24 h, y como mucho 50 cosas (lo más viejo sale primero) | lo que vas copiando |
+| **Fijados** 󰐃 | hasta cerrar sesión o apagar | lo que usas a cada rato; salen arriba del todo |
+| **Guardados** 󰆓 | para siempre, aunque apagues | lo que quieres tener cualquier día |
+
+En el menú (la ayuda sale escrita en la caja de búsqueda):
+
+| Tecla | |
+|---|---|
+| `Enter` | lo copia (y ya puedes pegarlo) |
+| `Ctrl + F` | lo fija; sobre algo fijado, lo **desfija** |
+| `Ctrl + G` | lo guarda; sobre algo guardado, lo **quita** de guardados |
+| `Ctrl + D` | lo borra de todas las listas (si era un guardado, avisa: no vuelve solo) |
+
+Tras fijar, guardar o borrar, el menú se vuelve a abrir en el mismo sitio, para
+que veas el cambio y sigas. Las imágenes salen con su **miniatura**.
+
+**Lo que no se apunta nunca:** lo que un gestor de contraseñas marca como
+secreto (KeePassXC y compañía: `wl-paste` lo avisa), el portapapeles vacío y lo
+que pese más de 16 MB.
+
+**Dónde vive cada cosa**, y por qué:
+
+- El historial y los fijados, **en memoria** (`$XDG_RUNTIME_DIR`), en una
+  carpeta con la firma de la sesión: por el portapapeles pasa de todo —códigos,
+  direcciones, trozos de conversaciones— y guardarlo en disco sin pedirlo lo
+  dejaría ahí después de apagar. Al arrancar, se barre lo de sesiones que ya no
+  están.
+- Los guardados, en `~/.local/share/celiuz/portapapeles/`: eso sí lo pediste tú.
+
+Los números se cambian en `~/.config/celiuz/portapapeles.conf` (no se versiona,
+se lee en cada copia):
+
+```ini
+maximo = 50     # cuantas cosas guarda el historial
+horas = 24      # a las cuantas horas se olvida una
+max_mb = 16     # lo que pese mas no se apunta
+```
+
+`portapapeles.py --ver` dice dónde está todo y cuántas hay; `portapapeles.py
+vaciar` borra el historial (no toca fijados ni guardados). No usa cliphist a
+propósito: no sabe de caducidad por tiempo ni de fijar o guardar, y montar eso
+encima de su base de datos era más frágil que un fichero por entrada. Sin
+paquetes nuevos: `wl-clipboard` y `fuzzel` ya estaban.
+
+---
+
+## Volumen y brillo, a la vista
+
+Las teclas de volumen, silencio, micro y brillo hacen el cambio **y enseñan cómo
+queda**: un aviso abajo en el centro con el valor y una barra que se rellena
+(`hypr/scripts/osd.sh`). Antes se cambiaba a ciegas.
+
+- **Uno solo, que se reescribe**: mantener la tecla no apila veinte avisos.
+- **Sin sonido y fuera del historial** (`SUPER + H`): va como aviso
+  *transitorio* y con su categoría, y `mako/config` lo trata aparte. Tampoco se
+  esconde en «no molestar»: es la respuesta a una tecla que acabas de pulsar.
+- Subir el volumen **quita el silencio**, y el tope del 100 % sigue ahí (por
+  encima wpctl amplifica por software y suena roto).
 
 ---
 
@@ -1344,7 +1500,7 @@ lo que dura.
 | 12 min | Apaga el monitor (`dpms off`) |
 | — | **No** suspende la máquina: es un escritorio que se queda con descargas y escaneos corriendo solos |
 
-Va por systemd y no con `exec-once = hypridle` a pelo por el `Restart=on-failure`:
+Va por systemd y no con `hypridle` a pelo por el `Restart=on-failure`:
 si el demonio se cayera, el auto-bloqueo dejaría de funcionar en silencio. Y como
 es un `.service` y no un `.scope`, el congelado del bloqueo no puede congelar a
 quien lo gobierna.
@@ -1356,7 +1512,7 @@ contador son las apps que inhiben por D-Bus (un vídeo a pantalla completa en el
 navegador), y eso es justo lo que se quiere.
 
 > **`SUPER+SHIFT+D` enciende la pantalla.** Es un salvavidas, no un adorno:
-> `hyprctl dispatch dpms` **sin argumento apaga el monitor**, Hyprland contesta
+> un `dpms` **sin argumento apaga el monitor**, Hyprland contesta
 > `ok` tan tranquilo, y la pantalla no vuelve sola — se vive como si la PC se
 > hubiera apagado sin apagarse. Con el DPMS apagado Hyprland sigue leyendo el
 > teclado, así que el atajo funciona justo cuando no ves nada.
@@ -1589,10 +1745,10 @@ eso está `tests/anidado.sh`, que no es una prueba sino una herramienta:
 
 Levanta un Hyprland **anidado que no puede tocar tu sesión**: `$HOME`
 desechable, una copia del repo enlazada igual que la enlaza `instalar.sh`,
-`autostart.conf` vaciado y su propio `$XDG_RUNTIME_DIR`. Al salir barre lo que
-quedara vivo con la firma de esa instancia y borra la casa.
+`autostart.lua` (y `autostart.conf`) vaciados y su propio `$XDG_RUNTIME_DIR`. Al
+salir barre lo que quedara vivo con la firma de esa instancia y borra la casa.
 
-Lo de vaciar `autostart.conf` no es exceso de celo: los `exec-once` de verdad
+Lo de vaciar el arranque no es exceso de celo: los arranques de verdad
 matan por **nombre de proceso** (`pkill -x mpvpaper`) y arrancan unidades del
 usuario (`systemctl --user start hypridle`), y ni el nombre ni las unidades
 entienden de `$HOME`. Un anidado levantado a pelo te deja el escritorio real sin
@@ -1662,28 +1818,33 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `/etc/sddm.conf.d/10-celiuz.conf` | `instalar.sh --sddm` |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
-| `hypr/conf/local.conf` | `instalar.sh` |
+| `hypr/lua/local.lua` | `instalar.sh` |
+| `hypr/conf/local.conf` | `instalar.sh` (el de la config vieja, mientras dure el puente) |
 | `waybar/local.jsonc` | `instalar.sh` (desde `waybar/derecha.jsonc`) |
 
-### Y uno que es tuyo: `hypr/conf/personal.conf`
+### Y uno que es tuyo: `hypr/lua/personal.lua`
 
-`instalar.sh` lo crea **vacío** la primera vez y **no lo vuelve a tocar nunca**.
+`instalar.sh` lo crea la primera vez —vacío, o **traducido de tu
+`conf/personal.conf`** si tenías uno con algo— y **no lo vuelve a tocar nunca**.
 No se versiona. Es donde van tus añadidos sin tener que editar los ficheros del
-repo: un `exec-once` de un programa que solo tienes tú, un atajo para algo que
-aquí no viene, o un ajuste que prefieres distinto.
+repo: un programa que arranque contigo, un atajo para algo que aquí no viene,
+tus pantallas, o un ajuste que prefieres distinto.
 
-```conf
-exec-once = mi-programa
-bind = SUPER, G, exec, otra-cosa
-bind = SUPER, Q, killactive     # también sirve para pisar uno del repo
+```lua
+hl.on("hyprland.start", function() hl.exec_cmd("mi-programa") end)
+hl.bind("SUPER + G", hl.dsp.exec_cmd("otra-cosa"))
+hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "auto-right", scale = 1.5 })
+hl.config({ input = { kb_options = "" } })   -- pisar un ajuste del repo
 ```
 
 Se carga **el último** de todos, así que desde ahí puedes pisar cualquier cosa:
-en hyprlang gana quien habla al final. Y como está fuera de git, tus cambios no
-te salen como modificaciones cada vez que traigas actualizaciones.
+gana quien habla al final. Y como está fuera de git, tus cambios no te salen
+como modificaciones cada vez que traigas actualizaciones. Si tiene un error, sale
+en `hyprctl configerrors` (y en `SUPER+SHIFT+R`) con su línea, y el resto de la
+config se carga igual.
 
 **`colores.css`, `mako/colores` y `Colores.qml` sí se versionan**: salen de la
-paleta y son iguales en cualquier equipo. Los del dock, `local.conf` y
+paleta y son iguales en cualquier equipo. Los del dock, `local.lua`, `local.conf` y
 `local.jsonc` **no**, porque dependen de la máquina — los crea `instalar.sh`. Los dos de `~/.cache`
 tampoco: se rehacen en cada bloqueo. Y los tres de fuera del repo (el fondo del
 arranque y el drop-in de SDDM) los pone `--sddm`, que es lo único que pide root.
@@ -1707,27 +1868,27 @@ imagen con su selector propio, capturas, calendario, monitores del sistema,
 pantalla de bloqueo y auto-bloqueo, pantalla de inicio de sesión, Bluetooth
 (auriculares que se conectan solos y de uno en uno), el aspecto
 (paleta, decoración y animaciones), adaptación a la pantalla que haya,
-portabilidad a cualquier ruta de clonado, y pruebas automáticas.
+portabilidad a cualquier ruta de clonado, pruebas automáticas, y desde el
+2026-09-25: **menú de salida** con confirmación, **historial del portapapeles**
+con fijados y guardados, **volumen y brillo a la vista**, y la **config en Lua**
+lista para Hyprland 0.57.
 
 **Pendiente, por orden de valor:**
 
 | | Qué | Por qué importa |
 |---|---|---|
-| 1 | **`env.conf` para Nvidia — está vacío** | Es lo que más puede afectar jugando en Wayland. Ojo: muchas variables que circulan por los foros llevan años obsoletas en 0.56 y algunas empeoran el rendimiento; hay que comprobar cuáles hacen falta de verdad, no copiar listas. Pista: el Hyprland anidado sobre esta NVIDIA solo levanta con `AQ_NO_MODIFIERS=1`. |
-| 2 | **Teclas multimedia y la perilla del teclado** | No hay ni un bind de volumen en toda la config. Es rápido. |
-| 3 | **Historial del portapapeles** | `SUPER+SHIFT+V` ya está reservado. Candidato: cliphist. |
-| 4 | **Reglas de ventana del flujo de seguridad** | VMs, Burp… Hay que decidir antes qué herramientas se usan de verdad. |
-| 5 | **El login (SDDM) y el TTY siguen en `latam`** | `/etc/vconsole.conf` gobierna la pantalla de login, así que la contraseña al encender se teclea con otra distribución que la de la sesión. Es un cambio de sistema, fuera del repo. |
+| 1 | **Borrar el puente de hyprlang** (`hypr/hyprland.conf` y los módulos de `hypr/conf/` menos `colores*.conf`) | Solo cuando las **dos** máquinas hayan entrado con la config en Lua (`./instalar.sh --revisar` lo dice). Antes no: un `git pull` con una sesión vieja abierta se quedaría sin atajos. |
+| 2 | **Un agente de polkit** | No hay ninguno en la sesión: los programas que piden permisos de administrador (`pkexec`, GParted…) fallan sin enseñar la ventana de contraseña. Candidato: `hyprpolkitagent` (repo `extra`). |
+| 3 | **`env.lua` para Nvidia — está vacío** | Es lo que más puede afectar jugando en Wayland. Ojo: muchas variables que circulan por los foros llevan años obsoletas en 0.56 y algunas empeoran el rendimiento; hay que comprobar cuáles hacen falta de verdad, no copiar listas. Pista: el Hyprland anidado sobre esta NVIDIA solo levanta con `AQ_NO_MODIFIERS=1`. |
+| 4 | **Atajos básicos que faltan** | Pantalla completa, mover ventanas y redimensionar con el teclado, escritorio especial (cajón), cambiar de escritorio con la rueda + SUPER. |
+| 5 | **Integración continua** | `shellcheck`, `ruff` y `./tests/run.sh` en cada push: las dos máquinas empujan a `main`. |
+| 6 | **Reglas de ventana del flujo de seguridad** | VMs, Burp… Hay que decidir antes qué herramientas se usan de verdad. |
+| 7 | **El login (SDDM) y el TTY siguen en `latam`** | `/etc/vconsole.conf` gobierna la pantalla de login, así que la contraseña al encender se teclea con otra distribución que la de la sesión. Es un cambio de sistema, fuera del repo. |
 
 Menores, ya ofrecidos y no pedidos: regla de sudo estrecha para
-`ir-a-windows.sh`, `windowrule` para que su terminal salga flotante, atajo propio
-para CeliuzPaper, y un botón de «añadir comando a mano» en el gestor del dock
-(para AppImages y binarios sueltos, que ningún escaneo de `.desktop` cubre).
+`ir-a-windows.sh`, regla de ventana para que su terminal salga flotante, atajo
+propio para CeliuzPaper, y un botón de «añadir comando a mano» en el gestor del
+dock (para AppImages y binarios sueltos, que ningún escaneo de `.desktop` cubre).
 
 Para retomar el trabajo hay un **`SIGUIENTE.md`** con el detalle de cada
 pendiente y las pistas que ya se encontraron.
-
-> **Aviso de futuro:** Hyprland avisa al arrancar de que *el formato `.conf`
-> dejará de estar soportado en la 0.57*. Todo este repo está en hyprlang `.conf`
-> por decisión explícita (poder seguir la wiki y los foros sin traducir), así que
-> antes de esa versión habrá que decidir: quedarse anclado, o portar a Lua.
