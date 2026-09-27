@@ -170,6 +170,12 @@ preparar_entorno() {
     # su respaldo, que es justo lo que queremos probar.
     unset HYPRLAND_INSTANCE_SIGNATURE
     unset WAYLAND_DISPLAY
+    # Y DISPLAY tambien: sin ella, un programa GTK al que se le quita Wayland
+    # cae a X11 y se dibuja por XWayland EN LA SESION REAL. Paso el 2026-09-25:
+    # la prueba del modo gaming abrio tres bibliotecas en el escritorio del
+    # autor mientras trabajaba, y la tarjeta de confirmacion "fallaba" en verde
+    # porque en realidad se estaba enseñando ahi.
+    unset DISPLAY
 
     export PATH="$FALSOS:$PATH"
     trap 'limpiar_entorno' EXIT INT TERM

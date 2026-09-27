@@ -88,6 +88,11 @@ MAX_REVIVIR = 3
 #               fondo: con la pausa puesta veri­as un fotograma congelado y no
 #               se puede elegir asi).
 #   release  -> vuelve a mandar, y recalcula ya mismo.
+#   gaming-on / gaming-off -> el modo gaming (scripts/modo-gaming.py): mientras
+#               dure, mpvpaper se MATA igual que con un juego de la stoplist
+#               (libera la VRAM, que es lo que importa jugando) y se levanta al
+#               salir. No se cambia la stoplist: el modo dura lo que diga el
+#               usuario, no lo que dure un proceso.
 # Con la firma de la sesion; ver lib/canales.py.
 FIFO_PATH = canales.canal_fondo()
 
@@ -340,6 +345,7 @@ def main():
     pausado = None       # lo ultimo que le dijimos a mpv
     parado_por_juego = False
     retenido = False     # alguien pidio `hold`: no se toca la pausa
+    modo_gaming = False  # `gaming-on`: fondo fuera mientras dure el modo
     revividos = 0        # intentos seguidos de resucitar mpvpaper (ver 1b)
     sin_hyprland = None  # desde cuando no se consigue hablar con el compositor
 
@@ -398,14 +404,19 @@ def main():
                         elif orden == "release":
                             retenido = False
                             pausado = None   # obliga a recalcular abajo
+                        elif orden == "gaming-on":
+                            modo_gaming = True
+                        elif orden == "gaming-off":
+                            modo_gaming = False
 
                 # --- 1. La stoplist: juegos ---
                 vivos = procesos_en_marcha()
-                hay_juego = bool(leer_stoplist() & vivos)
-                # Se saca de la lista que ya tenemos en la mano en vez de lanzar
-                # un pgrep: este bucle da una vuelta cada 5 s y el fichero evita
-                # crear procesos a proposito (ver la cabecera).
-                hay_fondo = "mpvpaper" in vivos
+                hay_juego = modo_gaming or bool(leer_stoplist() & vivos)
+                # EL NUESTRO, por el socket de la sesion, y no «algun proceso
+                # llamado mpvpaper»: con dos sesiones vivas el de la otra hacia
+                # creer que el nuestro seguia en pie y no se resucitaba nunca.
+                # Sigue sin crear procesos (lee /proc, ver la cabecera).
+                hay_fondo = mpvpaper_vivo()
                 if hay_juego and not parado_por_juego:
                     matar_mpvpaper()
                     parado_por_juego = True
@@ -427,8 +438,16 @@ def main():
                 # Se reintenta un numero limitado de veces: si el video esta
                 # corrompido o el archivo ya no existe, mpvpaper muere nada mas
                 # nacer y sin tope esto seria un bucle de arranques cada 5 s.
-                elif (not hay_fondo and os.path.exists(CURRENT)
-                      and revividos < MAX_REVIVIR):
+                #
+                # Y NUNCA si lo matamos nosotros (`parado_por_juego`): sin esta
+                # condicion, la vuelta siguiente a matarlo por un juego lo
+                # resucitaba, y el fondo seguia gastando VRAM durante toda la
+                # partida. Medido el 2026-09-25 con el modo gaming: muerto al
+                # segundo 1, vivo otra vez al 2. Pasaba igual con la stoplist,
+                # cinco segundos despues; la prueba no lo veia porque su copia del
+                # repo no tenia `current` y esta rama no se ejecutaba nunca.
+                elif (not parado_por_juego and not hay_fondo
+                      and os.path.exists(CURRENT) and revividos < MAX_REVIVIR):
                     revividos += 1
                     levantar_mpvpaper()
                     pausado = None

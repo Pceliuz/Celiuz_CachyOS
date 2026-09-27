@@ -1,0 +1,6 @@
+# Los videos de entrada y salida del modo gaming son de cada uno: casi nunca son
+# redistribuibles (bajados de internet, de un juego...), y pesan. Se quedan en
+# la maquina, igual que los fondos de hypr/wallpapers/.
+*
+!.gitignore
+!LEEME.md

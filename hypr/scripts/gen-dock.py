@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 import canales  # noqa: E402
 
 import apps  # noqa: E402
+import catalogo  # noqa: E402
 import nf_icons  # noqa: E402
 
 # La raiz del repo, sacada de DONDE ESTA ESTE FICHERO (hypr/scripts/gen-dock.py
@@ -186,8 +187,14 @@ def ruta_icono(nombre):
         import gi
         gi.require_version("Gtk", "3.0")
         from gi.repository import Gtk
-        Gtk.init_check([])
-        icono = Gtk.IconTheme.get_default().lookup_icon(nombre, 128, 0)
+        # Sin ninguna pantalla (instalar.sh desde un TTY, las pruebas) no hay
+        # tema «por defecto», porque ese va atado a una pantalla: get_default()
+        # devuelve None y esto reventaba. Un tema propio busca en los mismos
+        # sitios y no necesita pantalla. Se destapo al quitarles DISPLAY a las
+        # pruebas: hasta entonces pasaban porque se colaban en el XWayland del
+        # autor.
+        tema = Gtk.IconTheme.get_default() if Gtk.init_check([])[0] else None
+        icono = (tema or Gtk.IconTheme.new()).lookup_icon(nombre, 128, 0)
         return icono.get_filename() if icono else None
     except (ImportError, ValueError):
         return None
@@ -219,17 +226,32 @@ def instalada(cmd):
     return bool(shutil.which(primero)) or os.access(primero, os.X_OK)
 
 
+def es_juego(app):
+    """Los juegos no van en el dock: los ensena la biblioteca del modo gaming.
+
+    Se decide al GENERAR y no al anadir, a proposito: el juego se queda en
+    dock-apps.json (quitarlo seria perder lo que el usuario puso) y solo deja de
+    tener boton. Los lanzadores (Steam, Heroic...) si se quedan: el usuario los
+    abre para la tienda y deja descargas de horas en segundo plano.
+    """
+    return catalogo.clase_de_orden(app.get("cmd", ""), app.get("icon_name", "")) == catalogo.JUEGO
+
+
 def generar(datos=None):
     """Escribe dock.jsonc. Devuelve (numero de apps, ancho de la barra)."""
     datos = cargar() if datos is None else datos
-    apps = datos["apps"]
-    if len(apps) > MAX_BOTONES:
+    if len(datos["apps"]) > MAX_BOTONES:
         raise SystemExit(
-            f"gen-dock: {len(apps)} apps es mas de lo que cubre style.css "
+            f"gen-dock: {len(datos['apps'])} apps es mas de lo que cubre style.css "
             f"({MAX_BOTONES}). Alarga la lista de #custom-appN antes de seguir.")
 
+    # Cada boton conserva el numero de SU POSICION en dock-apps.json aunque se
+    # salten los juegos: el gestor del clic derecho recibe «appN» y quita la
+    # entrada N. Renumerar haria que el clic derecho sobre un icono quitara otro.
+    visibles = [(i, app) for i, app in enumerate(datos["apps"]) if not es_juego(app)]
+    apps = [app for _, app in visibles]
     ancho = max(CELDA, CELDA * len(apps))
-    ids = [f"app{i + 1}" for i in range(len(apps))]
+    ids = [f"app{i + 1}" for i, _ in visibles]
 
     # Cada app usa su propio icono si se puede resolver; si no, cae al glifo de la
     # Nerd Font. Se resuelve antes de escribir nada porque decide las dos cosas:
@@ -453,6 +475,8 @@ def main():
             else:
                 icono = "glifo generico (no encuentro su icono)"
             falta = "" if instalada(app.get("cmd")) else "  [NO INSTALADA]"
+            if es_juego(app):
+                falta += "  [JUEGO: sale en el modo gaming, no en el dock]"
             print(f"{i:2}. {glifo(app)}  {app.get('label', ''):32} "
                   f"{app.get('cmd', ''):34} {icono}{falta}")
         return

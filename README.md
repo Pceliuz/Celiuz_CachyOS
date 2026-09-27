@@ -118,6 +118,13 @@ sin ellas:
 sudo pacman -S wireplumber playerctl brightnessctl
 ```
 
+Y para el modo gaming (`SUPER + G`), opcionales: el overlay de FPS es MangoHud,
+y los vídeos de entrada y salida (si pones los tuyos) los reproduce mpv:
+
+```sh
+sudo pacman -S mangohud lib32-mangohud mpv
+```
+
 Y para grabar la pantalla (`SUPER + R`), que va aparte por lo mismo:
 
 ```sh
@@ -290,6 +297,10 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 | `SUPER + ALT + R` | Grabar el monitor entero (la misma tecla lo para) |
 | `SUPER + SHIFT + V` | Historial del portapapeles (Enter copia, Ctrl+F fija, Ctrl+G guarda, Ctrl+D borra) |
 | Volumen, silencio, micro, brillo | Lo cambian **y enseñan** cómo queda (abajo, con una barra) |
+| `CTRL + RePág` / `CTRL + AvPág` | Subir / bajar el volumen, para teclados sin esas teclas (en el navegador, cambiar de pestaña queda en `CTRL + TAB`) |
+| `SUPER + G` | Modo gaming: entrar / salir (pregunta antes; con un juego abierto no deja salir) |
+| `SUPER` + la tecla de al lado del 1 | Menú rápido del modo gaming (va por código de tecla: vale en `us` y en `latam`) |
+| `Supr` (dentro de un juego) | Enseñar / esconder el overlay de FPS (MangoHud) |
 | `SUPER + 1..7` | Ir al escritorio |
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
 | `SUPER + flechas` | Mover el foco |
@@ -1198,6 +1209,43 @@ vaciar` borra el historial (no toca fijados ni guardados). No usa cliphist a
 propósito: no sabe de caducidad por tiempo ni de fijar o guardar, y montar eso
 encima de su base de datos era más frágil que un fichero por entrada. Sin
 paquetes nuevos: `wl-clipboard` y `fuzzel` ya estaban.
+
+---
+
+## El modo gaming (SUPER + G)
+
+Un modo en el que el escritorio se aparta para jugar. Al entrar (con tu vídeo
+de entrada, si lo pones):
+
+- se cierran las ventanas que no son juegos, lanzadores, terminales ni apps
+  permitidas, y lo que queda se guarda en un escritorio oculto;
+- se apagan el fondo en vídeo, las barras, el blur, las sombras y las
+  animaciones, y los avisos pasan a «no molestar»;
+- Steam arranca en la bandeja con el overlay puesto, y con el procesado de
+  shaders en segundo plano encendido (así no te espera la ventana de
+  «Processing Vulkan shaders» al darle a jugar);
+- en el **escritorio 1** sale la **biblioteca**: tus juegos de Steam y los que
+  tengan `.desktop` de juego, con sus carátulas, horas y última vez. Se maneja
+  con teclado, mando o ratón.
+
+Un juego lanzado desde la biblioteca se abre en el 1 (la biblioteca se va, y
+vuelve al cerrarlo). Lo que abras después va al escritorio siguiente, sin
+huecos. El **menú rápido** (`SUPER` + la tecla de al lado del 1, o Select +
+Start en el mando) enseña lo abierto con el volumen de cada cosa, la música
+que suene, y deja ir, cerrar, abrir apps u otro juego. Al salir, lo abierto
+durante el modo se cierra y lo de antes vuelve a su sitio.
+
+Lo tuyo, fuera del repo:
+
+- **Apps permitidas** (tu música, por ejemplo): el botón «Añadir» del menú
+  rápido, o `~/.config/celiuz/modo-gaming.json` (`"apps"`). El navegador
+  predeterminado va solo.
+- **Vídeos de entrada y salida**: `hypr/modo-gaming/inicio.mp4` y `final.mp4`
+  (esa carpeta no se versiona; mira su `LEEME.md`).
+- **Ganchos**: ejecutables en `~/.config/celiuz/modo-gaming.d/`, que se corren
+  con `on` al entrar y `off` al salir.
+
+Desde un script: `hypr/scripts/modo-gaming.py on|off|estado --json`.
 
 ---
 

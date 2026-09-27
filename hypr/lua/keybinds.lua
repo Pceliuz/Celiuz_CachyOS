@@ -233,6 +233,13 @@ local repite = { locked = true, repeating = true }
 local bloqueada = { locked = true }
 exec("", "XF86AudioRaiseVolume", S .. "osd.sh volumen subir", repite)
 exec("", "XF86AudioLowerVolume", S .. "osd.sh volumen bajar", repite)
+-- Para teclados sin teclas de volumen (el de la PC del autor): Ctrl+RePag /
+-- Ctrl+AvPag. OJO: esa combinacion es la de cambiar de pestaña en los
+-- navegadores, y un atajo de Hyprland se la quita (ahi queda Ctrl+Tab). La
+-- eligio el usuario sabiendolo. Es el volumen GENERAL; el de cada app o juego
+-- esta en el menu rapido del modo gaming.
+exec("CTRL", "Page_Up", S .. "osd.sh volumen subir", repite)
+exec("CTRL", "Page_Down", S .. "osd.sh volumen bajar", repite)
 
 -- El silencio va con `locked` y sin `repeating`: repetir un interruptor lo unico
 -- que hace es encenderlo y apagarlo muy rapido.
@@ -329,3 +336,15 @@ accion(mainMod, "down",  hl.dsp.focus({ direction = "down" }),  "foco abajo")
 -- porque es como lo escribe el ejemplo oficial de Hyprland.
 accion(mainMod, "mouse:272", hl.dsp.window.drag(),   "arrastrar la ventana",      { mouse = true })
 accion(mainMod, "mouse:273", hl.dsp.window.resize(), "redimensionar la ventana", { mouse = true })
+
+-- Modo gaming (scripts/modo-gaming.py): pregunta antes con una tarjeta, tanto al
+-- entrar como al salir, porque entrar cierra ventanas y un roce jugando o
+-- trabajando no puede hacerlo sin que lo digas. Lo que hace, en su cabecera.
+exec(mainMod, "G", S .. "modo-gaming.py toggle")
+
+-- Menu rapido del modo gaming (scripts/menu-rapido.py), encima del juego: tus
+-- apps, la musica, el volumen por grupos, el micro. Va atado por CODIGO de
+-- tecla y no por simbolo: la tecla de al lado del 1 es `code:49` en cualquier
+-- teclado, pero su simbolo cambia con la distribucion (` en us, | en latam), y
+-- este repo se usa con las dos. Fuera del modo gaming no hace nada.
+exec(mainMod, "code:49", S .. "menu-rapido.py")

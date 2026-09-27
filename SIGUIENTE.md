@@ -135,9 +135,10 @@ tocar ese día:
 
 ## Pendientes, por orden de valor
 
-1. **Modo gaming** (lo próximo que quiere el usuario, 2026-09-25). Aún sin
-   diseñar: no des por hecho qué debe hacer, pregúntaselo. **Antes de escribir
-   nada, mira lo que YA existe**, porque media pieza está hecha:
+1. **Modo gaming — EN CONSTRUCCIÓN.** El diseño está cerrado con el usuario
+   (2026-09-25) y va en la sección «Modo gaming: el diseño», más abajo; las
+   maquetas que aprobó están en `~/Imágenes/modo-gaming/` (fuera del repo).
+   Lo que ya existía y en lo que se apoya:
    - `hypr/scripts/lib/juegos.py` — **ya sabe decir si algo es un juego**, por
      cuatro capas (Steam, ananicy, flatpak de juego, pantalla completa) más las
      excepciones a mano de `hypr/congelar-excepciones.json`. Lo usa `lock.sh`
@@ -175,6 +176,217 @@ tocar ese día:
 6. **`lua/env.lua` para Nvidia** (vacío). Solo se puede medir en la PC. Pista:
    el anidado sobre esa NVIDIA pide `AQ_NO_MODIFIERS=1`.
 7. Reglas de ventana del flujo de seguridad; el login y el TTY en `latam`.
+
+## Modo gaming: el diseño (cerrado con el usuario el 2026-09-25)
+
+**La idea**: un atajo (o el asistente del usuario, en su PC) mete el escritorio
+en un modo en el que todo lo que no sea jugar se quita de en medio, y en su
+lugar sale una biblioteca de juegos propia a pantalla completa.
+
+**El repo es público: aquí no se nombra al asistente.** Para quien clone el
+repo, el modo es un atajo y nada más. Lo que el asistente necesita son dos
+puntos de enganche genéricos, que valen para cualquiera:
+- `hypr/scripts/modo-gaming.py on|off|toggle|estado [--json]` (el CLI que llama
+  él; `on`/`off` sin tarjeta con `--sin-preguntar`, porque ya confirma él).
+- `~/.config/celiuz/modo-gaming.d/`: ejecutables que el modo corre al entrar y
+  al salir (`on` / `off` como argumento). Vacía para quien clona.
+
+### El flujo (rehecho el 2026-09-26 a petición del usuario)
+1. **Atajo del modo** → tarjeta de confirmación (Enter / A; Esc / B, o se va
+   sola a los 5 s sin hacer nada). Al salir igual, y avisa si hay un juego.
+2. **Al entrar**, detrás del vídeo de entrada del usuario (`video_entrada` en su
+   `modo-gaming.json`, con fundido; se salta con Enter/Esc/A): se cierran las
+   ventanas que no son juego, lanzador, app permitida ni terminal; lo que queda
+   se guarda en un escritorio **oculto** (`special:modo-gaming`); se apagan
+   fondo, barras y efectos; Steam a la bandeja con el overlay. Al acabar el
+   vídeo, **en el escritorio 1 solo está la biblioteca**.
+3. **Un juego lanzado desde la biblioteca se abre en el 1** y la biblioteca se
+   cierra. Si el juego se cierra, la biblioteca vuelve al 1.
+4. **Todo lo que se abre después** (desde el menú rápido, o una terminal con
+   SUPER+Enter) va al **escritorio siguiente** (2, 3...) y te lleva. Una
+   segunda ventana de la misma app va con la primera. No hay huecos: si uno se
+   vacía, los de detrás corren un puesto; y no se puede ir a uno vacío.
+5. **Al salir**, detrás del vídeo de salida: cada ventana guardada vuelve a su
+   escritorio, lo abierto durante el modo va a donde estabas, y los efectos
+   vuelven cuando acaba el vídeo.
+Probado entero en anidado el 2026-09-26 (con los vídeos del usuario, un juego
+falso, apps en scopes de systemd como las reales, y una terminal guardada que
+volvió a su escritorio 3).
+
+### Tercera ronda (2026-09-26, tras la prueba del usuario)
+- Overlay: centrado y del ancho de lo que enseña (`horizontal_stretch=0`).
+- Shaders: la causa de esperar 7-15 min en Aniimo era que Steam tenía APAGADO
+  el procesado de fondo (`EnableShaderBackgroundProcessing`, apagado de fábrica
+  en PC): bajó los shaders nuevos a la 01:34 y no los tocó hasta lanzar el
+  juego a las 08:10 (shader_log). `preparar-steam` lo enciende (con Steam
+  cerrado) y arranca ANTES del vídeo de entrada. **Lo que no se hace**: seguir
+  procesando mientras juegas. Steam lo pausa a propósito con un juego abierto,
+  y forzarlo por fuera (fossilize_replay a mano) es competir con el juego por
+  la CPU sin saber si Steam lo daría por hecho; se descartó y se le dijo.
+- Al empezar un juego se cierran las ventanas de los lanzadores (Steam a la
+  bandeja), también la que Steam abre justo después del juego.
+- SUPER+1..7 pasan por `modo-gaming.py ir N` mientras dura el modo (antes
+  cambiaba y rebotaba, y se veía el fondo vacío un instante).
+- Con un juego abierto NO se sale del modo: tarjeta «Tienes un juego abierto»
+  (`--forzar` se lo salta).
+- Salida: el vídeo va primero y a pantalla completa (se le fuerza), y detrás
+  se cierran biblioteca y lanzadores. Probado en la sesión real.
+
+### Cuarta ronda (2026-09-26)
+- Al salir del modo se CIERRA lo abierto durante él (pidiéndolo; lo que no se
+  deja, como kitty que pregunta, se trae a tu escritorio para que respondas).
+  Lo que ya estaba abierto al entrar vuelve a su sitio. Probado en la sesión real.
+- Barras y fondo vuelven DESPUÉS del vídeo de salida (antes asomaban encima).
+- Fondo negro en el modo: fuera el logo / fondo de fábrica de Hyprland.
+- Ctrl+RePág / Ctrl+AvPág: volumen general (le quita a los navegadores el
+  cambio de pestaña; queda Ctrl+Tab). Comprobado con un teclado virtual.
+- Menú rápido: «ABIERTO» con TODO lo abierto (también lo guardado), el volumen
+  de cada app/juego por su árbol de procesos (así sale Glassy, cuyo audio se
+  llama «Chromium»), Ir y Cerrar; cerrar un juego pregunta (ir a guardar /
+  cerrar ya / cancelar). Quitados los volúmenes por grupo y la lista de
+  escritorios.
+- Biblioteca: los shaders pendientes se leen EN VIVO del shader_log de Steam
+  (config.vdf solo se guarda al cerrar Steam), con el porcentaje del que va.
+- Vídeos del usuario en `hypr/modo-gaming/` (no versionado: son de YouTube, y
+  el final es de Undertale). Idea pendiente, a decidir por el usuario: unos
+  vídeos PROPIOS generados con ffmpeg para que el repo traiga algo de fábrica.
+- Arreglado: Glassy Music no se reconocía como app permitida (clase
+  `nankill.xyz.glassymusic.mod`) y el modo la cerraba al entrar.
+- No se puede: volumen por pestaña del navegador (Chromium saca UN flujo de
+  audio para todo el navegador; eso es de una extensión, no del escritorio).
+
+### Quinta ronda (2026-09-26): el menú rápido, más fino
+- «ABIERTO» enseña SOLO lo abierto dentro del modo (no lo guardado al entrar).
+- «MÚSICA»: una tarjeta por reproductor MPRIS (Brave y Glassy a la vez), cada
+  una con el volumen de SU app, e ir / cerrar. La app de cada reproductor sale
+  del PID dueño de su nombre en D-Bus (`GetConnectionUnixProcessID`), que es el
+  de su ventana; esas apps no se repiten en «abierto».
+- Las tarjetas, al estilo de la maqueta (carátula, «jugando · X min», EN
+  CURSO) con botones redondos y el volumen fino dentro; sin «sin sonido».
+- Probado en anidado con reproductores MPRIS de mentira que suenan silencio
+  con `paplay` (con `pw-cat` el flujo no lleva el PID del proceso; las apps de
+  verdad van por pipewire-pulse y sí).
+
+### Escritorios
+Cada cosa en el suyo, porque es lo que menos gasta: Hyprland no compone ni pide
+fotogramas a lo que no se ve, y un juego solo y a pantalla completa puede ir
+por *direct scanout* (sin componer nada).
+
+### Qué es juego, lanzador o app (`lib/catalogo.py`)
+- **Juego**: Steam con `type = game` en su `appinfo.vdf` (así caen fuera Proton,
+  los runtimes, los redistribuibles y Wallpaper Engine, que es `Application`),
+  y cualquier `.desktop` con `Categories=Game` que no sea lanzador ni
+  herramienta (Soulframe, Hytale, Minecraft Bedrock). Los accesos directos que
+  crea Steam (`steam://rungameid/N`) no se duplican: ya salen por Steam.
+- **Lanzador**: Steam, Heroic, Lutris, Bottles, itch… Salen en el dock **y** en
+  la biblioteca y el menú rápido (para la tienda y las descargas).
+- **App permitida**: el navegador predeterminado (`lib/apps.py`) y las que añada
+  cada usuario, en `~/.config/celiuz/modo-gaming.json` (no se versiona).
+- **El dock no enseña juegos**: `gen-dock.py` los salta al generar.
+
+### La biblioteca (maqueta 1, aprobada tal cual)
+Fondo con la imagen grande del juego seleccionado (el «hero» de Steam, en
+local), su logo, horas jugadas y última vez, carrusel de carátulas, pestañas
+Juegos / Lanzadores / Apps, animación de entrada y otra de salida, y
+navegación con **mando y teclado**. Arranca en el último juego jugado.
+
+### El menú rápido (maqueta 2, con la columna de controles añadida)
+Arriba lo que está pasando (juego en curso, la música por MPRIS con ⏮ ⏯ ⏭);
+en medio los controles (volumen Juego / Música / Chat por PipeWire, silenciar
+el micro, captura); abajo lo que se abre (apps, lanzadores, otro juego). Mando
+y teclado.
+
+### Atajos (tienen que valer en `us` y en `latam`, en la PC y en la laptop)
+| Para | Atajo |
+|---|---|
+| Entrar / salir | `SUPER+G` |
+| Menú rápido | `SUPER` + la tecla de al lado del 1, **por código** (`code:49`), no por símbolo: en `us` es `` ` `` y en `latam` es `\|`/`°` |
+| Menú rápido con mando | Select + Start (el Guide es de Steam) |
+| Overlay | `Delete` (es `DEL` y es `Supr`: el mismo keysym), atrapado por Hyprland y mandado con `mangohudctl` |
+
+### Overlay (MangoHud)
+Una config del repo con la paleta, que el modo pasa a todo lo que lanza (Steam
+arranca con `MANGOHUD=1` y sus juegos lo heredan). Diseño propio, no el de
+Afterburner. Ya existía una config solo para Soulframe
+(`~/Games/soulframe/mangohud.conf`, fuera del repo).
+
+### Shaders de Steam (la ventana «Processing Vulkan shaders»)
+Medido en la PC: la caché va atada a la versión del driver (el cambio del
+24-ago la invalidó entera), Steam procesa con pocos hilos (no hay
+`steam_dev.cfg`; la CPU tiene 12) y los juegos viven en un HDD. Lo acordado:
+procesarlos al entrar al modo, **primero el último juego jugado** (reordenando
+`ProcessingQueue` de `config.vdf` antes de arrancar Steam: está SIN comprobar
+que Steam lo respete), dar más hilos, y avisar en la biblioteca de lo
+pendiente. Steam pausa ese trabajo con un juego abierto.
+
+### Rendimiento: se mide, no se supone
+- `gamemode` aporta poco AQUÍ: la CPU ya está en `performance` (amd-pstate-epp)
+  y ananicy-cpp ya prioriza juegos. No se mete por rendimiento.
+- Candidatos reales, uno por uno y con números: `render:direct_scanout` (0 hoy;
+  en NVIDIA ha dado guerra), `misc:vrr` (0 hoy), tearing en pantalla completa.
+
+### Orden de construcción
+1. **Cimientos — HECHO (2026-09-25)**:
+   - `lib/catalogo.py` (juegos por el tipo de `appinfo.vdf`, lanzadores, apps;
+     imágenes y horas de Steam). En la PC ve 7 juegos y deja fuera Proton,
+     runtimes y Wallpaper Engine. Prueba: `tests/unidad/catalogo.sh`.
+   - El dock salta los juegos sin renumerar los botones (el clic derecho quita
+     la entrada N de `dock-apps.json`). En la PC salieron Minecraft y Soulframe.
+   - `modo-gaming.py` + `modo-gaming-tarjeta.py`, atado a `SUPER+G`. Probado en
+     anidado de punta a punta (cierra lo que toca, kitty no se deja, efectos
+     vuelven como estaban, ganchos on/off). Prueba: `tests/unidad/modo-gaming.sh`.
+   - `gaming-on`/`gaming-off` en `waybar-autohide.py` (estado aparte del
+     bloqueo: desbloquear a mitad de partida no resucita las barras) y en
+     `wallpaper-pause.py`. Pruebas: `barras-gaming.sh`, `fondo-gaming.sh`.
+   - Los dos demonios de la PC se relanzaron con el código nuevo y se probaron
+     en vivo: las barras se van y vuelven, y el fondo se apaga los 12 s del
+     modo y vuelve al salir. Con la pausa en `true` con ventanas abiertas.
+   - **Arreglado de paso un fallo viejo de `wallpaper-pause.py`**: resucitaba
+     mpvpaper en la vuelta siguiente a matarlo por un juego (también con la
+     stoplist), y decidía «hay fondo» por cualquier mpvpaper de cualquier sesión.
+2. **La biblioteca — HECHA (2026-09-26)**: `biblioteca.py`, a pantalla
+   completa en su escritorio, igual que la maqueta aprobada (fondo del juego con
+   fundido, logo, horas, carrusel, pestañas, animación de entrada y de salida),
+   con teclado, mando (`lib/mando.py`, sin dependencias) y ratón. Al lanzar un
+   juego enseña «Lanzando…» y se cierra sola cuando el juego abre ventana; al
+   cerrar el juego el vigilante la vuelve a abrir. Marca con «!» los juegos con
+   shaders pendientes en Steam y los lista arriba a la derecha.
+   Probado en anidado a 1920x1080 con un juego falso: entrar, diálogo de Steam
+   flotando encima, lanzar, volver, salir. La tarjeta ya acepta el mando.
+3. **El menú rápido — HECHO (2026-09-26)**: `menu-rapido.py`, capa encima del
+   juego. SUPER + la tecla de al lado del 1 (`code:49`, vale en us y en latam),
+   Select+Start en el mando (lo vigila el vigilante de `modo-gaming.py`) o X en la
+   biblioteca. Juego en curso, música por MPRIS (⏮ ⏯ ⏭, portada), volumen por
+   grupos juego/música/chat (`lib/sonido.py`), silenciar micro, overlay,
+   captura, tus apps + lanzadores + «Añadir» (fuzzel), otro juego, tus escritorios del
+   modo, salir. Rehecho el 2026-09-26: una columna con scroll, como la maqueta. Mientras está abierto el mando es solo suyo
+   (EVIOCGRAB). Pruebas: `sonido.sh` y lo nuevo de `modo-gaming.sh`.
+4. **Overlay y shaders — HECHO; rendimiento — PENDIENTE (con un juego de verdad)**:
+   - Overlay: `modo-gaming.py` genera `~/.cache/celiuz/mangohud.conf` al entrar
+     (paleta del repo, barra horizontal, escondido hasta Supr, `control=mangohud`
+     para el botón del menú). Visto en anidado sobre `vkcube`. Los juegos de
+     Steam lo llevan porque `preparar-steam` relanza Steam con `MANGOHUD=1` si
+     corría sin él y no hay ningún juego abierto; la biblioteca y el menú
+     lanzan con ese entorno. Solo sale en juegos Vulkan (Proton lo es); un juego
+     nativo OpenGL no lo lleva.
+   - Shaders: `preparar-steam`, con Steam cerrado, añade
+     `unShaderBackgroundProcessingThreads` (núcleos − 2) a `steam_dev.cfg` si
+     no lo había, y pone primero en `ProcessingQueue` el último juego jugado.
+     **Sin comprobar que Steam respete ese orden**, ni cuánto acortan los hilos:
+     hay que medirlo la próxima vez que Steam tenga shaders pendientes.
+     Conviene que el usuario mire en Steam > Ajustes > Descargas que esté
+     puesto el procesado de shaders en segundo plano.
+   - Rendimiento (`direct_scanout`, VRR, tearing): sin tocar. Se mide con un
+     juego de verdad y con el usuario delante, uno por uno.
+   - **Probado en la sesión real de la PC el 2026-09-26**: entrar y salir con
+     los dos vídeos, terminales y Brave ocultos y devueltos a su escritorio,
+     barras/fondo/efectos fuera y de vuelta, Steam relanzado con el overlay,
+     una terminal al escritorio 2 y vuelta al 1 al cerrarla, no poder ir a un
+     escritorio vacío, el menú rápido. Y Supr alterna el overlay en una app
+     Vulkan por XWayland (el camino de Proton). **Queda para el usuario**: la
+     tarjeta con el mando, jugar de verdad con el overlay, `SUPER` + la tecla
+     de al lado del 1 con el teclado real (un teclado virtual no dispara
+     atajos con SUPER), y Select+Start.
 
 ## Queda por probar a mano (de antes)
 

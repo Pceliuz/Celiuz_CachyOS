@@ -44,7 +44,7 @@ barras hasta cerrar sesion.
 Ordenes por el FIFO ($XDG_RUNTIME_DIR/waybar-autohide.<firma>.fifo; la firma es
 la de la sesion de Hyprland, ver lib/canales.py):
     show | hide | toggle | hold | release | reload | lock | unlock
-                                                    -> barra de arriba
+    | gaming-on | gaming-off                        -> barra de arriba
     dock:show | dock:hide | dock:lock | ...         -> dock
 `reload` relanza esa barra para que relea su config: lo usa gen-dock.py cuando
 cambian las apps del dock.
@@ -65,6 +65,12 @@ una barra "escondida" —que sigue existiendo, solo que en la capa de abajo— s
 lee entera por encima del bloqueo, y como el bloqueo salta a un escritorio vacio
 no hay ninguna ventana que la tape. Comprobado en anidado el 2026-07-28: se leia
 la IP, la CPU, la RAM y la hora sobre la pantalla de bloqueo.
+
+`gaming-on` / `gaming-off` las matan y las levantan igual, pero son un estado
+APARTE del bloqueo, y tiene que serlo: el modo gaming (scripts/modo-gaming.py)
+las quita durante horas, y si compartieran el `locked`, bloquear la pantalla a
+mitad de partida y desbloquearla las resucitaria con el modo puesto. Solo se
+levantan cuando no queda ninguno de los dos.
 """
 
 import json
@@ -459,6 +465,7 @@ class Bar:
         self.manual = True    # el usuario la saco con click en la linea
         self.held = False     # algo la esta reteniendo (el panel de calendario)
         self.locked = False   # la pantalla esta bloqueada: oculta pase lo que pase
+        self.gaming = False   # el modo gaming las quito (ver la cabecera)
         self.left_at = time.monotonic()   # cuando salio el puntero de la barra
         self.caidas = []      # momentos en que se la encontro muerta sin querer
         self.rendida = False  # se dejo de reintentar, y ya se aviso
@@ -514,7 +521,17 @@ class Bar:
         elif cmd == "unlock":
             if self.locked:
                 self.locked = False
-                self.relanzar()
+                if not self.gaming:
+                    self.relanzar()
+        elif cmd == "gaming-on":
+            if not self.gaming:
+                self.gaming = True
+                self.kill()
+        elif cmd == "gaming-off":
+            if self.gaming:
+                self.gaming = False
+                if not self.locked:
+                    self.relanzar()
         elif cmd == "reload":
             self.reload()
 
@@ -608,7 +625,7 @@ class Bar:
         self.reload()
 
     def update(self, windows, x, y, capas):
-        if self.locked:
+        if self.locked or self.gaming:
             # Durante el bloqueo las barras estan MUERTAS (ver command("lock")),
             # asi que aqui no hay nada que alternar: mandarles una senal seria
             # escribirle a un proceso que ya no esta.
@@ -673,8 +690,8 @@ class Bar:
         que se relanzan las dos aunque solo se haya caido una: dejar viva la que
         quedaba las descuadraria, y `visible_real()` exige las dos superficies.
         """
-        if self.locked:
-            # Con la pantalla bloqueada las matamos NOSOTROS a proposito (ver
+        if self.locked or self.gaming:
+            # Con la pantalla bloqueada (o en modo gaming) las matamos NOSOTROS a proposito (ver
             # command("lock")): verlas muertas es lo normal, y relanzarlas aqui
             # las pondria por encima del bloqueo, que es justo lo que se
             # buscaba evitar.

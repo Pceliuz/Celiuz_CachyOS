@@ -14,7 +14,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (30 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (35 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -26,7 +26,7 @@ lo que vayas a escribir tú.
 | GPU | **NVIDIA RTX 3050 6 GB** (GA107) | — |
 | Pantalla | HDMI-A-1, 1920x1080 **@100 Hz**, escala 1 | + televisor a la derecha, escala 1.5 |
 | Teclado | `us,latam`, perfil «sin-altgr» (Ctrl derecho hace de AltGr) | el suyo |
-| Atajos | **58** (57 del repo + `SUPER+A` suyo, de `personal.lua`) | 62 |
+| Atajos | **62** (61 del repo + `SUPER+A` suyo, de `personal.lua`) | 66 |
 
 ## El estado, en cuatro frases
 
@@ -46,12 +46,21 @@ lo que vayas a escribir tú.
    tema de SDDM puesto, y el menú / portapapeles / OSD probados en vivo. **No
    hay que repetir esa comprobación.**
 
-## Lo siguiente: el MODO GAMING
+## Lo siguiente: el MODO GAMING (en construcción)
 
-Es lo que el usuario quiere construir ahora. **Está sin diseñar: pregúntale qué
-debe hacer antes de escribir nada.** Lo que sí puedes traerle hecho es el
-inventario de lo que ya existe, porque media pieza está puesta y sería absurdo
-duplicarla:
+**El diseño está cerrado con el usuario** y escrito en `SIGUIENTE.md` («Modo
+gaming: el diseño»): léelo entero antes de tocar nada, que cada punto salió de
+una conversación. Hecho (2026-09-25/26), todo probado en anidado y con
+pruebas: `lib/catalogo.py`, el dock sin juegos, `modo-gaming.py` + tarjeta
+(`SUPER+G`) + vigilante de escritorios, `biblioteca.py`, `menu-rapido.py`
+(`SUPER+code:49`, Select+Start), el overlay de MangoHud y la cola de shaders.
+Falta medir el rendimiento con un juego de verdad y **probarlo todo en la
+sesión real**, que aún no se ha hecho: la lista está en `SIGUIENTE.md`.
+
+**El repo es público: aquí no se nombra al asistente del usuario.** Él llama a
+`modo-gaming.py` y engancha lo suyo en `~/.config/celiuz/modo-gaming.d/`.
+
+Lo que ya existía y en lo que se apoya (no dupliques):
 
 - **`hypr/scripts/lib/juegos.py` ya sabe decir si algo es un juego**, por cuatro
   capas —Steam, ananicy, flatpak de juego, pantalla completa— más las
@@ -117,6 +126,11 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadió el usuario |
 | `~/.cache/celiuzpaper/lock-*.conf` | fondo y medidas del bloqueo, rehechos en cada bloqueo |
 | `~/.local/state/celiuz/bluetooth.json` | cuándo se usó cada auricular y a cuáles bloqueó el cerrojo de `bluetooth.py` |
+| `~/.config/celiuz/modo-gaming.json` | apps permitidas jugando, juegos a ocultar, `cerrar_terminales` |
+| `~/.config/celiuz/modo-gaming.d/` | ganchos de cada equipo al entrar y salir del modo gaming |
+| `~/.cache/celiuz/mangohud.conf` | el overlay, rehecho con la paleta en cada entrada al modo |
+| `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
+| `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
 
 **No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio
 fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: con
@@ -984,6 +998,72 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   quién estás llamando rival**. Un proceso vivo con su propio dueño detrás no lo
   es, por mucho que comparta nombre y carpeta.
 
+- **Una ventana nueva le quita la pantalla completa a la que la tenga**, con
+  el valor de fábrica de `misc:on_focus_under_fullscreen` (2): medido en
+  anidado, la biblioteca a pantalla completa y un diálogo nuevo acababan
+  repartiéndose la pantalla a medias. Con 0 la de pantalla completa se queda,
+  y lo nuevo abre DETRÁS; para que se vea encima hay que ponerlo flotando y
+  darle el foco (`float` + `center` + `focus`, medido: el centro de la pantalla
+  pasó a ser el diálogo). Es lo que hace el modo gaming con las ventanas de
+  Steam que salen en la biblioteca.
+- **Un atajo por código de tecla (`code:49`) en Lua SÍ funciona, aunque
+  `hyprctl binds` lo enseñe con `key: ''` y `keycode: 0`.** Medido: `code:96`
+  (F12) disparó al pulsar F12. Es la forma de atar una tecla que cambia de
+  símbolo con la distribución (la de al lado del 1 es `` ` `` en us y `|` en
+  latam).
+- **`hl.dsp.send_shortcut` entrega la tecla a una ventana y NO pasa por los
+  atajos**: sirve para manejar una app en el anidado (así se probaron la
+  biblioteca y el menú), no para comprobar si un atajo se dispara.
+- **Un teclado virtual por uinput no consigue disparar atajos con SUPER**, ni
+  los de la config, aunque las teclas sueltas (volumen, F12) sí. No se sabe por
+  qué; lo que sí se sabe es que no dice nada de si el atajo está bien. Y ojo:
+  uinput es de TODO el sistema, así que lo que teclee llega a la sesión real,
+  no al anidado.
+- **«Ya hay una ventana» no sirve de cerrojo de instancia única.** Al terminar
+  el vídeo de entrada del modo gaming, `modo-gaming.py` y su vigilante (que veía
+  el escritorio 1 vacío) abrieron la biblioteca a la vez: las dos preguntaron
+  antes de que la otra tuviera ventana, y salieron dos. Un `flock` sobre un
+  fichero con la firma de la sesión es lo que vale.
+- **`juegos.py` cuenta al cliente de Steam como juego** («capa 1: Steam»), y
+  está bien para lo suyo (no congelarlo al bloquear), pero no para preguntar
+  «¿hay una partida abierta?»: con Steam abierto siempre la había, y el modo
+  gaming nunca relanzaba Steam con el overlay (Supr no enseñaba nada en
+  Aniimo). Para eso se miran las VENTANAS de juego.
+- **En el anidado, `systemd-run --user` no encuentra el gestor de systemd**
+  (lo busca en el `$XDG_RUNTIME_DIR` del anidado). Darle el runtime real vale
+  para él, pero la app heredaría ese runtime y resolvería `wayland-1` contra la
+  sesión real: hay que devolverle el runtime del anidado y el socket de Wayland
+  por ruta ABSOLUTA.
+- **mpv tarda 3-8 s en abrir su ventana con la salida por GPU en la NVIDIA de
+  la PC** (inicializarla es lo lento; medido el 2026-09-26), y 0,14 s con
+  `--vo=wlshm`. Y `--no-border` ROMPE `wlshm` en mpv 0.41 («Input image format
+  unknown», «Size was <= 0»: no sale nada). Los vídeos del modo gaming van con
+  wlshm y sin esa opción.
+- **Una ventana que pide pantalla completa se la quita a la que la tenía**,
+  aunque se abra detrás (`on_focus_under_fullscreen = 0` no lo impide: eso es
+  para el foco). La biblioteca, abierta detrás del vídeo de entrada, lo tapaba;
+  y **mpv sin poder dibujarse se congela** (sin fotogramas no avanza), así que
+  el vídeo no acababa nunca y quedaba una ventana zombi. La biblioteca ya solo
+  pide la pantalla completa cuando se ve de verdad (al recibir el foco).
+- **El audio de una app lo abre un proceso HIJO del de su ventana** (medido con
+  Brave y Glassy Music, Electron/Chromium), y su nombre en PipeWire no tiene
+  por qué parecerse a la app (el de Glassy se llama «Chromium»). Para saber qué
+  suena de qué ventana, el árbol de procesos, no el nombre.
+- **El `hyprctl` falso de una prueba no quita las ventanas que «cierra»**: una
+  comprobación que mira lo que pasa DESPUÉS del cierre (que se oculte, que se
+  mueva) pasa aunque se haya cerrado. Hay que mirar el cierre en sí.
+- **Una salida del anidado a una resolución forzada se deshace** cuando la
+  ventana del anidado se reajusta en la sesión real, y sin frecuencia
+  (`1920x1080` a secas) a veces ni se aplica: `1920x1080@60`, y justo antes de
+  capturar.
+- **kitty no se cierra al pedírselo si tiene algo corriendo: pregunta.** Es
+  lo que se quiere (el modo gaming cierra pidiendo, no matando), pero en una
+  prueba parece que el cierre «no funciona».
+- **`pgrep -f 'texto'` en una sonda casa con el propio shell que la lanzó** si
+  su línea de órdenes contiene ese texto (pasó el 2026-09-26 con un
+  `kill $(pgrep -f 'ventana.py juego')`: se mató la herramienta). El PID de
+  una ventana se saca de `hyprctl clients -j`.
+
 ## Las pruebas
 
 ```sh
@@ -1024,6 +1104,15 @@ consiguió el nombre (en el bus real ya lo tiene el servicio y no podría).
 **El falso tiene que reproducir el ORDEN de las señales del real**, no solo los
 métodos: el primer falso de BlueZ desconectaba antes de marcar `Blocked` —el real
 lo hace al revés— y con eso una guardia del demonio pasaba sin haberse ejercido.
+
+**Y `DISPLAY` fuera también** (`preparar_entorno` la quita desde el
+2026-09-26). Quitar solo `WAYLAND_DISPLAY` no aísla un programa GTK: cae a X11
+y se dibuja por XWayland EN LA SESIÓN REAL. Así abrió la prueba del modo gaming
+tres bibliotecas en el escritorio del autor mientras trabajaba, y la tarjeta de
+confirmación «fallaba» en verde porque en realidad se estaba enseñando. Lo
+destapado de paso: `gen-dock.py` reventaba sin pantalla (instalar.sh desde un
+TTY) y las pruebas pasaban solo porque se colaban en ese XWayland. Las pantallas
+del modo gaming, además, se niegan a arrancar sin Wayland (`solo_wayland()`).
 
 Dos trampas de las pruebas que mordieron escribiendo esa:
 
