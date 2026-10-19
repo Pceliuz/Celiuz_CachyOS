@@ -15,6 +15,7 @@ modo-gaming.py) o con X desde la biblioteca. Volver a pulsarlo lo cierra.
 
 Teclado, mando y ratón: flechas / cruceta para moverse, Enter / A para usar;
 sobre una barra de volumen, izquierda y derecha la mueven; Esc / B cierra.
+Sobre una de tus apps, Supr / Y (o su X) la quita del modo.
 
 Mientras está abierto el mando es SOLO suyo (lib/mando.py, exclusivo): si no,
 cada A del menú sería también una A en la partida de detrás.
@@ -350,8 +351,8 @@ class Menu(Gtk.Window):
         cx, cy = x0 + w0 / 2, y0 + h0 / 2
         mejor, puntos = None, None
         for i, o in enumerate(self.elementos):
-            if i == self.foco:
-                continue
+            if i == self.foco or o["tipo"] == "quitar":
+                continue                # la X es del raton; con teclas, Supr / Y
             x, y, w, h = o["rect"]
             ax, ay = x + w / 2 - cx, y + h / 2 - cy
             if (dx and ax * dx <= 4) or (dy and ay * dy <= 4):
@@ -401,6 +402,8 @@ class Menu(Gtk.Window):
             self.mover(0, 1)
         elif k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
             self.usar()
+        elif k in (Gdk.KEY_Delete, Gdk.KEY_KP_Delete, Gdk.KEY_BackSpace):
+            self.quitar_enfocada()
         elif k == Gdk.KEY_grave or ev.hardware_keycode == 49:
             self.cerrar()             # la misma tecla que lo abrio lo cierra
         return True
@@ -414,7 +417,7 @@ class Menu(Gtk.Window):
             return
         {"izquierda": lambda: self.mover(-1, 0), "derecha": lambda: self.mover(1, 0),
          "arriba": lambda: self.mover(0, -1), "abajo": lambda: self.mover(0, 1),
-         "aceptar": self.usar, "atras": self.cerrar, "start": self.cerrar,
+         "aceptar": self.usar, "atras": self.cerrar, "y": self.quitar_enfocada, "start": self.cerrar,
          "select": self.cerrar}.get(accion, lambda: None)()
 
     def clic(self, _w, ev):
@@ -648,7 +651,16 @@ class Menu(Gtk.Window):
             rect = (cx, cy, lado, lado)
             if i < len(cosas):
                 item = cosas[i]
-                activo = self.elemento("abrir:" + item["id"], rect, lambda c=item["cmd"]: self.lanzar(c))
+                quitable = item["tipo"] == catalogo.APP
+                if quitable:
+                    # La X va registrada ANTES que la tarjeta: el clic se lo
+                    # lleva el primero que lo contenga.
+                    rx = 26 * f
+                    x_rect = (cx + lado - rx - 7 * f, cy + 7 * f, rx, rx)
+                    self.elemento("quitar:" + item["id"], x_rect, lambda c=item["cmd"]: self.quitar_app(c),
+                                  tipo="quitar")
+                activo = self.elemento("abrir:" + item["id"], rect, lambda c=item["cmd"]: self.lanzar(c),
+                                       quitar=item["cmd"] if quitable else None)
                 self.tarjeta(cr, *rect, f, .55)
                 self.marco_foco(cr, *rect, 18 * f, f, activo)
                 pix = self.imgs.icono(item.get("icono"), 52 * f)
@@ -657,6 +669,8 @@ class Menu(Gtk.Window):
                     cr.paint()
                 dibujo.texto(cr, item["nombre"], cx + lado / 2, cy + lado * .70, 12 * f, C["luz"],
                              centro=True, ancho=lado - 12 * f, una_linea=True)
+                if quitable:
+                    self.dibujar_x(cr, x_rect, f, activo)
             else:
                 activo = self.elemento("anadir", rect, lambda: self.orden("anadir-app"))
                 dibujo.redondo(cr, *rect, 18 * f)
@@ -717,6 +731,40 @@ class Menu(Gtk.Window):
         dibujo.texto(cr, "Salir del modo gaming", x + ancho / 2, y + 18 * f, 15 * f, ROSA,
                      Pango.Weight.BOLD, centro=True)
         return y + 58 * f
+
+    def dibujar_x(self, cr, rect, f, activo):
+        """La X de quitar una app, como la de una pestaña: discreta, y en rosa
+        cuando la tarjeta tiene el foco (Supr / Y la usan entonces)."""
+        import cairo
+        x, y, w, h = rect
+        cr.arc(x + w / 2, y + h / 2, w / 2, 0, 2 * math.pi)
+        cr.set_source_rgba(*(ROSA if activo else C["apagado"]), .28 if activo else .75)
+        cr.fill()
+        d = w * .22
+        cr.set_source_rgba(*(ROSA if activo else C["tenue"]), 1 if activo else .8)
+        cr.set_line_width(2 * f)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        for sx in (1, -1):
+            cr.move_to(x + w / 2 - d * sx, y + h / 2 - d)
+            cr.line_to(x + w / 2 + d * sx, y + h / 2 + d)
+        cr.stroke()
+
+    def quitar_app(self, cmd):
+        """Saca la app del modo gaming (y de la cuadricula, sin recargar el
+        catalogo, que lee Steam entero). El foco pasa a la siguiente."""
+        if not catalogo.quitar_app(cmd):
+            return
+        antes = self.cat["apps"] + self.cat["lanzadores"]
+        pos = next((i for i, a in enumerate(antes) if a["cmd"] == cmd), 0)
+        self.cat["apps"] = [a for a in self.cat["apps"] if a["cmd"] != cmd]
+        quedan = self.cat["apps"] + self.cat["lanzadores"]
+        self.foco_id = "abrir:" + quedan[min(pos, len(quedan) - 1)]["id"] if quedan else "anadir"
+        self.area.queue_draw()
+
+    def quitar_enfocada(self):
+        e = self.actual()
+        if e and e.get("quitar"):
+            self.quitar_app(e["quitar"])
 
     def boton_redondo(self, cr, ident, cx, cy, r, glifo, f, accion, color=None, fondo=None):
         rect = (cx - r, cy - r, 2 * r, 2 * r)

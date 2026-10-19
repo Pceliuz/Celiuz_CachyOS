@@ -468,7 +468,7 @@ def apps_permitidas(ajustes_=None):
     nav = apps.navegador()
     candidatas = ([dict(nav, navegador=True)] if nav else []) + ajustes_["apps"]
     for a in candidatas:
-        if a["cmd"] in vistas:
+        if a["cmd"] in vistas or "app:" + a["cmd"] in ajustes_["ocultar"]:
             continue
         vistas.add(a["cmd"])
         salida.append({
@@ -480,6 +480,42 @@ def apps_permitidas(ajustes_=None):
             "navegador": bool(a.get("navegador")),
         })
     return salida
+
+
+def guardar_ajustes(datos):
+    """Reescribe ~/.config/celiuz/modo-gaming.json entero, de una vez."""
+    ruta = config_usuario()
+    os.makedirs(os.path.dirname(ruta), exist_ok=True)
+    with open(ruta + ".nuevo", "w", encoding="utf-8") as fh:
+        json.dump(datos, fh, ensure_ascii=False, indent=4)
+        fh.write("\n")
+    os.replace(ruta + ".nuevo", ruta)
+
+
+def anadir_app(app):
+    """Guarda {label, cmd, icon_name} entre las permitidas (y la saca de
+    `ocultar`, por si era el navegador, que se oculta en vez de borrarse)."""
+    datos = _leer_json(config_usuario())
+    datos["ocultar"] = [x for x in datos.get("ocultar", []) if x != "app:" + app["cmd"]]
+    if not datos["ocultar"]:
+        del datos["ocultar"]
+    if not any(isinstance(a, dict) and a.get("cmd") == app["cmd"] for a in datos.get("apps", [])):
+        datos.setdefault("apps", []).append(app)
+    guardar_ajustes(datos)
+
+
+def quitar_app(cmd):
+    """Saca una app del modo gaming. Las que anadio el usuario se borran de
+    la lista; el navegador no esta en ella (entra solo, apps.navegador()), asi
+    que ese se apunta en `ocultar`. Devuelve False si no habia tal app."""
+    if not any(a["cmd"] == cmd for a in apps_permitidas()):
+        return False
+    datos = _leer_json(config_usuario())
+    datos["apps"] = [a for a in datos.get("apps", []) if not (isinstance(a, dict) and a.get("cmd") == cmd)]
+    if any(a["cmd"] == cmd for a in apps_permitidas(dict(ajustes(), apps=datos["apps"]))):
+        datos["ocultar"] = sorted(set(map(str, datos.get("ocultar", []))) | {"app:" + cmd})
+    guardar_ajustes(datos)
+    return True
 
 
 def apuntar_lanzado(ident):

@@ -10,6 +10,7 @@ Uso:
     modo-gaming.py estado [--json]    sale con 0 si esta puesto y 1 si no
     modo-gaming.py ir N               ir al escritorio N del modo (si tiene algo)
     modo-gaming.py anadir-app         elegir con fuzzel una app permitida
+    modo-gaming.py quitar-app [CMD]   quitarla (sin CMD, lista las que hay)
 
 QUE HACE AL ENTRAR
 ------------------
@@ -716,23 +717,35 @@ def anadir_app():
     if not candidatas:
         return 1
     try:
-        r = subprocess.run(["fuzzel", "--dmenu", "--index", "--prompt", "Añadir al modo gaming: "],
-                           input="\n".join(c["label"] for c in candidatas), capture_output=True,
-                           text=True, timeout=300)
+        # Cada linea lleva su icono con la extension de rofi que entiende
+        # fuzzel (`nombre\0icon\x1ficono`), con uno generico detras por si
+        # el de la app no esta en el tema.
+        lineas = ["%s\0icon\x1f%s" % (" ".join(c["label"].split()),
+                                     ",".join(filter(None, (c["icon_name"], "application-x-executable"))))
+                  for c in candidatas]
+        r = subprocess.run(["fuzzel", "--dmenu", "--index", "--prompt", "󰊴  Añadir al modo gaming  ",
+                            "--placeholder", "Busca una app…"],
+                           input="\n".join(lineas), capture_output=True, text=True, timeout=300)
         indice = int(r.stdout.strip())
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return 1                        # cancelado
     if not 0 <= indice < len(candidatas):
         return 1
-    ruta = catalogo.config_usuario()
-    datos = catalogo._leer_json(ruta)
-    datos.setdefault("apps", []).append(candidatas[indice])
-    os.makedirs(os.path.dirname(ruta), exist_ok=True)
-    with open(ruta + ".nuevo", "w", encoding="utf-8") as fh:
-        json.dump(datos, fh, ensure_ascii=False, indent=4)
-        fh.write("\n")
-    os.replace(ruta + ".nuevo", ruta)
+    catalogo.anadir_app(candidatas[indice])
     print("modo gaming: añadida «%s»" % candidatas[indice]["label"])
+    return 0
+
+
+def quitar_app_cli(cmd):
+    """`quitar-app <cmd>`: la X de las apps del menu rapido, desde fuera."""
+    if not cmd:
+        for a in catalogo.apps_permitidas():
+            print("%s\t%s" % (a["cmd"], a["nombre"]))
+        return 2
+    if not catalogo.quitar_app(cmd):
+        print("modo gaming: no hay ninguna app permitida con la orden «%s»" % cmd, file=sys.stderr)
+        return 1
+    print("modo gaming: quitada «%s»" % cmd)
     return 0
 
 
@@ -1394,6 +1407,8 @@ def main(argv):
         return ir_cli(argv[1] if len(argv) > 1 else "")
     if orden == "anadir-app":
         return anadir_app()
+    if orden == "quitar-app":
+        return quitar_app_cli(" ".join(argv[1:]))
     if orden == "preparar-steam":
         return preparar_steam()
     print(__doc__.split("QUE HACE")[0].strip(), file=sys.stderr)

@@ -14,6 +14,9 @@
 #  - Los accesos directos que crea Steam no duplican el juego; un flatpak con
 #    Categories=Game sí es juego; las herramientas que se apuntan a Game no.
 #  - El navegador sale del predeterminado de la máquina, no de uno cableado.
+#  - La X del menú rápido (`modo-gaming.py quitar-app`): la app del usuario se
+#    borra de la lista y el navegador, que entra solo, se apunta en `ocultar`;
+#    volver a añadirlo lo destapa. Y lo demás del fichero no se toca.
 #  - El dock salta los juegos SIN renumerar los botones: el clic derecho sobre
 #    el botón N quita la entrada N de dock-apps.json.
 #
@@ -211,6 +214,28 @@ afirmar_igual "Heroic|Steam" "$(campo x '"|".join(j["nombre"] for j in d["lanzad
     "lanzadores: Heroic y Steam"
 afirmar_igual "NavegadorX|Mi música" "$(campo x '"|".join(j["nombre"] for j in d["apps"])')" \
     "apps: el navegador predeterminado y la del usuario"
+
+# --- Quitar y volver a añadir (la X del menú rápido) ------------------------------------
+titulo "Quitar apps del modo gaming"
+MODO="$REPO/hypr/scripts/modo-gaming.py"
+CONF="$XDG_CONFIG_HOME/celiuz/modo-gaming.json"
+cp "$CONF" "$TMP/conf-antes.json"
+apps_() { python3 "$CAT" --json | python3 -c 'import json,sys; print("|".join(a["nombre"] for a in json.load(sys.stdin)["apps"]))'; }
+"$MODO" quitar-app mi-musica >/dev/null 2>"$TMP/err"; codigo=$?
+afirmar "quitar la del usuario sale con 0" test "$codigo" -eq 0
+afirmar_igual "NavegadorX" "$(apps_)" "se va la del usuario"
+"$MODO" quitar-app navegadorx >/dev/null 2>"$TMP/err"; codigo=$?
+afirmar "quitar el navegador sale con 0" test "$codigo" -eq 0
+afirmar_igual "" "$(apps_)" "y se va el navegador"
+afirmar_contiene "$CONF" '"app:navegadorx"' "el navegador queda en ocultar"
+afirmar_contiene "$CONF" '"steam:550"' "lo que ya estaba oculto sigue"
+"$MODO" quitar-app no-existe >/dev/null 2>&1; codigo=$?
+afirmar "quitar lo que no hay sale con 1" test "$codigo" -eq 1
+python3 -c "import sys; sys.path.insert(0, '$REPO/hypr/scripts/lib'); import catalogo
+catalogo.anadir_app({'label': 'NavegadorX', 'cmd': 'navegadorx', 'icon_name': ''})"
+afirmar_igual "NavegadorX" "$(apps_)" "volver a añadir el navegador lo destapa"
+afirmar_no_contiene "$CONF" '"app:navegadorx"' "y lo saca de ocultar"
+cp "$TMP/conf-antes.json" "$CONF"
 
 # --- Sin poder leer appinfo.vdf ------------------------------------------------------
 titulo "Si Steam cambia el formato de appinfo.vdf"
