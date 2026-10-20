@@ -51,8 +51,9 @@ USO
     monitores.py --ver      ensayo en seco: la tabla de lo que haria
     monitores.py --demonio  ademas se queda escuchando y reacciona al enchufar
 
-El modo --demonio es el que va en conf/autostart.conf. Enchufar una pantalla
-dispara `monitoradded`, y el modo nuevo se le pone sola.
+El modo --demonio es el que va en lua/autostart.lua. Enchufar una pantalla
+dispara `monitoradded`, y el modo nuevo se le pone sola; recargar la config
+dispara `configreloaded`, que devolveria la pantalla a `preferred`, y lo mismo.
 """
 
 import json
@@ -101,6 +102,10 @@ MISMO_REFRESCO = 0.5
 # (monitoradded, monitoraddedv2, y los de workspaces que la siguen). Se espera a
 # que amaine antes de mirar, o se aplicaria el modo tres veces.
 REPOSO = 0.5
+
+# Los eventos tras los que hay que volver a mirar (ver demonio()).
+EVENTOS = (b"monitoradded", b"monitoraddedv2", b"monitorremoved",
+           b"configreloaded")
 
 
 def _socket_control():
@@ -308,12 +313,18 @@ def ver(raiz=RAIZ):
 
 
 def demonio(raiz=RAIZ):
-    """Aplica al arrancar y cada vez que aparece o desaparece una pantalla.
+    """Aplica al arrancar, al aparecer o desaparecer una pantalla y al recargar.
 
     Se escucha el socket de eventos en vez de sondear, igual que hace
     wallpaper-pause.py. Los eventos que importan son `monitoradded`,
-    `monitoraddedv2` y `monitorremoved`; el resto del trafico (workspaces,
-    ventanas) se ignora sin leerlo dos veces.
+    `monitoraddedv2`, `monitorremoved` y `configreloaded`; el resto del trafico
+    (workspaces, ventanas) se ignora sin leerlo dos veces.
+
+    `configreloaded` porque una recarga vuelve a aplicar `preferred` —el modo
+    del EDID— y le quita a la pantalla el refresco que se le habia subido. Sin
+    escucharlo, la PC se quedaba a 60 Hz tras cada `hyprctl reload` hasta el
+    siguiente enchufe (2026-10-20, al recargar `instalar.sh` la sesion). Volver
+    a aplicar no hace bucle: si no hay nada que mejorar no manda ni una orden.
     """
     aplicar(raiz)
     ruta = os.path.join(os.path.dirname(_socket_control()), ".socket2.sock")
@@ -336,8 +347,7 @@ def demonio(raiz=RAIZ):
                 lineas, _, buffer = buffer.rpartition(b"\n")
                 if not lineas:
                     continue
-                if any(l.split(b">>")[0] in (b"monitoradded", b"monitoraddedv2",
-                                             b"monitorremoved")
+                if any(l.split(b">>")[0] in EVENTOS
                        for l in lineas.split(b"\n")):
                     # Que amaine la rafaga de eventos antes de preguntar: si se
                     # mira en el primero, la pantalla nueva aun no tiene ni

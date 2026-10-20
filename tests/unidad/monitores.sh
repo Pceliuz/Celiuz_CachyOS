@@ -309,6 +309,44 @@ afirmar_igual "0" "$(valor sin_sesion)" \
         "sin sesion de Hyprland no se inventa ninguna pantalla"
 
 
+titulo "5b. El demonio vuelve a mirar tras recargar la config"
+
+# Una recarga reaplica `preferred` y devolvia la PC a 60 Hz hasta el siguiente
+# enchufe (2026-10-20). Se le da al demonio un socket de eventos de mentira que
+# manda `configreloaded`, y se cuenta cuantas veces llama a aplicar(): una al
+# arrancar y otra tras el evento. Un evento cualquiera (de ventanas) no cuenta.
+DEMO="$TMP/demonio-ev"
+mkdir -p "$DEMO"
+cuenta="$(python3 - "$SCRIPT" "$DEMO" 2>"$TMP/demonio.err" <<'PYEOF'
+import importlib.util, os, socket, sys, threading, time
+ruta, carpeta = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("monitores", ruta)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+llamadas = []
+mod.aplicar = lambda raiz=None, seco=False: llamadas.append(1)
+mod._socket_control = lambda: os.path.join(carpeta, ".socket.sock")
+mod.REPOSO = 0.05
+
+servidor = socket.socket(socket.AF_UNIX)
+servidor.bind(os.path.join(carpeta, ".socket2.sock"))
+servidor.listen(1)
+threading.Thread(target=mod.demonio, daemon=True).start()
+conexion, _ = servidor.accept()
+conexion.sendall(b"activewindow>>kitty,algo\n")
+time.sleep(0.3)
+antes = len(llamadas)
+conexion.sendall(b"configreloaded>>\n")
+time.sleep(0.3)
+print(antes, len(llamadas))
+PYEOF
+)"
+afirmar "el demonio de mentira no escribe nada en stderr" test ! -s "$TMP/demonio.err"
+afirmar_igual "1 2" "$cuenta" \
+        "aplica al arrancar, ignora una ventana, y vuelve a aplicar tras «configreloaded»"
+
+
 titulo "6. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
