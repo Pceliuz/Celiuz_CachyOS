@@ -603,6 +603,17 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   waybar viva. Lo bueno es relanzar (`Bar.supervisar()`), con freno: 5 intentos
   en 60 s y luego rendirse **avisando**, que si no es un bucle de procesos a 10
   Hz. Lo vigila `tests/unidad/barras-supervisor.sh`.
+- **Una waybar hija del demonio que él ya no lleva apuntada deja la barra
+  puesta para siempre** (2026-10-20, en la PC). Una barra de arriba de las
+  05:13 seguía viva sin que `self.proc` la nombrara: en `top`, sin recibir un
+  toggle, o sea «la barra ya no se oculta al abrir una app». Y atascaba al
+  realineo: sus superficies y las de la nueva quedaban en niveles distintos,
+  `realinear()` relanzaba cada 5 s y solo mataba la apuntada. No moría por
+  señal ignorada (cae con SIGTERM normal): el demonio nunca se la mandó, y no
+  se averiguó qué camino la soltó. `relanzar()` barre ahora por PPID y ruta de
+  config (`hijos_con_config`) a cualquier otra con la misma config. Se ve con
+  `pgrep -af 'waybar -c'`: más de una por config es esto. Lo vigila
+  `tests/unidad/barras-supervisor.sh`.
 - **`waybar-autohide.py --reiniciar` NO es un comando que termina: SE CONVIERTE
   en el demonio.** Mata al que hubiera (`matar_otros()`) y sigue con el bucle
   principal en primer plano, o sea que está pensado para un `exec` de un bind y

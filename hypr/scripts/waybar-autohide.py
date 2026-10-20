@@ -426,6 +426,56 @@ def launch(config):
     )
 
 
+def hijos_con_config(config):
+    """PIDs de los hijos de ESTE demonio que corren waybar con esa config.
+
+    Por PPID y por la ruta de la config en su linea de ordenes, nunca por
+    nombre: un `waybar` de otra sesion (o el de la sesion de quien corre las
+    pruebas) no es hijo nuestro y no sale aqui.
+    """
+    ruta = os.path.join(WAYBAR_DIR, config).encode()
+    yo = os.getpid()
+    pids = []
+    for entrada in os.listdir("/proc"):
+        if not entrada.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entrada}/stat", "rb") as f:
+                # El nombre va entre parentesis y puede llevar espacios: se
+                # parte por el ULTIMO ")" y el PPID es el segundo campo despues.
+                ppid = int(f.read().rsplit(b")", 1)[1].split()[1])
+            if ppid != yo:
+                continue
+            with open(f"/proc/{entrada}/cmdline", "rb") as f:
+                argv = f.read().split(b"\0")
+        except (OSError, ValueError, IndexError):
+            continue        # se fue entre el listado y la lectura
+        if ruta in argv:
+            pids.append(int(entrada))
+    return pids
+
+
+def terminar_pid(pid, espera=2.0):
+    """SIGTERM, y SIGKILL si no se ha ido a tiempo. Lo recoge para no dejar zombi."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return
+    limite = time.monotonic() + espera
+    while time.monotonic() < limite:
+        try:
+            if os.waitpid(pid, os.WNOHANG)[0]:
+                return
+        except ChildProcessError:
+            return
+        time.sleep(0.05)
+    try:
+        os.kill(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+    except (OSError, ChildProcessError):
+        pass
+
+
 def avisar(cuerpo):
     """Notificacion de que algo va mal con las barras.
 
@@ -555,8 +605,27 @@ class Bar:
         for proc in (self.proc, self.trigger):
             try:
                 proc.wait(timeout=2)
-            except (OSError, subprocess.TimeoutExpired):
+            except subprocess.TimeoutExpired:
+                proc.kill()             # no se fue con SIGTERM: que no se quede
+                try:
+                    proc.wait(timeout=2)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            except OSError:
                 pass
+        # Y cualquier OTRA waybar nuestra con esta misma config, fuera. Es la
+        # que el demonio ya no lleva apuntada (2026-10-20, en la PC): una barra
+        # de arriba de las 05:13 seguia viva sin que self.proc la nombrara,
+        # puesta en `top` y sin recibir un solo toggle —o sea, la barra que «ya
+        # no se oculta al abrir una app»—. Y encima atasca: sus superficies y
+        # las de la nueva quedan en niveles distintos, desalineada() lo ve,
+        # realinear() relanza cada 5 s... y como solo mataba la apuntada, la
+        # huerfana seguia ahi para siempre. Aqui, que es por donde pasan todos
+        # los relanzamientos, se barre por PPID y config. No se sabe aun que
+        # camino la solto; con esto, el primer realineo la recoge sea cual sea.
+        for config in (self.config, self.trigger_config):
+            for pid in hijos_con_config(config):
+                terminar_pid(pid)
         self.proc = launch(self.config)
         self.trigger = launch(self.trigger_config)
         # Margen de cortesia para que se vea el cambio antes de que se esconda

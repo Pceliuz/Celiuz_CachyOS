@@ -119,7 +119,62 @@ afirmar "avisa por notificacion de que se rinde" test "$(veces_llamado notify-se
 matar_demonio
 
 
-titulo "3. No toco nada de tu equipo"
+titulo "3. Relanzar se lleva tambien la barra que el demonio ya no lleva apuntada"
+
+# El fallo del 2026-10-20 en la PC: una waybar de arriba hija del demonio pero
+# sin que self.proc la nombrara. Se quedaba en `top` sin recibir toggles (la
+# barra ya no se ocultaba al abrir una app) y el realineo cada 5 s solo mataba
+# la apuntada. Aqui se fabrica la huerfana a mano —un hijo con la misma config
+# del que el demonio no guarda el Popen— y se pide un relanzar.
+# Conserva sus argumentos en /proc/<pid>/cmdline, como el waybar de verdad: un
+# `exec sleep` los perderia, y el barrido busca justo la ruta de la config.
+cat > "$FALSOS/waybar" <<'EOF'
+#!/usr/bin/env bash
+exec python3 -c 'import time; time.sleep(600)' "$@"
+EOF
+chmod +x "$FALSOS/waybar"
+
+salida="$(python3 - "$DEMONIO" 2>&1 <<'PY'
+import importlib.util, os, sys, time
+spec = importlib.util.spec_from_file_location("autohide", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+bar = mod.Bar("config.jsonc", "trigger.jsonc", lambda x, y: False,
+              "waybar-main", "waybar-trigger")
+huerfana = mod.launch("config.jsonc")
+otra = mod.launch("dock.jsonc")                 # de otra barra: no se toca
+lanzados = [bar.proc, bar.trigger, huerfana, otra]
+try:
+    pid = huerfana.pid
+    del huerfana                                # nadie guarda su Popen
+    time.sleep(0.3)
+    print("antes", sorted(mod.hijos_con_config("config.jsonc")) ==
+          sorted([pid, bar.proc.pid]))
+    bar.kill()
+    bar.relanzar()
+    lanzados += [bar.proc, bar.trigger]
+    print("huerfana", os.path.exists(f"/proc/{pid}"))
+    print("nueva", mod.hijos_con_config("config.jsonc") == [bar.proc.pid])
+    print("dock", otra.poll() is None)
+finally:
+    # Con un demonio sin el barrido esto revienta a medias: que no deje
+    # procesos de mentira vivos diez minutos.
+    for p in lanzados:
+        try:
+            p.kill()
+        except OSError:
+            pass
+PY
+)"; codigo=$?
+afirmar_igual 0 "$codigo" "la sonda termina bien"
+afirmar_igual "antes True" "$(grep '^antes' <<<"$salida")" "ve a la huerfana como hija con esa config"
+afirmar_igual "huerfana False" "$(grep '^huerfana' <<<"$salida")" "relanzar la mata (y la recoge)"
+afirmar_igual "nueva True" "$(grep '^nueva' <<<"$salida")" "queda una sola barra de arriba, la apuntada"
+afirmar_igual "dock True" "$(grep '^dock' <<<"$salida")" "no toca las waybar de otra config"
+
+
+titulo "4. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 
 resumen
