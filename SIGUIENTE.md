@@ -21,6 +21,21 @@ Y un aviso que salió en la laptop durante el rebase, «module 'lua.teclados' no
 found»: git escribió `hyprland.lua` antes que el módulo nuevo y Hyprland recargó
 en el hueco. Ahora se carga solo si el fichero está (`5ffad6f`).
 
+## 2026-10-20 (PC): traído `b6ee1bb`
+
+- `git pull` + `./instalar.sh`: 43/43, «sin pendientes», `configerrors`
+  vacío, 62 atajos. La tarjeta salió por la X820 y quedó `us,latam`
+  (`altgr-intl,`, lo mismo que el global). Barras recargadas.
+- **El pull dejó «Your config has errors: cannot open hyprland.lua»** y a
+  Hyprland sin vigilar la config: trampa nueva en `CLAUDE.md` («Y un `git pull`
+  puede dejar a Hyprland ciego»). `instalar.sh` recarga ahora la sesión al final.
+- `e2e/bluetooth-panel` falló UNA vez en la tanda completa y luego pasó 19 de
+  19 (suelta, en tanda y 12 en paralelo). Parece de tiempos, como
+  `unidad/modo-gaming`: si vuelve, guarda la salida (`./tests/run.sh > log`)
+  para ver qué comprobación cae. Sospechosas: el plazo fijo de 1,2 s de
+  «buscar» y «A sale»/«B sale», que no esperan.
+- Falta en la PC: los paneles, Ctrl+RePag/AvPag y SUPER+Supr en vivo.
+
 ## 2026-10-20 (portátil): saludo sin repetir, Insert para el overlay, y cada teclado con su distribución
 
 - **El saludo** sale al azar **sin repetirse** hasta haber enseñado todas, y la

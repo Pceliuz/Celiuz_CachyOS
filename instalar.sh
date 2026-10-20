@@ -299,6 +299,29 @@ comprobar_hyprland_lua() {
     fi
 }
 
+# recargar_sesion — un `hyprctl reload` a la sesion abierta, al final.
+#
+# No es por cortesia: `git pull` reescribe los ficheros de la config BORRANDOLOS
+# y creandolos otra vez, y Hyprland, que vigila esos ficheros, a veces recarga
+# justo en el hueco. Sale «Your config has errors: cannot open .../hyprland.lua:
+# No such file or directory» y, peor, Hyprland DEJA DE VIGILAR: editar despues
+# cualquier fichero de la config no recarga nada, y el aviso se queda puesto.
+# Medido en anidado el 2026-10-20; solo lo cura un reload. Como el camino de
+# siempre es `git pull && ./instalar.sh`, aqui queda curado justo despues.
+recargar_sesion() {
+    [ "$SOLO_REVISAR" -eq 1 ] && return 0
+    [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || return 0
+    command -v hyprctl >/dev/null 2>&1 || return 0
+    titulo "9. La sesion abierta"
+    local errores
+    if errores="$("$REPO/hypr/scripts/recargar.sh" -q 2>&1)"; then
+        hecho "  config recargada, sin errores"
+    else
+        aviso "la config recargo con avisos o errores:"
+        printf '%s\n' "$errores" | sed 's/^/    /'
+    fi
+}
+
 # --- 3. CeliuzPaper ----------------------------------------------------------
 
 celiuzpaper() {
@@ -919,6 +942,7 @@ else
     fondo
     pantalla
     sddm_estado
+    recargar_sesion
 fi
 
 titulo "Resumen"

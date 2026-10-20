@@ -350,6 +350,23 @@ modificarlos sí es inofensivo (la sesión recarga la config entera, que sigue
 completa). Todo lo nuevo va SOLO en `hypr/lua/`. Borrarlos es un pendiente con
 fecha en SIGUIENTE.md; `instalar.sh --revisar` dice si la sesión aún es vieja.
 
+### Y un `git pull` puede dejar a Hyprland ciego hasta el próximo reload
+
+git reescribe un fichero **borrándolo y creándolo otra vez**, y Hyprland, que
+vigila los de la config, a veces recarga justo en el hueco: sale «Your config
+has errors: cannot open .../hyprland.lua: No such file or directory» (le pasó a
+la PC el 2026-10-20 al traer `b6ee1bb`). Lo grave no es el aviso: **después deja
+de vigilar**, así que editar cualquier fichero de la config ya no recarga nada y
+el aviso se queda puesto. Medido en anidado; es una carrera (salió 1 de 2) y lo
+cura un `hyprctl reload`. Por eso `instalar.sh` termina recargando la sesión
+abierta (`recargar_sesion`): el camino de siempre es `git pull && ./instalar.sh`.
+Si alguien hace pull sin instalar y ve ese aviso, `SUPER+SHIFT+R`. (Volvió
+a pasar en vivo al rebasar sobre `5ffad6f`, que le toca justo a hyprland.lua.)
+Su prima es «module 'lua.X' not found»: git escribió `hyprland.lua` antes que
+el módulo nuevo que pide. Por eso un `require` de un módulo nuevo va con la
+guardia de `lua/teclados.lua` (mirar si el fichero está), o en un commit
+anterior al que lo pide.
+
 ### Y el anidado tiene que vaciar `autostart.lua`
 
 `tests/anidado.sh` vaciaba `autostart.conf`; el primer anidado con config Lua
