@@ -861,7 +861,11 @@ def escribir_mangohud():
     fuente = fuente_del_repo()
     # Solo lo que este equipo tiene (lib/hardware.py, preguntado ahora mismo):
     # una integrada no tiene temperatura ni VRAM propias, y un sobremesa no
-    # tiene bateria.
+    # tiene bateria. Lo que va SIEMPRE es lo que mide MangoHud del juego y no
+    # del hardware: los FPS, el nombre de la API (OpenGL/Vulkan), los ms por
+    # fotograma y su grafica (la raya). Esa raya NO es de la GPU dedicada: sale
+    # igual con una integrada (visto en la laptop el 2026-10-20), asi que no se
+    # esconde. Lo pidio asi el usuario: cada cosa, si el equipo la tiene.
     hw = hardware.overlay(hardware.detectar())
     lineas = [
         "# GENERADO por hypr/scripts/modo-gaming.py al entrar al modo gaming.",
