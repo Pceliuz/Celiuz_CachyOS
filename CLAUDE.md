@@ -540,15 +540,26 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   combined»*, o sea que «la resolución nativa **y** el mejor refresco **a esa**
   resolución» no existe — `highres` deja el refresco sin especificar y `highrr`
   es la trampa del 800x600. Lo pidieron en hyprwm/Hyprland#8758 y se cerró como
-  *not planned*. Pero el dato **sí está**: `hyprctl monitors -j` trae
-  `availableModes` entero, y elegir bien es aritmética sobre esa lista. Eso es
-  `scripts/monitores.py`, que arranca desde `lua/autostart.lua` con
-  `--demonio` y reacciona a `monitoradded` **y a `configreloaded`**: cada
-  recarga reaplica `preferred` y devolvía la PC a 60 Hz (2026-10-20, al
-  recargar `instalar.sh` la sesión). Tres decisiones suyas que conviene no
-  deshacer:
+  *not planned*. Pero el dato **sí está**, y desde dos sitios, que eligen igual
+  (la resolución que ya hay, la del modo preferido, y dentro de ella el refresco
+  más alto; ningún número escrito, sale de cada pantalla):
+  - **`lua/monitors.lua` al cargarse**: `hl.get_monitors()` trae
+    `available_modes` con la marca `preferred`, y escribe una regla con el
+    nombre de cada pantalla encendida. Es lo que hace que **una recarga no pase
+    por los 60 Hz**: con `preferred` a secas, cada recarga los reaplicaba y un
+    script los subía después, dos cambios de modo (2026-10-20, al recargar
+    `instalar.sh` la sesión). Medido en la PC: 55 muestras durante un
+    `reload`, todas a 100. Gana la ÚLTIMA regla de una salida (medido), así que
+    `personal.lua`, que va después, sigue mandando.
+  - **`scripts/monitores.py --demonio`** (desde `lua/autostart.lua`), para lo
+    que la config no ve: la primera carga de la sesión, cuando aún no hay
+    salidas, y lo que se enchufa después. Reacciona a `monitoradded` y a
+    `configreloaded`.
+  Tres decisiones que conviene no deshacer:
   - **agrupa por resolución primero y por refresco después**, nunca al revés (al
-    revés *es* `highrr`, y el televisor se va a 800x600);
+    revés *es* `highrr`, y el televisor se va a 800x600). Y la resolución no se
+    cambia: si la puesta no es la mayor, solo se sube el refresco dentro de
+    ella;
   - **no toca la escala**, porque depende de la distancia a la que miras y eso no
     lo sabe ningún EDID — un televisor de 1080p a distancia de sofá son ~35 DPI y
     quiere 1.5, un monitor de 24" en la mesa son ~92 y quiere 1;
@@ -557,9 +568,10 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
     idioma en que corre la sesión, para que una copia vieja no fije nada). Un script que ajusta pantallas solo y pisa la línea que
     escribiste tú es peor que no tenerlo: en este repo el orden de capas manda, y
     personal.conf se carga el último.
-  Lo vigila `tests/unidad/monitores.sh`, que tiene la trampa del 800x600 como
+  Lo vigilan `tests/unidad/monitores.sh`, que tiene la trampa del 800x600 como
   caso de prueba y comprueba también lo contrario — que no manda ni una orden al
-  compositor cuando no hay nada que mejorar.
+  compositor cuando no hay nada que mejorar—, y la sección 8 de
+  `tests/unidad/config-lua.sh` (la regla Lua con pantallas de 100, 144 y 60).
 - **Una escala de monitor que no dé un tamaño lógico entero la RECHAZA
   Hyprland.** En 1080p las dos cómodas son `1.5` (1280x720) y `1.25` (1536x864).
   Hace falta escala en un televisor aunque sea 1080p: 1390 mm de ancho para 1920

@@ -190,6 +190,29 @@ di("baja_motivo", "si" if filas and filas[0][3] and "resolucion" in filas[0][3] 
 mod.aplicar(raiz=copia)
 di("baja_ordenes", len(estado["ordenes"]))
 
+# Pero el refresco SI se sube dentro de la resolucion que tenga (antes, en este
+# caso, se rendia entero): 1280x720 a 60 que admite 120 a esa misma resolucion.
+BAJA_RAPIDA = dict(BAJA, availableModes=PC["availableModes"] + ["1280x720@120.00Hz"])
+estado["monitores"] = [BAJA_RAPIDA]
+estado["ordenes"] = []
+mod.aplicar(raiz=copia)
+di("baja_rapida", estado["ordenes"][0] if estado["ordenes"] else "")
+
+# Ningun numero es de la PC del autor: cada pantalla da el suyo. Un monitor de
+# 144 (que anuncia 143.91, como muchos) y un portatil de 165.
+for clave, pantalla in (
+        ("m144", {"name": "DP-1", "x": 0, "y": 0, "width": 2560, "height": 1440,
+                  "refreshRate": 59.95, "scale": 1.0,
+                  "availableModes": ["2560x1440@59.95Hz", "2560x1440@143.91Hz",
+                                     "2560x1440@120.00Hz", "1920x1080@240.00Hz"]}),
+        ("m165", {"name": "eDP-1", "x": 0, "y": 0, "width": 2560, "height": 1600,
+                  "refreshRate": 60.0, "scale": 1.25,
+                  "availableModes": ["2560x1600@60.00Hz", "2560x1600@165.00Hz"]})):
+    estado["monitores"] = [pantalla]
+    estado["ordenes"] = []
+    mod.aplicar(raiz=copia)
+    di(clave, estado["ordenes"][0] if estado["ordenes"] else "")
+
 # --- 5b. Con la config en Lua --------------------------------------------------
 # Hyprland 0.56 con hyprland.lua: `keyword monitor` es un error y la orden va
 # como `eval hl.monitor({...})`; y lo tuyo esta en lua/personal.lua. Una copia
@@ -305,6 +328,12 @@ afirmar_igual "si" "$(valor baja_motivo)" \
         "una pantalla por debajo de su resolucion mayor: lo dice"
 afirmar_igual "0" "$(valor baja_ordenes)" \
         "pero no le cambia la resolucion a ciegas"
+afirmar_igual "HDMI-A-1,1280x720@120,0x0,1" "$(valor baja_rapida)" \
+        "aunque si le sube el refresco DENTRO de su resolucion"
+afirmar_igual "DP-1,2560x1440@143.91,0x0,1" "$(valor m144)" \
+        "un monitor de 144: sus 143.91 a 1440p, no los 240 de 1080p"
+afirmar_igual "eDP-1,2560x1600@165,0x0,1.25" "$(valor m165)" \
+        "un portatil de 165, con su escala"
 afirmar_igual "0" "$(valor sin_sesion)" \
         "sin sesion de Hyprland no se inventa ninguna pantalla"
 

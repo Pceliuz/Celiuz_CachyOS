@@ -39,11 +39,18 @@ sigue en conf/personal.conf, donde se pone a mano una vez y se acierta siempre.
 
 NO mueve nada. Se conserva la posicion y la escala que la pantalla ya tenga, asi
 que esto no reordena un escritorio de dos pantallas ni deshace el `auto-right`
-de conf/monitors.conf: solo sube el refresco donde se pueda.
+de lua/monitors.lua: solo sube el refresco donde se pueda. Tampoco cambia la
+resolucion: sube el refresco DENTRO de la que ya tiene.
 
-Y NO PISA LO TUYO. Si nombras una salida en conf/personal.conf o en
-conf/local.conf, este script se la salta entera. Es la regla de capas del repo:
-en hyprlang gana el ultimo, y personal.conf se carga el ultimo de todos.
+Y NO PISA LO TUYO. Si nombras una salida en lua/personal.lua o lua/local.lua
+(personal.conf/local.conf con la config vieja), este script se la salta entera.
+Es la regla de capas del repo: gana el ultimo, y personal se carga el ultimo.
+
+NO ESTA SOLO. lua/monitors.lua hace la MISMA eleccion al cargarse, con
+`hl.get_monitors()`, para cada pantalla ya encendida: por eso una recarga no
+pasa por los 60 Hz. Este script cubre lo que la config no ve —la primera carga
+de la sesion, sin salidas aun, y lo que se enchufa despues— y hace de red si
+algo se escapa.
 
 USO
 ---
@@ -186,6 +193,18 @@ def mejor_modo(modos):
     return ancho, alto, refresco
 
 
+def mejor_refresco_a(modos, ancho, alto):
+    """El refresco mas alto A ESA resolucion, como (ancho, alto, refresco).
+
+    Es lo que se aplica: la resolucion no se toca nunca —la pone la regla de
+    lua/monitors.lua, que ya elige la del modo preferido, o la pones tu—, solo
+    se sube el refresco dentro de ella. Es la misma eleccion que hace
+    monitors.lua al cargarse, para que los dos no se contradigan.
+    """
+    refrescos = [r for a, b, r in modos if (a, b) == (ancho, alto)]
+    return (ancho, alto, max(refrescos)) if refrescos else None
+
+
 def salidas_fijadas(raiz=RAIZ, modo=""):
     """Nombres de salida que ya configuraste tu; este script no las toca.
 
@@ -247,21 +266,23 @@ def revisar(raiz=RAIZ):
                       float(mon["refreshRate"]))
         except (KeyError, TypeError, ValueError):
             continue
-        mejor = mejor_modo(parsear_modos(mon.get("availableModes")))
+        modos = parsear_modos(mon.get("availableModes"))
+        # Se sube el refresco A LA RESOLUCION QUE YA TIENE. Cambiar de
+        # resolucion no es lo que se vino a hacer aqui, y a ciegas es
+        # peligroso: si la que hay puesta no es la mas grande, es la del modo
+        # preferido de la pantalla o la eligio alguien (personal.lua, un
+        # `hyprctl` a mano). Antes, en ese caso, no se subia ni el refresco.
+        mejor = mejor_refresco_a(modos, actual[0], actual[1])
+        mayor = mejor_modo(modos)
         if nombre in fijadas:
             motivo = "la fijas tu en tu personal.lua (o personal.conf)"
         elif mejor is None:
-            motivo = "no anuncia ningun modo que se pueda leer"
-        elif mejor[:2] != actual[:2]:
-            # Cambiar de RESOLUCION no es lo que se vino a hacer aqui, y a
-            # ciegas es peligroso: si la que hay puesta no es la mas grande, es
-            # que alguien la eligio (una linea en personal.conf que nombra otra
-            # salida, un `hyprctl keyword` a mano, o el propio EDID mintiendo).
-            # Se avisa y se deja como esta.
-            motivo = "su resolucion no es la mayor que anuncia (%dx%d); no la cambio" % (
-                mejor[0], mejor[1])
+            motivo = "no anuncia ningun modo que se pueda leer a su resolucion"
         elif abs(mejor[2] - actual[2]) < MISMO_REFRESCO:
             motivo = "ya esta en su mejor modo"
+            if mayor and mayor[:2] != actual[:2]:
+                motivo += (" a %dx%d (su resolucion mayor es %dx%d; esa no la "
+                           "cambio)" % (actual[0], actual[1], mayor[0], mayor[1]))
         else:
             motivo = None
         salida.append((mon, actual, mejor, motivo))

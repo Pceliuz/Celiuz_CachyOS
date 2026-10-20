@@ -9,7 +9,7 @@ el fichero llegó a 1238 líneas).
 
 ---
 
-## 2026-10-20 (PC): la barra de arriba ya no se escondía, y la recarga bajaba a 60 Hz
+## 2026-10-20 (PC): la barra de arriba ya no se escondía, y cada pantalla a sus Hz más altos
 
 - **Qué era**: una waybar de arriba de las 05:13 seguía viva como hija del
   demonio, pero `self.proc` ya no la nombraba. Se quedaba en `top` sin recibir
@@ -34,6 +34,22 @@ el fichero llegó a 1238 líneas).
   60. Ahora escucha también `configreloaded` (medido: Hyprland lo emite en
   cada reload); `unidad/monitores` 5b (falla contra el código viejo). En vivo:
   demonio reiniciado, `reload`, y se queda en 100.
+- **Y luego, a petición del usuario («que cada máquina tenga sus Hz más
+  altos»)**: `monitores.py` ya era genérico (ningún 100 escrito: el refresco
+  más alto a la resolución de cada pantalla), pero cada recarga seguía pasando
+  por 60 y subiendo, un parpadeo. Ahora **`lua/monitors.lua` elige al
+  cargarse** con `hl.get_monitors()` (que trae `available_modes` y la marca
+  `preferred`) y escribe la regla con el nombre de cada pantalla encendida.
+  Medido en la PC sin el demonio: durante un `reload`, 55 de 55 muestras a 100.
+  Y medido que gana la última regla de una salida, así que `personal.lua`
+  manda. `monitores.py` queda para la primera carga (sin salidas aún) y lo que
+  se enchufa, y ahora sube el refresco aunque la resolución puesta no sea la
+  mayor (antes se rendía). Pruebas: `config-lua` §8 (100, 144, el televisor,
+  personal gana) y `monitores` (120 dentro de 720p, 144, 165 de portátil).
+  **En la laptop**: el televisor está fijado en su `personal.lua` y se le
+  respeta; si se quiere que suba solo, quitar de esa línea el `mode`
+  (comprobar antes con `monitores.py --ver` qué anuncia). La pantalla interna
+  sube sola.
 - **En la PC**: los dos demonios reiniciados y `./instalar.sh` pasado: 43/43,
   «sin pendientes», `configerrors` vacío, 62 atajos, 100 Hz, una waybar por
   config y la de arriba escondida con ventanas abiertas.

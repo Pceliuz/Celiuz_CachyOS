@@ -54,6 +54,12 @@ hl = {
     layer_rule = function(t) R.capas[#R.capas + 1] = t; return { set_enabled = function() end } end,
     workspace_rule = function(t) end,
     device = function(t) R.dispositivos[#R.dispositivos + 1] = t end,
+    -- Las pantallas encendidas: ninguna, salvo que HL_PANTALLAS nombre un
+    -- fichero Lua que devuelva su lista (con available_modes, como la real).
+    get_monitors = function()
+        local f = os.getenv("HL_PANTALLAS")
+        return f and dofile(f) or {}
+    end,
     dsp = {
         exec_cmd = dsp("exec_cmd"), dpms = dsp("dpms"), focus = dsp("focus"), exit = dsp("exit"),
         window = { close = dsp("window.close"), float = dsp("window.float"), move = dsp("window.move"),

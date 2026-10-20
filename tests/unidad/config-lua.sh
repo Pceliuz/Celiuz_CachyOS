@@ -114,5 +114,43 @@ cargar "$TMP/verde.json"
 afirmar_igual "True" "$(consulta "$TMP/verde.json" '"rgba(00ff00ff)" in R["opciones"]["general.col.active_border"]["colors"]')" \
     "un color cambiado en colores.conf llega al borde (no hay copia en Lua)"
 
+titulo "8. Cada pantalla encendida, a su refresco mas alto (lua/monitors.lua)"
+# Una recarga reaplica las reglas: con `preferred` a secas la PC bajaba a 60 Hz
+# y monitores.py la subia despues (2026-10-20). La regla con nombre lo evita, y
+# el numero sale de los modos de cada pantalla, no de la del autor.
+sed -i 's/^\$amatista *= *rgba(00ff00ff)/$amatista = rgba(b16cffff)/' "$COPIA/hypr/conf/colores.conf"
+cat > "$TMP/pantallas.lua" <<'EOF'
+local function m(w, h, r, p) return { width = w, height = h, refresh_rate = r, preferred = p } end
+return {
+    -- La PC: el EDID prefiere 60 y admite 100.
+    { name = "HDMI-A-1", width = 1920, height = 1080,
+      available_modes = { m(1920, 1080, 60.0, true), m(1920, 1080, 100.0), m(1280, 720, 60.0) } },
+    -- El televisor: su 800x600@60.32 es la trampa de `highrr`.
+    { name = "HDMI-A-2", width = 1920, height = 1080,
+      available_modes = { m(1920, 1080, 60.0, true), m(800, 600, 60.32) } },
+    -- Un 1440p de 144 que anuncia 143.91, y un modo de 1080p a 240 que no toca.
+    { name = "DP-1", width = 2560, height = 1440,
+      available_modes = { m(2560, 1440, 59.95, true), m(2560, 1440, 143.91), m(1920, 1080, 240.0) } },
+    -- Una pantalla que no anuncia nada: sin regla propia, se queda la generica.
+    { name = "DP-2", width = 1024, height = 768, available_modes = {} },
+}
+EOF
+cat > "$COPIA/hypr/lua/personal.lua" <<'EOF'
+hl.monitor({ output = "HDMI-A-2", mode = "preferred", position = "auto-right", scale = 1.5 })
+EOF
+HL_PANTALLAS="$TMP/pantallas.lua" cargar "$TMP/pantallas.json"; codigo=$?
+rm -f "$COPIA/hypr/lua/personal.lua"
+afirmar_igual "0" "$codigo" "carga sin error con pantallas"
+modo_de() { consulta "$TMP/pantallas.json" "[m.get('mode') for m in R['monitores'] if m.get('output')=='$1'][$2]"; }
+afirmar_igual "preferred" "$(modo_de '' 0)" "la regla generica sigue (para lo que se enchufe despues)"
+afirmar_igual "1920x1080@100" "$(modo_de HDMI-A-1 0)" "la PC: sus 100, aunque el EDID prefiera 60"
+afirmar_igual "1920x1080@60" "$(modo_de HDMI-A-2 0)" "el televisor: 1080p, no su 800x600 de mas refresco"
+afirmar_igual "2560x1440@143.91" "$(modo_de DP-1 0)" "un 144: a su resolucion preferida, no los 240 de 1080p"
+afirmar_igual "0" "$(consulta "$TMP/pantallas.json" "len([m for m in R['monitores'] if m.get('output')=='DP-2'])")" \
+    "sin modos que leer no se inventa ninguna regla"
+afirmar_igual "preferred" "$(modo_de HDMI-A-2 -1)" "y lo de personal.lua llega DESPUES, asi que gana"
+afirmar_igual "1" "$(consulta "$TMP/pc.json" "len(R['monitores'])")" \
+    "sin pantallas (la primera carga de la sesion) solo queda la generica"
+
 afirmar_intacta_la_casa_real
 resumen
