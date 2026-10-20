@@ -339,10 +339,22 @@ PY
 # mpvpaper dibuja con la API de render de libmpv y ese VO no implementa
 # capturas: `screenshot-to-file` responde "error running command" en todas sus
 # variantes. Por eso se le pregunta el archivo y el segundo, y corta ffmpeg.
+# VIDEO_VIVO: 1 si el fondo en video esta corriendo (y por tanto hay algo que
+# ver detras con el xray). El modo gaming lo APAGA entero para dejarle la RAM y
+# la GPU al juego, y entonces el xray enseñaba negro (2026-10-20). Sin video
+# vivo el fotograma se saca del FICHERO del fondo (wallpapers/current) y se usa
+# en vez del xray. Encender el video solo para el bloqueo se descarto: ~430 MB
+# y la GPU con el juego abierto detras, y 3-8 s de negro hasta que mpv arranca
+# en la NVIDIA de la PC. Lo eligio asi el usuario.
+VIDEO_VIVO=0
 capturar_fondo() {
     local video pos ancho
-    video=$(mpv_propiedad path) || return 1
-    pos=$(mpv_propiedad time-pos) || return 1
+    if video=$(mpv_propiedad path) && pos=$(mpv_propiedad time-pos); then
+        VIDEO_VIVO=1
+    else
+        video="$SCRIPTS/../wallpapers/current"
+        pos=1                    # no el primero: muchos videos empiezan en negro
+    fi
     video=$(realpath -e "$video" 2>/dev/null) || return 1
 
     # El ancho lo dice lib/pantalla.py, que ademas sabe de escala y de rotacion.
@@ -351,8 +363,12 @@ capturar_fondo() {
     ancho=$("$SCRIPTS/lib/pantalla.py" ancho 2>/dev/null)
     [[ "$ancho" =~ ^[0-9]+$ ]] || ancho=1920
 
-    ffmpeg -nostdin -loglevel error -ss "$pos" -i "$video" \
-           -frames:v 1 -vf "scale=${ancho}:-2" -q:v 3 -y "$FONDO_TMP" \
+    # Sin -ss la segunda vez: si el fondo es una imagen, o un video de menos de
+    # un segundo, pedir el segundo 1 no da nada.
+    { ffmpeg -nostdin -loglevel error -ss "$pos" -i "$video" \
+             -frames:v 1 -vf "scale=${ancho}:-2" -q:v 3 -y "$FONDO_TMP" && [ -s "$FONDO_TMP" ]; } \
+        || ffmpeg -nostdin -loglevel error -i "$video" \
+             -frames:v 1 -vf "scale=${ancho}:-2" -q:v 3 -y "$FONDO_TMP" \
         && mv -f "$FONDO_TMP" "$FONDO"
 }
 
@@ -503,6 +519,10 @@ if capturar_fondo; then
 else
     rm -f "$FONDO_TMP"
     echo "lock: no se pudo capturar el fondo; se usara el que hubiera" >&2
+fi
+if [ "$MODO_FONDO" = "xray" ] && [ "$VIDEO_VIVO" -eq 0 ]; then
+    echo "lock: el fondo en video no esta corriendo (modo gaming?): fotograma, no xray"
+    MODO_FONDO=fotograma
 fi
 
 if [ "$MANTENER_VIDEO" -eq 1 ]; then

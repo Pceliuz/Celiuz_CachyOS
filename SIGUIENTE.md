@@ -69,9 +69,15 @@ Era el vigilante del modo gaming devolviendo del escritorio 99 al del juego.
 Arreglado en tres capas: el vigilante respeta el 99 (`WS_BLOQUEO`), `lock.sh`
 mira que no se vea nada en ninguna pantalla antes de encender el xray (si no,
 fotograma), y un vigía lo apaga si aparece una ventana bloqueado.
-`e2e/bloqueo` (55), `unidad/a-la-vista` (13). **Falta en vivo**: bloquear en el
-modo gaming con un juego abierto; y en la PC con el televisor puesto y ventanas
-en él (debe salir el fotograma, no el xray).
+`e2e/bloqueo` (58), `unidad/a-la-vista` (13).
+
+Probado por el usuario en el modo gaming: salía NEGRO, porque el modo apaga el
+video del fondo y el xray no tenía nada que enseñar. Ahora, sin video vivo, el
+fotograma se saca del fichero (`wallpapers/current`) y se usa en vez del xray.
+Encender el video solo para el bloqueo se descartó con el usuario (~430 MB y la
+GPU con el juego detrás, y 3-8 s de negro en la NVIDIA). **Falta en vivo**:
+bloquear otra vez en el modo gaming (debe salir el fondo, quieto); y en la PC con
+el televisor puesto y ventanas en él.
 
 ## 2026-10-20 (laptop): teclado de España y aviso al conectar
 

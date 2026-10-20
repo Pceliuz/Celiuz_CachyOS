@@ -55,6 +55,16 @@ esac'
 
 binario_falso notify-send 0
 
+# El fondo en video «corriendo»: sin el, lock.sh usa el fotograma y no el xray
+# (es lo que pasa en el modo gaming, que lo apaga). Cada caso lo tiene salvo
+# el 12, que prueba justo eso.
+export MPV="$TMP/mpv.sock"
+python3 "$REPO/tests/lib/mpv_falso.py" "$MPV" &
+MPV_FALSO=$!
+# Sin pisar el trap de preparar_entorno, que borra la casa de mentira.
+trap 'kill "$MPV_FALSO" 2>/dev/null; limpiar_entorno' EXIT INT TERM
+for _ in $(seq 50); do [ -S "$MPV" ] && break; sleep 0.1; done
+
 comprobar_bloqueo_normal() {
     titulo "1. Bloqueo normal (se desbloquea escribiendo la contrasena)"
     rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
@@ -476,6 +486,27 @@ esac"
     afirmar "y no se queda vivo al desbloquear" sh -c "! kill -0 '$vigia' 2>/dev/null"
 }
 
+comprobar_sin_video() {
+    titulo "12. Sin el fondo en video (el modo gaming lo apaga): fotograma, no negro"
+    rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
+    binario_falso hyprctl 0 '
+case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
+  "activeworkspace -j")               echo "{\"id\": 1, \"windows\": 1}" ;;
+  "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
+  *)                                  echo "ok" ;;
+esac'
+    binario_falso "$BLOQUEO" 0
+    MPV="$TMP/no-hay-mpv.sock" LOCK_DESPEGADO=1 CONGELAR=0 MODO_FONDO=xray REINTENTOS=1 \
+    FIFO="$TMP/no-existe-pausa.fifo" FIFO_BARRAS="$TMP/no-existe-barras.fifo" \
+        "$REPO/hypr/scripts/lock.sh" > "$TMP/diario-sinvideo.txt" 2>&1
+    afirmar_contiene "$TMP/diario-sinvideo.txt" "no esta corriendo" "se da cuenta de que no hay video"
+    afirmar_no_contiene "$REGISTRO/hyprctl.log" 'session_lock_xray true' "y no enciende el xray (que enseñaria negro)"
+    afirmar_contiene "$XDG_CACHE_HOME/celiuzpaper/lock-fondo.conf" '^    path = ' "el fondo del bloqueo es la imagen"
+}
+
 comprobar_bloqueo_normal
 comprobar_bloqueo_caido
 comprobar_aviso_no_responde
@@ -487,5 +518,6 @@ comprobar_sin_flock
 comprobar_config_lua
 comprobar_algo_a_la_vista
 comprobar_vigia
+comprobar_sin_video
 comprobar_no_toca_nada_real
 resumen
