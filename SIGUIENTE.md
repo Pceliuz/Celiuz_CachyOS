@@ -34,7 +34,10 @@ en el hueco. Ahora se carga solo si el fichero está (`5ffad6f`).
   `unidad/modo-gaming`: si vuelve, guarda la salida (`./tests/run.sh > log`)
   para ver qué comprobación cae. Sospechosas: el plazo fijo de 1,2 s de
   «buscar» y «A sale»/«B sale», que no esperan.
-- Falta en la PC: los paneles, Ctrl+RePag/AvPag y SUPER+Supr en vivo.
+- El saludo, visto en kitty en la PC: sale la imagen.
+- **La PC no tiene Bluetooth** (sin `/sys/class/bluetooth`; la placa no trae):
+  el módulo se esconde solo y el panel no se prueba ahí. En la laptop va bien.
+- Falta en la PC: el panel de red, Ctrl+RePag/AvPag y SUPER+Supr en vivo.
 
 ## 2026-10-20 (portátil): saludo sin repetir, Insert para el overlay, y cada teclado con su distribución
 
@@ -80,9 +83,9 @@ del «⋯», de emparejar) y con pruebas: `unidad/bluetooth-panel` (48) y
 `e2e/bluetooth-panel` (31, con el demonio delante).
 
 Pendiente:
-- **Probarlo en la sesión real de las dos máquinas** tras recargar las barras
+- **Probarlo en la sesión real de la laptop** (la PC no tiene Bluetooth) tras recargar las barras
   (`SUPER+SHIFT+C`): abrir, cerrar, «Usar este» entre dos auriculares
-  encendidos, y emparejar unos de verdad. En la PC, con el televisor, que
+  encendidos, y emparejar unos de verdad. Con el televisor enchufado, que
   salga bajo el icono de la pantalla donde se pincha.
 - Los dos TWS viejos de la laptop (`41:42:47…`, `41:42:39…`) ya no aparecen:
   el usuario decide si se olvidan (el «⋯» del panel lo hace).
