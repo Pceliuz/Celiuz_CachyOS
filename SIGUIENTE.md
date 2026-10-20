@@ -71,7 +71,10 @@ el fichero llegó a 1238 líneas).
   Como Steam ya corría con el overlay, la próxima entrada al modo lo reinicia
   una vez para escribirlo. La tecla estaba bien: «Ins» manda `Insert` (medido
   con `xkbcli interactive-wayland`).
-- **Falta verlo**: SUPER+G (cierra y abre Steam), Silksong, Ins.
+- **Visto**: la barra sale en Silksong con Ins.
+- Y en una GPU integrada ya no salen «0 °C» ni «VRAM 0.0 GiB»: la config del
+  overlay mira la GPU al entrar al modo (`modo-gaming.datos_de_gpu`,
+  `unidad/mangohud-gpu`). En la PC (NVIDIA) siguen saliendo las dos.
 
 ## 2026-10-20 (portátil): el repo pasa a privado y trae las imágenes del saludo
 
