@@ -53,7 +53,19 @@ end
 -- La distribucion de cada teclado que ya contestaste (la tarjeta de
 -- scripts/teclados.py). Despues de lo de la maquina, porque es mas concreto:
 -- habla de UN teclado, no de todos.
-require("lua.teclados")
+--
+-- Se mira antes si el fichero esta, como con personal.lua. No es por quien
+-- clona (el repo lo trae): es por git. Al traer el commit que lo creo, git
+-- escribio este hyprland.lua un instante ANTES que lua/teclados.lua, Hyprland
+-- recargo en ese hueco y salio «module 'lua.teclados' not found» (2026-10-20,
+-- en la laptop, durante un rebase). Un modulo nuevo que se cargue desde aqui,
+-- igual: o con esta guardia, o en un commit anterior al que lo pide.
+local teclados = os.getenv("HOME") .. "/.config/hypr/lua/teclados.lua"
+local ft = io.open(teclados, "r")
+if ft then
+    ft:close()
+    require("lua.teclados")
+end
 
 -- Y DESPUES DE TODO, lo tuyo. `lua/personal.lua` lo crea instalar.sh y NO se
 -- versiona: es donde van tus anadidos —un programa que arranque contigo, un
