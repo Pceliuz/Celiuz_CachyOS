@@ -579,13 +579,17 @@ lo dice (el campo del descriptor HID que debería decirlo contesta «Not
 supported» en los dos equipos del autor, como en casi todos). Así que **se
 pregunta**: al conectar un teclado que no conoce, sale una tarjeta
 
-> **¿Qué tiene la tecla de la derecha de la L?**   `Ñ`  ·  `; :`
+> **¿Qué teclas tiene?**   `Ñ Ç` España  ·  `Ñ` Latinoamérica  ·  `; :` Inglés
 
-`Ñ` es latinoamericano y `; :` es inglés. La respuesta se aplica en el acto **a
-ese teclado y a ningún otro**, y se recuerda para siempre en
+La respuesta se aplica en el acto **a ese teclado y a ningún otro**, y se recuerda para siempre en
 `~/.config/celiuz/teclados.conf` (de cada equipo, fuera del repo), que
 `lua/teclados.lua` vuelve a leer en cada recarga. `SUPER+DEL` sigue alternando
 igual, porque cada teclado lleva las dos distribuciones, la suya delante.
+
+**Cada teclado conserva la suya a la vez**: con un teclado US enchufado a la
+laptop, el US escribe en inglés y el interno sigue en latinoamericano, y puedes
+ir de uno a otro sin tocar nada. Al conectar uno que ya conoce, sale un aviso
+(«Teclado español (España) conectado: configuración cambiada automáticamente»).
 
 No pregunta por el teclado **interno de un portátil** (para ese vale lo de
 `vconsole.conf`, de arriba), ni por lo que no tiene letras (botón de encendido,

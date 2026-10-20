@@ -122,8 +122,25 @@ r["ps2"] = t.leer_conf().get("at-translated-set-2-keyboard", {}).get("layout")
 r["dist_us"] = list(t.distribucion("us"))
 r["dist_no"] = list(t.distribucion("no"))
 r["dist_latam"] = list(t.distribucion("latam"))
-t.maquina.distribucion_del_sistema = lambda: ("es", "")
-r["dist_es"] = list(t.distribucion("latam"))
+r["dist_es"] = list(t.distribucion("es"))
+r["nombres"] = [t.nombre_distribucion(x) for x in ("es,us", "latam,us", "us,latam")]
+
+# --- El aviso al conectar ------------------------------------------------------
+avisos = []
+anota = lambda d, l, nuevo: avisos.append([d, l, nuevo])
+guardado = open(t.ruta_conf()).read()
+open(t.ruta_conf(), "w").write("")
+vistos = set()
+t.revisar(X820, set(), contesta("es"), vistos=vistos, avisar_=anota)
+r["aviso_al_contestar"] = list(avisos); avisos.clear()
+t.revisar(X820, set(), contesta("us"), vistos=vistos, avisar_=anota)
+r["aviso_sigue_puesto"] = list(avisos)
+t.revisar("", set(), contesta("us"), vistos=vistos, avisar_=anota)       # desenchufado
+t.revisar(X820, set(), contesta("us"), vistos=vistos, avisar_=anota)     # y otra vez
+r["aviso_al_reconectar"] = list(avisos); avisos.clear()
+t.revisar(X820, set(), contesta("us"), vistos=None, avisar_=anota)
+r["aviso_sin_vistos"] = list(avisos)
+open(t.ruta_conf(), "w").write(guardado)
 
 # --- olvidar ---------------------------------------------------------------
 import contextlib, io
@@ -170,7 +187,14 @@ afirmar_igual "latam,us" "$(R 'R["ps2"]')" "   y apunta lo que se conteste"
 titulo "5. Que distribucion sale"
 afirmar_igual "['us,latam', 'altgr-intl,']" "$(R 'R["dist_us"]')" "«; :» → us, con latam detras"
 afirmar_igual "['latam,us', ',altgr-intl']" "$(R 'R["dist_latam"]')" "«Ñ» → latam, con us detras"
-afirmar_igual "['es,us', ',altgr-intl']" "$(R 'R["dist_es"]')" "«Ñ» con el sistema en «es» → es"
+afirmar_igual "['es,us', ',altgr-intl']" "$(R 'R["dist_es"]')" "«Ñ Ç» → España, con us detras"
+afirmar_igual "['español (España)', 'latinoamericano', 'inglés (US)']" "$(R 'R["nombres"]')" "el nombre del aviso"
+
+titulo "5b. El aviso al conectar"
+afirmar_igual "[['X820UItra', 'es,us', True]]" "$(R 'R["aviso_al_contestar"]')" "al contestar: uno, «aplicada»"
+afirmar_igual "[]" "$(R 'R["aviso_sigue_puesto"]')" "mientras sigue enchufado, ninguno mas"
+afirmar_igual "[['X820UItra', 'es,us', False]]" "$(R 'R["aviso_al_reconectar"]')" "al volver a enchufarlo: «cambiada automaticamente»"
+afirmar_igual "[]" "$(R 'R["aviso_sin_vistos"]')" "sin vistos (el arranque), sin aviso"
 afirmar_igual "['-', '']" "$(R 'R["dist_no"]')" "«No es un teclado» → no se toca"
 
 titulo "6. Se aplica en caliente, a ese teclado"

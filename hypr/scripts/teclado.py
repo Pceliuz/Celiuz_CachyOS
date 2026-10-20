@@ -39,6 +39,10 @@ DISTRIBUCIONES = [
     ("Latin American", "Latinoamericano",
      "La <b>ñ</b> y las tildes, donde estan impresas.\n"
      "Sin <b>&lt;</b> ni <b>&gt;</b>: no existen en este teclado."),
+    # Despues de «Latin American»: el nombre de latam es «Spanish (Latin
+    # American)» y tambien contiene «Spanish». El de España es «Spanish» solo.
+    ("Spanish", "Español (España)",
+     "La <b>ñ</b>, la <b>ç</b> y las tildes, donde estan impresas."),
     ("English", "Ingles US",
      "Lo que dice la tecla es lo que sale.\n"
      "<b>ñ</b> y tildes con <b>Ctrl derecho</b> (AltGr)."),

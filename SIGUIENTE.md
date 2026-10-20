@@ -62,6 +62,19 @@ el fichero llegó a 1238 líneas).
   prueba. Si se repite a menudo, que esa comprobación ignore lo que escribe la
   sesión (el `lock.log`, los `lock-*.conf`).
 
+## 2026-10-20 (laptop): teclado de España y aviso al conectar
+
+- La tarjeta de `teclados.py` tiene tres opciones: `Ñ Ç` España (`es,us`), `Ñ`
+  Latinoamérica, `; :` Inglés. Salió de un teclado Fiddler de España de un
+  amigo del usuario. Vista en anidado; `es,us` aplicado da «Spanish».
+- Al conectar un teclado ya conocido, aviso «Teclado X conectado… configuración
+  cambiada automáticamente» (no en el arranque de la sesión).
+  `unidad/teclados` (36). `teclado.py` (SUPER+Supr) nombra también «Español
+  (España)».
+- Cada teclado lleva su distribución a la vez (`hl.device`): falta **verlo en
+  vivo** con el teclado US de la PC enchufado a la laptop, escribiendo en los
+  dos.
+
 ## 2026-10-20 (laptop): la barra de FPS no salía
 
 - Faltaba **MangoHud** en la laptop (instalado; ahora `instalar.sh` avisa).

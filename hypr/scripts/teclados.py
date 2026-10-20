@@ -9,16 +9,22 @@ vez por teclado.
     teclados.py olvidar ID   borra la respuesta de ese aparato (o «todos»), para
                              que vuelva a preguntar la proxima vez que lo vea
     teclados.py tarjeta DESCRIPCION
-                             solo la pregunta; imprime latam / us / no, o nada
-                             si se cerro sin contestar
+                             solo la pregunta; imprime latam / es / us / no, o
+                             nada si se cerro sin contestar
 
 POR QUE PREGUNTAR. Lo honesto seria que el teclado lo dijera, y hay donde: el
 campo `bCountryCode` del descriptor HID. Se le pregunto a los teclados de las
 dos maquinas y contestan «Not supported», como casi todos. /etc/vconsole.conf
 tampoco vale: dice con que teclado se INSTALO (en la PC del autor pone latam y
 su teclado es un ANSI us). Asi que se pregunta, y se pregunta por algo que se
-puede mirar sin saber de distribuciones: que tiene la tecla de la derecha de la
-L. «Ñ» es latinoamericano; «; :» es ingles.
+puede mirar sin saber de distribuciones: que teclas tiene. «Ñ» y «Ç» es español
+de España; «Ñ» sin «Ç» es latinoamericano; ni una ni otra («; :» a la derecha
+de la L) es ingles.
+
+CADA TECLADO CON LA SUYA, A LA VEZ. La distribucion va por teclado (`hl.device`),
+no por equipo: con un teclado US enchufado a la laptop, el US escribe en ingles
+y el interno sigue en latinoamericano, y se puede ir de uno a otro sin tocar
+nada. Al conectar uno ya conocido sale un aviso diciendo cual se le puso.
 
 QUE ES «UN TECLADO». Un aparato fisico se presenta como varios dispositivos
 («X820UItra», «X820UItra Keyboard», «… Consumer Control»), asi que se pregunta
@@ -201,13 +207,37 @@ def distribucion(respuesta):
     (teclado.py) siga alternando en este teclado igual que en los demas."""
     if respuesta == "no":
         return "-", ""
-    if respuesta == "latam":
-        sistema, variante = maquina.distribucion_del_sistema()
-        # Si al instalar se eligio una con Ñ, esa (es, latam); si no, latam.
-        if sistema in ("latam", "es"):
-            return "%s,us" % sistema, "%s,altgr-intl" % (variante or "")
-        return "latam,us", ",altgr-intl"
+    if respuesta in ("latam", "es"):
+        return "%s,us" % respuesta, ",altgr-intl"
     return maquina.LAYOUT_AUTOR, maquina.VARIANTE_AUTOR
+
+
+NOMBRES = {"latam": "latinoamericano", "es": "español (España)", "us": "inglés (US)"}
+
+
+def nombre_distribucion(layout):
+    """«latam,us» → «latinoamericano». La primera es la que manda."""
+    primera = layout.split(",")[0]
+    return NOMBRES.get(primera, primera)
+
+
+def avisar_conectado(descripcion, layout, nuevo):
+    """El aviso al conectar un teclado. Con la misma etiqueta que teclado.py,
+    para que un aviso sustituya al anterior en vez de apilarse."""
+    if layout == "-":
+        return
+    titulo = "Teclado %s conectado" % nombre_distribucion(layout)
+    cuerpo = ("«%s»: %s. Los demás teclados conservan la suya." %
+              (descripcion, "configuración aplicada" if nuevo else
+               "configuración cambiada automáticamente"))
+    try:
+        subprocess.run(["notify-send", "--app-name=Teclado", "--icon=input-keyboard",
+                        "--expire-time=5000",
+                        "--hint=string:x-canonical-private-synchronous:teclado",
+                        titulo, cuerpo], timeout=5, check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 # --- Hablar con Hyprland ---------------------------------------------------------------
@@ -261,14 +291,14 @@ def hypr_vivo():
 
 # --- La pregunta -------------------------------------------------------------------------
 def preguntar(descripcion):
-    """«latam», «us», «no», o None si se cerro sin contestar."""
+    """«latam», «es», «us», «no», o None si se cerro sin contestar."""
     try:
         r = subprocess.run([sys.executable, os.path.realpath(__file__), "tarjeta", descripcion],
                            capture_output=True, text=True, timeout=600, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return None
     respuesta = r.stdout.strip()
-    return respuesta if respuesta in ("latam", "us", "no") else None
+    return respuesta if respuesta in ("latam", "es", "us", "no") else None
 
 
 def tarjeta(descripcion):
@@ -284,7 +314,9 @@ def tarjeta(descripcion):
     if not base.solo_wayland() or not Gtk.init_check(sys.argv)[0]:
         return 1
     base.cargar_estilo("""
-        .letra { font-size: 30px; font-weight: 800; padding: 14px 34px; }
+        .letra { font-weight: 800; padding: 12px 10px; }
+        .letra .grande { font-size: 28px; font-weight: 800; color: white; }
+        .letra .pequena { font-size: 12px; font-weight: 700; color: alpha(white, 0.8); }
         .enlace { background: none; border: none; box-shadow: none; color: @tenue;
                   font-size: 12px; padding: 4px 6px; }
         .enlace:hover { color: @luz; }
@@ -309,19 +341,27 @@ def tarjeta(descripcion):
     caja.get_style_context().add_class("tarjeta")
     caja.set_size_request(460, -1)
     for texto, clase in (("◆  TECLADO NUEVO", "marca"),
-                         ("¿Qué tiene la tecla de la derecha de la L?", "titulo"),
-                         ("«%s». Con eso sé si es latinoamericano o inglés, y lo "
-                          "recuerdo para este teclado." % descripcion, "texto")):
+                         ("¿Qué teclas tiene?", "titulo"),
+                         ("«%s». Mira la tecla de la derecha de la L, y si hay "
+                          "una «Ç» junto al Intro. Lo recuerdo para este teclado, "
+                          "y los demás conservan la suya." % descripcion, "texto")):
         etiqueta = Gtk.Label(label=texto, xalign=0)
         etiqueta.set_line_wrap(True)
         etiqueta.set_max_width_chars(44)
         etiqueta.get_style_context().add_class(clase)
         caja.pack_start(etiqueta, False, False, 0)
 
-    botones = Gtk.Box(spacing=14, homogeneous=True)
+    botones = Gtk.Box(spacing=12, homogeneous=True)
     botones.set_margin_top(14)
-    for letra, valor in (("Ñ", "latam"), ("; :", "us")):
-        b = Gtk.Button(label=letra)
+    for letra, pie_, valor in (("Ñ  Ç", "España", "es"), ("Ñ", "Latinoamérica", "latam"),
+                               ("; :", "Inglés", "us")):
+        b = Gtk.Button()
+        dentro = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        for texto_, clase_ in ((letra, "grande"), (pie_, "pequena")):
+            e = Gtk.Label(label=texto_)
+            e.get_style_context().add_class(clase_)
+            dentro.pack_start(e, False, False, 0)
+        b.add(dentro)
         for clase in ("boton", "si", "letra"):
             b.get_style_context().add_class(clase)
         b.connect("clicked", lambda _b, v=valor: terminar(v))
@@ -349,16 +389,22 @@ def tarjeta(descripcion):
 
 
 # --- El demonio ----------------------------------------------------------------------------
-def revisar(texto, aplazados, preguntar_=preguntar):
+def revisar(texto, aplazados, preguntar_=preguntar, vistos=None, avisar_=avisar_conectado):
     """Una pasada: apunta y aplica lo que falte. Devuelve los ids aplazados
     («Ahora no») que siguen enchufados, para no volver a preguntar por ellos
-    hasta que se desenchufen."""
+    hasta que se desenchufen. Con `vistos` (un set que el demonio guarda entre
+    pasadas) avisa de cada teclado ya conocido que ACABA de aparecer; sin el,
+    no avisa (la primera pasada del demonio lo arranca con lo que ya habia)."""
     portatil = maquina.detalle()["tipo"] == "laptop"
     lista = aparatos(leer_proc(texto), portatil, teclados_hypr())
     presentes = {a["id"] for a in lista}
     aplazados = aplazados & presentes
     conf = leer_conf()
     por_id = {e["id"]: e for e in conf.values()}
+    recien = presentes - vistos if vistos is not None else set()
+    if vistos is not None:
+        vistos.clear()
+        vistos.update(presentes)
     for a in lista:
         if a["motivo"]:
             continue
@@ -371,8 +417,11 @@ def revisar(texto, aplazados, preguntar_=preguntar):
                 aplazados.add(a["id"])
                 continue
             layout, variant = distribucion(respuesta)
+            avisar_(a["descripcion"], layout, True)
         else:
             layout, variant = sabido["layout"], sabido["variant"]
+            if a["id"] in recien:
+                avisar_(a["descripcion"], layout, False)
         nuevos = [n for n in a["nombres"] if n not in conf]
         if not nuevos:
             continue
@@ -395,7 +444,7 @@ def demonio():
         fcntl.flock(cerrojo, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         return 0
-    ultimo, aplazados, sin_hypr = None, set(), 0.0
+    ultimo, aplazados, sin_hypr, vistos = None, set(), 0.0, None
     while True:
         if hypr_vivo():
             sin_hypr = 0.0
@@ -412,7 +461,12 @@ def demonio():
             ultimo = texto
             # Que amaine: un aparato aparece en /proc antes que en Hyprland.
             time.sleep(0.5)
-            aplazados = revisar(texto, aplazados)
+            # La primera vez se apunta lo que ya hay enchufado sin avisar: al
+            # entrar en la sesion no hace falta un aviso por teclado.
+            if vistos is None:
+                vistos = {a["id"] for a in aparatos(leer_proc(texto),
+                          maquina.detalle()["tipo"] == "laptop", teclados_hypr())}
+            aplazados = revisar(texto, aplazados, vistos=vistos)
         time.sleep(SONDEO)
 
 
