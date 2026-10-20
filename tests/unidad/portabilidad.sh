@@ -66,6 +66,9 @@ for f in sorted(raiz.rglob("*")):
         continue
     if ".git" in f.parts or "tests" in f.parts or "__pycache__" in f.parts:
         continue
+    # Lo que bajan npm y Expo para la app de remoto/ (no versionado, y de otros)
+    if "node_modules" in f.parts or ".expo" in f.parts:
+        continue
     try:
         src = f.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
