@@ -5,9 +5,46 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-10-19**, en el **portátil** (antes, 2026-09-25 en las dos).
+Última sesión: **2026-10-20**, en la **PC** (antes, el mismo día en el portátil).
 
 ---
+
+## 2026-10-20 (PC): la barra de arriba ya no se escondía, y la recarga bajaba a 60 Hz
+
+- **Qué era**: una waybar de arriba de las 05:13 seguía viva como hija del
+  demonio, pero `self.proc` ya no la nombraba. Se quedaba en `top` sin recibir
+  un solo toggle, y al haber dos barras de arriba en niveles distintos,
+  `realinear()` relanzaba la apuntada cada 5 s sin tocar la otra: un bucle
+  para siempre. Se veía con `pgrep -af 'waybar -c'` (dos `config.jsonc`) y en
+  `hyprctl layers` (dos `waybar-main`, una en cada nivel).
+- **Qué no era**: no ignoraba SIGTERM (comprobado: muere con él). El demonio
+  nunca se lo mandó. **No se averiguó qué camino la soltó**; en el diario no
+  hay bloqueo ni modo gaming a esa hora. Si vuelve a pasar, apunta la hora y
+  lo que se hizo justo antes.
+- **El arreglo** (`58b2153`): `relanzar()`, por donde pasan todos los
+  relanzamientos, barre por PPID y ruta de config (`hijos_con_config`) a
+  cualquier otra waybar con la misma config, y remata con SIGKILL la que no se
+  vaya con SIGTERM. Sea cual sea la causa, el primer realineo la recoge.
+  `unidad/barras-supervisor` (16; falla 5 contra el código viejo). Trampa
+  nueva en `CLAUDE.md`.
+- **Y la PC se quedaba a 60 Hz tras cada recarga.** Salió al repasar las
+  notas: `hyprctl reload` reaplica `preferred` (el modo del EDID, 60) y
+  `monitores.py` solo escuchaba enchufes. Como `instalar.sh` recarga ya la
+  sesión al final (`fa50d4a`), cada `git pull && ./instalar.sh` la bajaba a
+  60. Ahora escucha también `configreloaded` (medido: Hyprland lo emite en
+  cada reload); `unidad/monitores` 5b (falla contra el código viejo). En vivo:
+  demonio reiniciado, `reload`, y se queda en 100.
+- **En la PC**: los dos demonios reiniciados y `./instalar.sh` pasado: 43/43,
+  «sin pendientes», `configerrors` vacío, 62 atajos, 100 Hz, una waybar por
+  config y la de arriba escondida con ventanas abiertas.
+- **En la laptop**: `git pull && ./instalar.sh`, y luego volver a entrar (o
+  `SUPER+SHIFT+C` para las barras) para que los dos demonios carguen el código
+  nuevo. Allí lo de los 60 Hz importa con el televisor puesto.
+- **Prueba intermitente**: `unidad/portapapeles` falló una vez en «no toco la
+  cache real del usuario» y pasó al repetirla. La huella de
+  `~/.cache/celiuzpaper` cambió por la sesión real mientras corría, no por la
+  prueba. Si se repite a menudo, que esa comprobación ignore lo que escribe la
+  sesión (el `lock.log`, los `lock-*.conf`).
 
 ## 2026-10-20 (portátil): el repo pasa a privado y trae las imágenes del saludo
 

@@ -7,7 +7,7 @@ una laptop. Casi todo lo que sigue existe por esa razón.
 
 ---
 
-# Dónde va la cosa (al 2026-09-25)
+# Dónde va la cosa (al 2026-10-20)
 
 Lee esto primero y sabrás en qué punto está el escritorio sin tener que
 reconstruirlo. El detalle largo está en **`SIGUIENTE.md`** (por dónde seguir,
@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (42 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (43 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -38,14 +38,15 @@ lo que vayas a escribir tú.
 2. **Los `.conf` viejos siguen ahí a propósito** («El puente», en
    `SIGUIENTE.md`). No se editan. Se borran cuando las dos máquinas hayan
    entrado con Lua: **la PC ya entró; falta confirmar la laptop.**
-3. **Lo último que se añadió**: menú de salida con doble pregunta
-   (`SUPER+SHIFT+P`), historial de portapapeles con fijados y guardados
-   (`SUPER+SHIFT+V`), y el volumen a la vista con una barra abajo
-   (`hypr/scripts/osd.sh`, en las teclas de volumen).
-4. **La PC está verificada al día de hoy**: 30/30 pruebas, `hyprctl
-   configerrors` vacío, `instalar.sh --revisar` sin pendientes, los 100 Hz, el
-   tema de SDDM puesto, y el menú / portapapeles / OSD probados en vivo. **No
-   hay que repetir esa comprobación.**
+3. **Lo último que se añadió** (octubre): el panel del Bluetooth, los paneles
+   de la barra que se excluyen, el saludo de la terminal con imágenes, y cada
+   teclado con su distribución (`teclados.py`). Antes, en septiembre: menú de
+   salida (`SUPER+SHIFT+P`), portapapeles (`SUPER+SHIFT+V`) y el OSD del
+   volumen. El detalle, en `SIGUIENTE.md`.
+4. **La PC está verificada al 2026-10-20**: 43/43 pruebas, `hyprctl
+   configerrors` vacío, `instalar.sh --revisar` sin pendientes, 62 atajos, los
+   100 Hz y el tema de SDDM puesto. El menú, el portapapeles y el OSD se
+   probaron en vivo el 2026-09-25. **No hay que repetir esa comprobación.**
 
 ## Lo siguiente: el MODO GAMING (en construcción)
 
@@ -542,7 +543,9 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   *not planned*. Pero el dato **sí está**: `hyprctl monitors -j` trae
   `availableModes` entero, y elegir bien es aritmética sobre esa lista. Eso es
   `scripts/monitores.py`, que arranca desde `lua/autostart.lua` con
-  `--demonio` y reacciona a `monitoradded`. Tres decisiones suyas que conviene no
+  `--demonio` y reacciona a `monitoradded` **y a `configreloaded`**: cada
+  recarga reaplica `preferred` y devolvía la PC a 60 Hz (2026-10-20, al
+  recargar `instalar.sh` la sesión). Tres decisiones suyas que conviene no
   deshacer:
   - **agrupa por resolución primero y por refresco después**, nunca al revés (al
     revés *es* `highrr`, y el televisor se va a 800x600);
