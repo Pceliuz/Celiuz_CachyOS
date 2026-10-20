@@ -7,30 +7,33 @@
 # - Que en kitty pinta una imagen de la carpeta, al azar entre las que haya.
 # - Que sin imagenes, o en una terminal que no sabe dibujarlas, sale el
 #   fastfetch normal: nunca un saludo roto ni un error.
-# - Que la carpeta es la de imagenes del usuario (xdg-user-dir), no una cableada.
+# - Que la carpeta es fastfetch/imagenes del repo donde este el script, se
+#   llame por donde se llame (tambien por el enlace de ~/.local/bin).
 # - Que fastfetch/config.jsonc es JSON valido para el fastfetch instalado.
 # - Que instalar.sh engancha fish UNA vez y respeta un fish_greeting propio.
 #
-# fastfetch y xdg-user-dir son de mentira (salvo en la comprobacion de la config).
+# fastfetch es de mentira, y se trabaja en una COPIA del repo con la carpeta
+# de imagenes vaciada (salvo en la comprobacion de la config).
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/../lib/comun.sh"
 
 preparar_entorno
-SCRIPT="$REPO/hypr/scripts/saludo.sh"
-FOTOS="$TMP/fotos"
-mkdir -p "$FOTOS/terminal"
-binario_falso xdg-user-dir 0 "echo '$FOTOS'"
+COPIA="$(copiar_repo)"
+SCRIPT="$COPIA/hypr/scripts/saludo.sh"
+IMAGENES="$COPIA/fastfetch/imagenes"
+rm -rf "$IMAGENES"; mkdir -p "$IMAGENES"
 binario_falso fastfetch 0
 
 ultima() { tail -n1 "$REGISTRO/fastfetch.log" 2>/dev/null; }
 
 titulo "1. La carpeta"
-afirmar_igual "$FOTOS/terminal" "$("$SCRIPT" --carpeta)" "sale de xdg-user-dir"
-binario_falso xdg-user-dir 0 "echo '$HOME'"
-afirmar_igual "$HOME/Pictures/terminal" "$("$SCRIPT" --carpeta)" \
-    "si no hay carpeta de imagenes, ~/Pictures/terminal"
-binario_falso xdg-user-dir 0 "echo '$FOTOS'"
+afirmar_igual "$IMAGENES" "$("$SCRIPT" --carpeta)" "la del repo donde esta el script"
+mkdir -p "$HOME/.local/bin"; ln -sfn "$SCRIPT" "$HOME/.local/bin/celiuz-saludo"
+afirmar_igual "$IMAGENES" "$("$HOME/.local/bin/celiuz-saludo" --carpeta)" \
+    "   tambien llamado por el enlace de ~/.local/bin"
+afirmar "el repo de verdad trae la carpeta, con imagenes" \
+    test -n "$(ls "$REPO/fastfetch/imagenes" 2>/dev/null | head -n1)"
 
 titulo "2. Sin imagenes: el fastfetch de siempre"
 salida="$(KITTY_WINDOW_ID=1 "$SCRIPT" 2>&1)"; codigo=$?
@@ -38,9 +41,9 @@ afirmar_igual "0|" "$codigo|$salida" "sale bien y sin escribir nada"
 afirmar_igual "" "$(ultima)" "fastfetch sin --logo"
 
 titulo "3. Con imagenes, en kitty: una de ellas"
-for n in uno dos tres; do : > "$FOTOS/terminal/$n.png"; done
-: > "$FOTOS/terminal/cuatro.JPG"
-: > "$FOTOS/terminal/notas.txt"
+for n in uno dos tres; do : > "$IMAGENES/$n.png"; done
+: > "$IMAGENES/cuatro.JPG"
+: > "$IMAGENES/notas.txt"
 : > "$REGISTRO/fastfetch.log"
 for _ in $(seq 40); do KITTY_WINDOW_ID=1 TERM=xterm-kitty "$SCRIPT"; done
 vistas="$(grep -o -- '--logo [^ ]*' "$REGISTRO/fastfetch.log" | sort -u | sed 's|.*/||' | tr '\n' ' ')"
@@ -62,14 +65,14 @@ for k in $(seq 1 38); do
 done
 afirmar_igual "0" "$malas" "en 40 aperturas, ninguna se repite antes de 3 terminales"
 afirmar_igual "0" "$seguidas" "nunca sale la misma dos veces seguidas (ni al cambiar de vuelta)"
-rm "$FOTOS/terminal/tres.png"
-: > "$FOTOS/terminal/cinco.png"
+rm "$IMAGENES/tres.png"
+: > "$IMAGENES/cinco.png"
 : > "$REGISTRO/fastfetch.log"
 for _ in $(seq 4); do KITTY_WINDOW_ID=1 "$SCRIPT"; done
 salieron="$(grep -o -- '--logo [^ ]*' "$REGISTRO/fastfetch.log" | sed 's|.*/||')"
 afirmar_igual "si no" "$(grep -qx cinco.png <<< "$salieron" && echo si || echo no) $(grep -qx tres.png <<< "$salieron" && echo si || echo no)" \
     "una nueva entra en la vuelta y una borrada deja de salir"
-rm "$FOTOS/terminal/cinco.png"; : > "$FOTOS/terminal/tres.png"
+rm "$IMAGENES/cinco.png"; : > "$IMAGENES/tres.png"
 
 titulo "4. Una terminal que no dibuja imagenes"
 : > "$REGISTRO/fastfetch.log"
@@ -159,11 +162,9 @@ afirmar_igual "1 no" "$codigo $( [ -e "$TMP/r.png" ] && echo si || echo no)" \
     "una imagen rota sale con 1 y no deja copia"
 
 titulo "8. saludo.sh usa la copia adaptada si ya esta"
-cp "$TMP/sticker.png" "$FOTOS/terminal/"
-rm -f "$FOTOS/terminal/"{uno,dos,tres}.png "$FOTOS/terminal/cuatro.JPG"
-binario_falso xdg-user-dir 0 "echo '$FOTOS'"
+cp "$TMP/sticker.png" "$IMAGENES/"
+rm -f "$IMAGENES/"{uno,dos,tres}.png "$IMAGENES/cuatro.JPG"
 salida="$("$SCRIPT" --preparar)"
-afirmar_contiene "$REGISTRO/xdg-user-dir.log" "PICTURES" "pregunta la carpeta"
 copia="$(ls "$XDG_CACHE_HOME/celiuz/saludo/"*.png 2>/dev/null | head -n1)"
 afirmar "--preparar deja la copia en la cache" test -s "$copia"
 : > "$REGISTRO/fastfetch.log"

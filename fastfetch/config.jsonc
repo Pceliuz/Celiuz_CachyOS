@@ -3,7 +3,7 @@
 // a secas tambien lo usa (con el logo de la distro).
 //
 // La imagen la pone hypr/scripts/saludo.sh (`celiuz-saludo`): elige una al azar
-// de ~/Imágenes/terminal y se la pasa con --logo. Aqui solo va lo que no cambia.
+// de fastfetch/imagenes/ (en el repo) y se la pasa con --logo. Aqui solo va lo que no cambia.
 //
 // Los colores son los ANSI de la terminal (magenta, blanco...), no un hex: asi
 // siguen al tema de kitty de cada equipo. Los iconos son de Nerd Font.

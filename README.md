@@ -1382,11 +1382,13 @@ uno se cierra el que hubiera abierto.
 ## El saludo de la terminal
 
 Al abrir una terminal, fastfetch (`fastfetch/config.jsonc`, enlazado a
-`~/.config/fastfetch`) con una **imagen al azar** al lado. Las imágenes las pones
-tú en la carpeta `terminal` de tus imágenes —`~/Imágenes/terminal`, o
-`~/Pictures/terminal` en inglés; `celiuz-saludo --carpeta` te dice cuál—: PNG,
-JPG, WebP o GIF, y las de fondo transparente quedan mejor. El repo no trae
-ninguna. Para probar una concreta: `celiuz-saludo ruta/a/la/imagen.png`.
+`~/.config/fastfetch`) con una **imagen al azar** al lado. Las imágenes vienen
+con el repo, en **`fastfetch/imagenes/`** (455 de anime, el 2026-10-20), y se
+instalan con los dotfiles: para quitar una la borras de ahí, para añadir otra la
+copias ahí, y con un commit llega al otro equipo. PNG, JPG, WebP o GIF; las de
+fondo transparente quedan mejor. **Solo pueden estar ahí porque el repo es
+privado**: no son nuestras para repartir, y si algún día se hace público esa
+carpeta tiene que salir antes. Para probar una concreta: `celiuz-saludo ruta/a/la/imagen.png`.
 
 Cada imagen se **adapta** antes de dibujarla (`hypr/scripts/lib/imagen_saludo.py`):
 se reduce, a un sticker se le recorta el aire transparente de alrededor (si no,

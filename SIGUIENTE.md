@@ -9,6 +9,18 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (portátil): el repo pasa a privado y trae las imágenes del saludo
+
+El usuario lo hizo privado y las 455 imágenes de `~/Imágenes/terminal` se
+movieron a `fastfetch/imagenes/` (33 MB). `saludo.sh --carpeta` las busca ahí,
+junto al propio script. **En la PC, tras `git pull`**: abrir una kitty y ver
+que sale una imagen; la carpeta vieja de allí (`~/Imágenes/terminal`, si la
+tenía) ya no se mira.
+
+Y un aviso que salió en la laptop durante el rebase, «module 'lua.teclados' not
+found»: git escribió `hyprland.lua` antes que el módulo nuevo y Hyprland recargó
+en el hueco. Ahora se carga solo si el fichero está (`5ffad6f`).
+
 ## 2026-10-20 (portátil): saludo sin repetir, Insert para el overlay, y cada teclado con su distribución
 
 - **El saludo** sale al azar **sin repetirse** hasta haber enseñado todas, y la
@@ -34,7 +46,7 @@ el fichero llegó a 1238 líneas).
   reloj cierra el de red, etc. Probado en la sesión real (WiFi → reloj →
   Bluetooth: siempre una sola capa) y con `unidad/paneles-exclusivos` (12).
 - **El saludo de la terminal**: `fastfetch/config.jsonc` + `hypr/scripts/saludo.sh`
-  (`celiuz-saludo`), imagen al azar de `~/Imágenes/terminal` por el protocolo
+  (`celiuz-saludo`), imagen al azar de `fastfetch/imagenes/` (en el repo desde el 2026-10-20) por el protocolo
   de kitty, enganchado a fish por `instalar.sh` (`saludo_fish`). Visto en
   anidado; `unidad/saludo` (21). Las imágenes se adaptan (`lib/imagen_saludo.py`:
   recorte del aire transparente, esquinas redondeadas, 400 px) a una caché, en

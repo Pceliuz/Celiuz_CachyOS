@@ -5,10 +5,11 @@
 #
 # LAS IMAGENES
 # ------------
-# Las pones tu en la carpeta «terminal» de tus imágenes (xdg-user-dir PICTURES:
-# ~/Imágenes/terminal en español, ~/Pictures/terminal en inglés). PNG, JPG,
-# WebP o GIF; las de fondo transparente quedan mejor. El repo no trae ninguna:
-# es publico y las de anime no son nuestras para repartir.
+# Viven en el repo, en fastfetch/imagenes/, y se instalan con los dotfiles:
+# para quitar una, se borra de ahi; para poner otra, se copia ahi. PNG, JPG,
+# WebP o GIF; las de fondo transparente quedan mejor. OJO: pueden estar aqui
+# porque el repo es PRIVADO (desde el 2026-10-20) —las de anime no son nuestras
+# para repartir—. Si algun dia se hace publico, esta carpeta sale antes.
 #
 # Antes de dibujarla se ADAPTA (lib/imagen_saludo.py): se reduce, a un sticker
 # se le recorta el aire transparente de alrededor y a una foto se le redondean
@@ -25,14 +26,12 @@
 #   celiuz-saludo --preparar  adapta ya todas (la primera vez de cada una, si
 #                             no, tarda un poco mas en abrir esa terminal)
 
+# La raiz se saca del propio script atravesando el enlace de ~/.local/bin
+# (la regla del CLAUDE.md: nada de ~/dotfiles cableado).
 carpeta() {
-    local fotos
-    fotos="$(xdg-user-dir PICTURES 2>/dev/null)"
-    # xdg-user-dir devuelve $HOME si no hay carpeta de imagenes definida.
-    if [ -z "$fotos" ] || [ "$fotos" = "$HOME" ]; then
-        fotos="$HOME/Pictures"
-    fi
-    printf '%s/terminal\n' "$fotos"
+    local raiz
+    raiz="$(dirname "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")")"
+    printf '%s/fastfetch/imagenes\n' "$raiz"
 }
 
 # ¿Entiende la terminal el protocolo de imagenes de kitty? Se mira lo que dice

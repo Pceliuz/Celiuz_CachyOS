@@ -1,7 +1,8 @@
 # Notas para Claude Code
 
 Este repo es el escritorio de Hyprland de Parzival (`Pceliuz/Celiuz_CachyOS`),
-sobre CachyOS. **Es público y se usa en más de un equipo**: una PC de sobremesa y
+sobre CachyOS. **Es privado desde el 2026-10-20 (antes público) y se usa en más
+de un equipo**: una PC de sobremesa y
 una laptop. Casi todo lo que sigue existe por esa razón.
 
 ---
@@ -57,7 +58,7 @@ pruebas: `lib/catalogo.py`, el dock sin juegos, `modo-gaming.py` + tarjeta
 Falta medir el rendimiento con un juego de verdad y **probarlo todo en la
 sesión real**, que aún no se ha hecho: la lista está en `SIGUIENTE.md`.
 
-**El repo es público: aquí no se nombra al asistente del usuario.** Él llama a
+**Aquí no se nombra al asistente del usuario** (la regla es de cuando el repo era público, y sigue). Él llama a
 `modo-gaming.py` y engancha lo suyo en `~/.config/celiuz/modo-gaming.d/`.
 
 Lo que ya existía y en lo que se apoya (no dupliques):
@@ -93,6 +94,15 @@ enumera SDL**, no si el device existe.
 
 ---
 
+## Privado, y con cosas que no se pueden publicar
+
+Desde el 2026-10-20 el repo es **privado** en GitHub, y por eso lleva las 455
+imágenes de anime del saludo de la terminal en `fastfetch/imagenes/`: no son
+nuestras para repartir. **Si algún día vuelve a ser público, esa carpeta sale
+antes**, y de la historia también (un `git rm` no basta: siguen en los commits
+viejos). Lo demás del repo se sigue escribiendo como si lo fuera a clonar otra
+persona en otro equipo: la regla de abajo no cambia.
+
 ## La regla de oro
 
 **Nada que dependa de la máquina entra en git.** Se rompió justo por aquí el
@@ -126,7 +136,6 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadió el usuario |
 | `~/.cache/celiuzpaper/lock-*.conf` | fondo y medidas del bloqueo, rehechos en cada bloqueo |
 | `~/.local/state/celiuz/bluetooth.json` | cuándo se usó cada auricular y a cuáles bloqueó el cerrojo de `bluetooth.py` |
-| `~/Imágenes/terminal/` (`xdg-user-dir PICTURES`) | las imágenes del saludo de la terminal; el repo no trae ninguna |
 | `~/.cache/celiuz/saludo/` | las copias adaptadas de esas imágenes (clave: tamaño + fecha + ruta) |
 | la línea `celiuz-saludo` al final de `~/.config/fish/config.fish` | el `fish_greeting`; `instalar.sh` la añade una vez y no toca un saludo propio |
 | `~/.config/celiuz/clima.conf` | `ubicacion` (auto / zona / fija), `clima = no`, `signo` del panel del reloj |

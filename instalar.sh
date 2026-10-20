@@ -251,10 +251,7 @@ saludo_fish() {
     titulo "2b. El saludo de la terminal"
     local fotos
     fotos="$("$REPO/hypr/scripts/saludo.sh" --carpeta)"
-    if [ ! -d "$fotos" ]; then
-        hacer mkdir -p "$fotos"
-    fi
-    gris "  las imagenes van en: $fotos"
+    gris "  las imagenes, en el repo: $fotos ($(find "$fotos" -maxdepth 1 -type f 2>/dev/null | wc -l))"
     if ! command -v fastfetch >/dev/null 2>&1; then
         aviso "el saludo de la terminal necesita: fastfetch"
         gris "    sudo pacman -S fastfetch"
