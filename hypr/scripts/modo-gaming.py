@@ -73,6 +73,7 @@ sys.path.insert(0, os.path.join(AQUI, "lib"))
 
 import canales  # noqa: E402
 import catalogo  # noqa: E402
+import hardware  # noqa: E402
 import hypr  # noqa: E402
 import juegos  # noqa: E402
 import mando  # noqa: E402
@@ -847,35 +848,6 @@ def tecla_overlay(tipo=None):
     return "Insert" if tipo == "laptop" else "Delete"
 
 
-DRM = "/sys/class/drm"
-
-
-def datos_de_gpu(drm=None):
-    """{"temp": bool, "vram": bool}: si alguna GPU de este equipo tiene sensor de
-    temperatura y memoria PROPIA que enseñar. Una integrada (la Intel UHD 620 de
-    la laptop) no tiene ninguna de las dos: MangoHud pintaba «0 °C» y «VRAM 0.0
-    GiB», y el usuario pregunto que era eso (2026-10-20). Su calor es el del CPU y
-    su memoria es la RAM, que ya salen al lado.
-
-    Se pregunta al ENTRAR al modo (la config se rehace cada vez), no al instalar:
-    una GPU se cambia sin reinstalar. NVIDIA con su driver no deja nada de esto en
-    /sys, pero siempre tiene las dos (MangoHud las lee por NVML)."""
-    drm = drm or DRM
-    temp = vram = False
-    for tarjeta in glob.glob(os.path.join(drm, "card[0-9]*")):
-        if "-" in os.path.basename(tarjeta):
-            continue                      # card1-eDP-1: una salida, no una GPU
-        dispositivo = os.path.join(tarjeta, "device")
-        driver = os.path.basename(os.path.realpath(os.path.join(dispositivo, "driver")))
-        if driver == "nvidia":
-            return {"temp": True, "vram": True}
-        if glob.glob(os.path.join(dispositivo, "hwmon", "hwmon*", "temp*_input")):
-            temp = True
-        if os.path.exists(os.path.join(dispositivo, "mem_info_vram_total")):
-            vram = True                   # amdgpu, dedicada o la reserva de un APU
-    return {"temp": temp, "vram": vram}
-
-
 def escribir_mangohud():
     """La config del overlay: una barra horizontal arriba a la izquierda con la
     paleta del repo, ESCONDIDA hasta pulsar su tecla (`tecla_overlay()`: Supr
@@ -887,7 +859,10 @@ def escribir_mangohud():
     enseñarlo desde fuera (`mangohudctl`, el boton del menu rapido)."""
     c = paleta_hex()
     fuente = fuente_del_repo()
-    gpu = datos_de_gpu()
+    # Solo lo que este equipo tiene (lib/hardware.py, preguntado ahora mismo):
+    # una integrada no tiene temperatura ni VRAM propias, y un sobremesa no
+    # tiene bateria.
+    hw = hardware.overlay(hardware.detectar())
     lineas = [
         "# GENERADO por hypr/scripts/modo-gaming.py al entrar al modo gaming.",
         "# NO EDITAR: se reescribe cada vez. Los colores salen de colores.conf.",
@@ -911,15 +886,22 @@ def escribir_mangohud():
         "frametime",
         "frame_timing=1",
         "frametime_color=%s" % c["neon"],
-        "gpu_stats",
-    ] + (["gpu_temp"] if gpu["temp"] else []) + [
-        "gpu_color=%s" % c["neon"],
-    ] + (["vram", "vram_color=%s" % c["amatista"]] if gpu["vram"] else []) + [
-        "cpu_stats",
-        "cpu_temp",
-        "cpu_color=%s" % c["amatista"],
-        "ram",
-        "ram_color=%s" % c["tenue"],
+    ]
+    if hw["gpu"]:
+        lineas += ["gpu_stats", "gpu_color=%s" % c["neon"]]
+    if hw["gpu_nombre"]:
+        lineas.append("gpu_name")
+    if hw["gpu_temp"]:
+        lineas.append("gpu_temp")
+    if hw["vram"]:
+        lineas += ["vram", "vram_color=%s" % c["amatista"]]
+    lineas += ["cpu_stats", "cpu_color=%s" % c["amatista"]]
+    if hw["cpu_temp"]:
+        lineas.append("cpu_temp")
+    lineas += ["ram", "ram_color=%s" % c["tenue"]]
+    if hw["bateria"]:
+        lineas += ["battery", "battery_color=%s" % c["luz"]]
+    lineas += [
         "engine_color=%s" % c["neon"],
         "horizontal_separator_color=%s" % c["apagado"],
         "toggle_hud=%s" % tecla_overlay(),

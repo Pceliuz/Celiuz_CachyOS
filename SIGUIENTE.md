@@ -72,9 +72,13 @@ el fichero llegó a 1238 líneas).
   una vez para escribirlo. La tecla estaba bien: «Ins» manda `Insert` (medido
   con `xkbcli interactive-wayland`).
 - **Visto**: la barra sale en Silksong con Ins.
-- Y en una GPU integrada ya no salen «0 °C» ni «VRAM 0.0 GiB»: la config del
-  overlay mira la GPU al entrar al modo (`modo-gaming.datos_de_gpu`,
-  `unidad/mangohud-gpu`). En la PC (NVIDIA) siguen saliendo las dos.
+- **La barra enseña solo lo que el equipo tiene**: `lib/hardware.py` (pedido por
+  el usuario) mira al entrar al modo cada GPU (integrada o dedicada, sensor,
+  memoria propia), el sensor del CPU y la bateria. Integrada: sin «0 °C» ni
+  «VRAM 0.0»; hibrido: con el nombre de la GPU; portatil: con bateria (añadido
+  sin pedirlo: si no la quiere, fuera). `hardware.py` da el resumen con el
+  porque; `unidad/hardware` (21). **En la PC**: `hypr/scripts/lib/hardware.py`
+  debe decir NVIDIA dedicada y la barra, temperatura y VRAM de la 3050.
 
 ## 2026-10-20 (portátil): el repo pasa a privado y trae las imágenes del saludo
 

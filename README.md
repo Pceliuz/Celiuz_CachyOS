@@ -321,6 +321,13 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 > `mangohud %command%` en las opciones de lanzamiento de los juegos que las
 > tengan **vacías** (lo que hayas escrito tú no se toca). Para que no lo haga:
 > `"mangohud_lanzamiento": false` en `~/.config/celiuz/modo-gaming.json`.
+>
+> La barra enseña **solo lo que tu equipo tiene**: al entrar al modo,
+> `hypr/scripts/lib/hardware.py` mira cada GPU (integrada o dedicada, si tiene
+> sensor y memoria propios), el sensor del CPU y si hay batería. Una integrada
+> sale sin temperatura ni VRAM (no tiene), un portátil con dos GPU enseña además
+> su nombre (para saber en cuál corre el juego) y un portátil, la batería. Para
+> ver qué ha detectado y por qué: `hypr/scripts/lib/hardware.py`.
 
 ---
 
