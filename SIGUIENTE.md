@@ -62,6 +62,17 @@ el fichero llegó a 1238 líneas).
   prueba. Si se repite a menudo, que esa comprobación ignore lo que escribe la
   sesión (el `lock.log`, los `lock-*.conf`).
 
+## 2026-10-20 (laptop): con el bloqueo solo se ve el fondo
+
+Reporte de alguien que usa el repo: una partida de Minecraft detrás del bloqueo.
+Era el vigilante del modo gaming devolviendo del escritorio 99 al del juego.
+Arreglado en tres capas: el vigilante respeta el 99 (`WS_BLOQUEO`), `lock.sh`
+mira que no se vea nada en ninguna pantalla antes de encender el xray (si no,
+fotograma), y un vigía lo apaga si aparece una ventana bloqueado.
+`e2e/bloqueo` (55), `unidad/a-la-vista` (13). **Falta en vivo**: bloquear en el
+modo gaming con un juego abierto; y en la PC con el televisor puesto y ventanas
+en él (debe salir el fotograma, no el xray).
+
 ## 2026-10-20 (laptop): teclado de España y aviso al conectar
 
 - La tarjeta de `teclados.py` tiene tres opciones: `Ñ Ç` España (`es,us`), `Ñ`

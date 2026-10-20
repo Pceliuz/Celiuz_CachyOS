@@ -123,6 +123,11 @@ SIEMPRE = ("steam",)
 # ni pide fotogramas a lo que no se ve, y un juego solo y a pantalla completa
 # puede ir directo a la pantalla.
 WS_BIBLIOTECA = 1
+# El escritorio vacio al que salta el bloqueo (WORKSPACE_LIMPIO de lock.sh)
+# para que su xray solo enseñe el fondo. El vigilante NO puede devolverte de
+# ahi: lo hacia («a uno vacio no se va») y una partida de Minecraft salio
+# detras de la pantalla de bloqueo de alguien que usa este repo (2026-10-20).
+WS_BLOQUEO = 99
 GUARDADAS = "special:modo-gaming"
 CLASE_BIBLIOTECA = "celiuz-biblioteca"
 CLASE_VIDEO = "celiuz-video"   # el video de entrada o de salida (mpv)
@@ -623,6 +628,11 @@ def vigilar():
         *lineas, buffer = buffer.split(b"\n")
         for linea in lineas:
             evento, _, datos = linea.decode("utf-8", "replace").partition(">>")
+            # En el escritorio del bloqueo no se mueve nada ni a nadie: ni te
+            # saca de ahi, ni te lleva detras de una ventana nueva.
+            if evento in ("openwindow", "closewindow") and \
+                    escritorio_activo().get("id") == WS_BLOQUEO:
+                continue
             if evento == "openwindow":
                 direccion = "0x" + datos.split(",")[0]
                 ventanas = clientes()
@@ -636,6 +646,8 @@ def vigilar():
                 if not datos.isdigit():
                     continue
                 n = int(datos)
+                if n == WS_BLOQUEO:
+                    continue            # el bloqueo: ahi si se va, y vacio
                 if n == WS_BIBLIOTECA or n in en_uso(clientes()):
                     bueno = n
                 else:

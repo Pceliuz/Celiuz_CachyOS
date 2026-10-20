@@ -27,7 +27,10 @@
 #   1. Guarda el escritorio en el que estas y salta a uno vacio.
 #   2. Esconde las barras (arriba y dock).
 #   3. Congela las aplicaciones, salvo juegos y terminales (lib/congelar.py).
-#   4. Enciende el xray y escribe el fragmento de fondo transparente.
+#   4. Comprueba que NO se ve ninguna ventana en ninguna pantalla
+#      (lib/a_la_vista.py). Si queda alguna, nada de xray: el fotograma del
+#      fondo, que lo tapa todo. Si no, enciende el xray, y un vigia lo apaga
+#      en cuanto aparezca una ventana a la vista con el bloqueo puesto.
 #   5. Bloquea, y no se rinde si hyprlock cae.
 #   6. Al desbloquear DESHACE TODO, pase lo que pase (trap EXIT).
 #
@@ -411,6 +414,7 @@ XRAY_ORIGINAL=""
 ANR_ORIGINAL=""
 BARRAS_ESCONDIDAS=0
 CONGELADO=0
+VIGIA=""
 
 despejar() {
     WS_ORIGINAL=$(hyprctl activeworkspace -j 2>/dev/null \
@@ -454,6 +458,10 @@ limpiar() {
     local codigo=$?
     trap - EXIT INT TERM HUP
 
+    if [ -n "$VIGIA" ]; then
+        kill "$VIGIA" 2>/dev/null
+        VIGIA=""
+    fi
     if [ -n "$XRAY_ORIGINAL" ]; then
         hypr_ajustar misc:session_lock_xray "$XRAY_ORIGINAL" >/dev/null 2>&1
         echo "lock: xray devuelto a $XRAY_ORIGINAL"
@@ -534,6 +542,46 @@ if [ "$CONGELAR" -eq 1 ]; then
     CONGELADO=1
 fi
 
+# --- 4. Que no se vea NADA de las apps -----------------------------------------
+# Lo pidio el usuario tras ver una partida de Minecraft detras del bloqueo de
+# alguien que usa este repo (2026-10-20): con el bloqueo puesto solo se ven el
+# fondo y la pantalla de bloqueo. El salto al escritorio vacio no lo garantiza
+# solo (el vigilante del modo gaming te devolvia al juego, una segunda pantalla
+# no se vacia, una ventana fijada sale en todos): se MIRA. Unas vueltas, porque
+# quien nos devuelve lo hace unos milisegundos despues del salto. Si sigue
+# habiendo algo, o no se puede saber, el fotograma: es una imagen del VIDEO del
+# fondo (ffmpeg), no una captura de pantalla, asi que no lleva ninguna app.
+if [ "$MODO_FONDO" = "xray" ]; then
+    vista=""; codigo_vista=2
+    for vuelta in 1 2 3; do
+        sleep 0.3
+        vista="$("$SCRIPTS/lib/a_la_vista.py" 2>/dev/null)"; codigo_vista=$?
+        [ "$codigo_vista" -eq 0 ] && break
+        [ "$vuelta" -lt 3 ] && [ -n "$WS_ORIGINAL" ] \
+            && hypr_despachar workspace "$WORKSPACE_LIMPIO" >/dev/null 2>&1
+    done
+    if [ "$codigo_vista" -ne 0 ]; then
+        echo "lock: queda algo a la vista ($(printf '%s' "$vista" | tr '\n' ',' | sed 's/,$//')): sin xray, con el fotograma"
+        MODO_FONDO=fotograma
+    fi
+fi
+
+# El vigia: con el bloqueo puesto, si aparece una ventana a la vista (un juego,
+# que no se congela, abre otra; algo cambia de escritorio), se apaga el xray en
+# el acto. Lo que se ve entonces detras de la pantalla de bloqueo es negro, no
+# el fondo, pero no se ve ninguna app. Solo actua con un «si» claro (1): un
+# hyprctl que tarda una vez no es motivo para apagarlo.
+vigilar_vista() {
+    while sleep 1; do
+        "$SCRIPTS/lib/a_la_vista.py" >/dev/null 2>&1
+        if [ $? -eq 1 ]; then
+            hypr_ajustar misc:session_lock_xray false >/dev/null 2>&1
+            echo "lock: aparecio una ventana a la vista con el bloqueo puesto: xray apagado"
+            return
+        fi
+    done
+}
+
 if [ "$MODO_FONDO" = "xray" ]; then
     # Se guarda el valor de antes para devolverlo tal cual en el trap: dejarlo
     # encendido seria una fuga, porque cualquier otro bloqueo lo aprovecharia.
@@ -543,6 +591,9 @@ if [ "$MODO_FONDO" = "xray" ]; then
     hypr_ajustar misc:session_lock_xray true >/dev/null 2>&1
     echo "lock: xray encendido (estaba en $XRAY_ORIGINAL)"
     escribir_fragmento xray
+    vigilar_vista 9>&- &
+    VIGIA=$!
+    echo "lock: vigia de ventanas en marcha (pid $VIGIA)"
 else
     escribir_fragmento fotograma
 fi

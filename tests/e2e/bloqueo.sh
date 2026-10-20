@@ -46,6 +46,8 @@ _gris "  repo    = $REPO  (enlazado como ~/dotfiles)"
 binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "activeworkspace -j")               echo "{\"id\": 3, \"windows\": 2}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
   *)                                  echo "ok" ;;
@@ -109,6 +111,8 @@ comprobar_bloqueo_caido() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "activeworkspace -j")               echo "{\"id\": 5, \"windows\": 1}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 1}" ;;
   *)                                  echo "ok" ;;
@@ -148,6 +152,8 @@ comprobar_aviso_no_responde() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "activeworkspace -j")                    echo "{\"id\": 7, \"windows\": 4}" ;;
   "getoption misc:session_lock_xray -j")   echo "{\"int\": 0}" ;;
   "getoption misc:enable_anr_dialog -j")   echo "{\"int\": 1}" ;;
@@ -216,6 +222,8 @@ comprobar_dos_a_la_vez() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "locked")                              echo "false" ;;
   "activeworkspace -j")                  echo "{\"id\": 7, \"windows\": 0}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -263,6 +271,8 @@ comprobar_bloqueada_sin_hyprlock() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "locked")                              echo "true" ;;
   "activeworkspace -j")                  echo "{\"id\": 7, \"windows\": 0}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -301,6 +311,8 @@ comprobar_hyprctl_sin_locked() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "locked")                              echo "unknown request" ;;
   "activeworkspace -j")                  echo "{\"id\": 4, \"windows\": 1}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -334,6 +346,8 @@ comprobar_sin_flock() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "locked")                              echo "false" ;;
   "activeworkspace -j")                  echo "{\"id\": 2, \"windows\": 3}" ;;
   "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
@@ -365,6 +379,8 @@ comprobar_config_lua() {
     binario_falso hyprctl 0 '
 case "$*" in
   "eval return 1")                         echo "ok" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
   "activeworkspace -j")                    echo "{\"id\": 4, \"windows\": 2}" ;;
   "getoption misc:session_lock_xray -j")   echo "{\"bool\": true}" ;;
   "getoption misc:enable_anr_dialog -j")   echo "{\"bool\": false}" ;;
@@ -408,6 +424,58 @@ comprobar_no_toca_nada_real() {
         test -z "$(pgrep -f "$FALSOS/$BLOQUEO" 2>/dev/null)"
 }
 
+comprobar_algo_a_la_vista() {
+    titulo "10. Si queda una app a la vista, nada de xray (Minecraft detras del bloqueo, 2026-10-20)"
+    rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
+    # Dos pantallas: la del foco salto al 99, la otra sigue en el 4 con un juego.
+    binario_falso hyprctl 0 '
+case "$*" in
+  "eval return 1") echo "eval is only supported with the lua config manager" ;;
+  "monitors -j") echo "[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}, {\"activeWorkspace\": {\"id\": 4}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[{\"class\": \"Minecraft\", \"workspace\": {\"id\": 4}, \"mapped\": true}]" ;;
+  "activeworkspace -j")               echo "{\"id\": 4, \"windows\": 1}" ;;
+  "getoption misc:session_lock_xray -j") echo "{\"int\": 0}" ;;
+  *)                                  echo "ok" ;;
+esac'
+    binario_falso "$BLOQUEO" 0
+    LOCK_DESPEGADO=1 CONGELAR=0 MODO_FONDO=xray REINTENTOS=1 \
+    FIFO="$TMP/no-existe-pausa.fifo" FIFO_BARRAS="$TMP/no-existe-barras.fifo" \
+        "$REPO/hypr/scripts/lock.sh" > "$TMP/diario-vista.txt" 2>&1
+    afirmar_contiene "$TMP/diario-vista.txt" "queda algo a la vista \(Minecraft \(escritorio 4\)\)" \
+        "lo ve, y dice que es"
+    afirmar_no_contiene "$REGISTRO/hyprctl.log" 'session_lock_xray true' "NO enciende el xray"
+    afirmar_no_contiene "$XDG_CACHE_HOME/celiuzpaper/lock-fondo.conf" 'rgba\(00000000\)' \
+        "el fondo del bloqueo es el fotograma, opaco"
+    afirmar_igual "1" "$(veces_llamado "$BLOQUEO")" "y bloquea igual"
+}
+
+comprobar_vigia() {
+    titulo "11. Una ventana que aparece CON el bloqueo puesto apaga el xray"
+    rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
+    binario_falso hyprctl 0 "
+case \"\$*\" in
+  \"eval return 1\") echo \"eval is only supported with the lua config manager\" ;;
+  \"monitors -j\") echo '[{\"activeWorkspace\": {\"id\": 99}, \"specialWorkspace\": {\"id\": 0}}]' ;;
+  \"clients -j\")  if [ -f '$REGISTRO/aparece' ]; then echo '[{\"class\": \"steam\", \"workspace\": {\"id\": 99}}]'; else echo '[]'; fi ;;
+  \"activeworkspace -j\")               echo '{\"id\": 3, \"windows\": 2}' ;;
+  \"getoption misc:session_lock_xray -j\") echo '{\"int\": 0}' ;;
+  *)                                  echo ok ;;
+esac"
+    # El bloqueo dura 3 s, y a mitad aparece una ventana en el 99.
+    binario_falso "$BLOQUEO" 0 "sleep 0.5; : > '$REGISTRO/aparece'; sleep 2.5"
+    LOCK_DESPEGADO=1 CONGELAR=0 MODO_FONDO=xray REINTENTOS=1 \
+    FIFO="$TMP/no-existe-pausa.fifo" FIFO_BARRAS="$TMP/no-existe-barras.fifo" \
+        "$REPO/hypr/scripts/lock.sh" > "$TMP/diario-vigia.txt" 2>&1
+    afirmar_contiene "$REGISTRO/hyprctl.log" 'session_lock_xray true' "empieza con el xray (no habia nada)"
+    afirmar_contiene "$TMP/diario-vigia.txt" "aparecio una ventana a la vista" "el vigia la ve"
+    afirmar_igual "2" "$(grep -c 'session_lock_xray false' "$REGISTRO/hyprctl.log")" \
+        "y apaga el xray (una vez el vigia, otra el trap al salir)"
+    # Por su pid, no con `pgrep -f`: eso casa con la orden que lance la prueba.
+    local vigia; vigia="$(sed -n 's/.*vigia de ventanas en marcha (pid \([0-9]*\)).*/\1/p' "$TMP/diario-vigia.txt")"
+    afirmar "el vigia arranco y dijo su pid" test -n "$vigia"
+    afirmar "y no se queda vivo al desbloquear" sh -c "! kill -0 '$vigia' 2>/dev/null"
+}
+
 comprobar_bloqueo_normal
 comprobar_bloqueo_caido
 comprobar_aviso_no_responde
@@ -417,5 +485,7 @@ comprobar_bloqueada_sin_hyprlock
 comprobar_hyprctl_sin_locked
 comprobar_sin_flock
 comprobar_config_lua
+comprobar_algo_a_la_vista
+comprobar_vigia
 comprobar_no_toca_nada_real
 resumen

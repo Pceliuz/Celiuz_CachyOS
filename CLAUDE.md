@@ -1145,6 +1145,18 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   quién estás llamando rival**. Un proceso vivo con su propio dueño detrás no lo
   es, por mucho que comparta nombre y carpeta.
 
+- **El bloqueo no puede fiarse de haber saltado al escritorio vacío: lo MIRA.**
+  El xray deja ver todo lo de debajo, y el salto al 99 no bastaba en tres casos:
+  el vigilante del modo gaming te devolvía al juego en milisegundos («a uno
+  vacío no se va»; salió Minecraft detrás del bloqueo de alguien que usa el
+  repo, 2026-10-20), una segunda pantalla no se vacía, y una ventana fijada sale
+  en todos. Ahora `lock.sh` pregunta a `lib/a_la_vista.py` (0 nada / 1 algo / 2
+  no lo sé) antes de encender el xray, y si no es un 0 usa el fotograma, que
+  sale del VÍDEO del fondo y no lleva ninguna app; y un vigía apaga el xray si
+  aparece una ventana con el bloqueo puesto. El modo gaming deja en paz el
+  escritorio `WS_BLOQUEO` (el mismo número que `WORKSPACE_LIMPIO` de lock.sh;
+  lo compara `unidad/a-la-vista`). Si algo nuevo mueve escritorios solo, que
+  respete el 99.
 - **Una ventana nueva le quita la pantalla completa a la que la tenga**, con
   el valor de fábrica de `misc:on_focus_under_fullscreen` (2): medido en
   anidado, la biblioteca a pantalla completa y un diálogo nuevo acababan
