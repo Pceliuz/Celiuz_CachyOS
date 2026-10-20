@@ -126,6 +126,15 @@ comprobar_dependencias() {
         gris "    sudo pacman -S wf-recorder"
     fi
 
+    # El overlay de FPS del modo gaming (Supr en la PC, Insert en un portatil) lo
+    # dibuja MangoHud. Sin el, el modo arranca Steam con MANGOHUD=1 igual y la
+    # tecla no hace NADA, sin un error en ningun sitio: paso en la laptop el
+    # 2026-10-20. lib32 hace falta para los juegos de 32 bits.
+    if ! command -v mangohud >/dev/null 2>&1; then
+        aviso "el overlay de FPS del modo gaming no saldra sin: mangohud lib32-mangohud"
+        gris "    sudo pacman -S mangohud lib32-mangohud"
+    fi
+
     # El QR de «Compartir red» del panel de red sale de qrencode. Sin el, el
     # panel lo dice en su sitio y enseña la contraseña igual: es un aviso.
     if ! command -v qrencode >/dev/null 2>&1; then
