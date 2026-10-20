@@ -1019,6 +1019,122 @@ def procesado_de_fondo(raiz, poner=False):
     return True
 
 
+# --- MangoHud en los juegos OpenGL ------------------------------------------------
+# `MANGOHUD=1` (lo que lleva el Steam que lanza el modo) solo enciende la capa de
+# VULKAN. Un juego nativo con OpenGL no la carga nunca, y entonces su tecla no
+# enseña nada: paso con Silksong en la laptop el 2026-10-20 (su Player.log dice
+# «Creating OpenGL 4.6 graphics device»). Para OpenGL hace falta el lanzador
+# `mangohud`, que precarga la biblioteca, y eso Steam lo pone POR JUEGO, en sus
+# opciones de lanzamiento. El usuario eligio que el modo lo ponga solo en los
+# juegos que las tengan VACIAS: lo que ya escribio el no se toca. En uno Vulkan
+# no cambia nada (el lanzador no se duplica).
+#
+# Solo con MangoHud instalado: `mangohud %command%` sin el binario deja el juego
+# SIN ARRANCAR. Y solo con Steam cerrado, que reescribe localconfig.vdf al salir.
+# Se apaga con `"mangohud_lanzamiento": false` en ~/.config/celiuz/modo-gaming.json.
+LANZAMIENTO_MANGOHUD = "mangohud %command%"
+_APPS = ["userlocalconfigstore", "software", "valve", "steam", "apps"]
+
+
+def _apps_localconfig(texto):
+    """Donde esta cada juego dentro de localconfig.vdf: ({appid: {cierra,
+    opciones, valor}}, posicion de la `}` del bloque apps o None). `opciones`
+    es el tramo del valor de LaunchOptions, sin las comillas."""
+    pila, clave, apps, cierre_apps = [], None, {}, None
+    for m in catalogo._TOKEN.finditer(texto):
+        cadena, llave, suelto = m.groups()
+        if cadena is None and llave is None and suelto is None:
+            continue                     # comentario o condicional [$WIN32]
+        ruta = [k for k in pila]
+        if llave == "{":
+            pila.append((clave or "").lower())
+            if pila[:-1] == _APPS:
+                apps[clave] = {"cierra": None, "opciones": None, "valor": ""}
+            clave = None
+        elif llave == "}":
+            if not pila:
+                break
+            if pila[:-1] == _APPS and pila[-1] in apps:
+                apps[pila[-1]]["cierra"] = m.start()
+            elif pila == _APPS:
+                cierre_apps = m.start()
+            pila.pop()
+            clave = None
+        elif clave is None:
+            clave = cadena if cadena is not None else suelto
+        else:
+            if (ruta[:-1] == _APPS and ruta[-1] in apps and cadena is not None
+                    and clave.lower() == "launchoptions"):
+                apps[ruta[-1]]["opciones"] = (m.start(1), m.end(1))
+                apps[ruta[-1]]["valor"] = cadena
+            clave = None
+    return apps, cierre_apps
+
+
+def _principio_de_linea(texto, pos):
+    """(inicio de la linea de `pos`, su sangria) o None si hay algo delante."""
+    inicio = texto.rfind("\n", 0, pos) + 1
+    sangria = texto[inicio:pos]
+    return (inicio, sangria) if not sangria.strip() else None
+
+
+def poner_mangohud(texto, appids):
+    """(texto nuevo, appids a los que se les puso). Solo a los que no tienen
+    opciones de lanzamiento, o las tienen vacias."""
+    apps, cierre_apps = _apps_localconfig(texto)
+    if cierre_apps is None:
+        return texto, []
+    cambios, puestos = [], []
+    linea = '"LaunchOptions"\t\t"%s"\n' % LANZAMIENTO_MANGOHUD
+    for appid in appids:
+        e = apps.get(appid)
+        if e and e["opciones"] is not None:
+            if e["valor"].strip():
+                continue                 # lo escribio el usuario: suyo
+            cambios.append((e["opciones"][0], e["opciones"][1], LANZAMIENTO_MANGOHUD))
+        elif e and e["cierra"] is not None:
+            sitio = _principio_de_linea(texto, e["cierra"])
+            if not sitio:
+                continue
+            cambios.append((sitio[0], sitio[0], sitio[1] + "\t" + linea))
+        elif not e:
+            sitio = _principio_de_linea(texto, cierre_apps)
+            if not sitio:
+                continue
+            s = sitio[1] + "\t"
+            cambios.append((sitio[0], sitio[0],
+                            '%s"%s"\n%s{\n%s\t%s%s}\n' % (s, appid, s, s, linea, s)))
+        else:
+            continue
+        puestos.append(appid)
+    for inicio, fin, nuevo in sorted(cambios, reverse=True):
+        texto = texto[:inicio] + nuevo + texto[fin:]
+    return texto, puestos
+
+
+def juegos_sin_mangohud(raiz, escribir=False):
+    """Los juegos instalados a los que les falta el lanzador (y se lo pone si
+    `escribir`). Vacio sin MangoHud, sin cuenta o si el usuario lo apago."""
+    import shutil
+    if not shutil.which("mangohud"):
+        return []
+    if catalogo._leer_json(catalogo.config_usuario()).get("mangohud_lanzamiento", True) is False:
+        return []
+    ruta = catalogo.ruta_localconfig(raiz)
+    try:
+        with open(ruta, encoding="utf-8", errors="replace") as fh:
+            texto = fh.read()
+    except (OSError, TypeError):
+        return []
+    appids = [j["id"][6:] for j in catalogo.juegos_steam() if j["id"].startswith("steam:")]
+    nuevo, puestos = poner_mangohud(texto, appids)
+    if escribir and puestos:
+        with open(ruta + ".celiuz-nuevo", "w", encoding="utf-8") as fh:
+            fh.write(nuevo)
+        os.replace(ruta + ".celiuz-nuevo", ruta)
+    return puestos
+
+
 def preparar_steam():
     """En segundo plano al entrar: Steam en la bandeja CON el overlay, y con los
     shaders mejor atendidos. Si ya corre con el overlay, nada. Si corre sin el
@@ -1028,7 +1144,8 @@ def preparar_steam():
     estado = steam_con_overlay()
     raiz = catalogo.raiz_steam()
     falta_fondo = bool(raiz) and not procesado_de_fondo(raiz)
-    if estado is True and not falta_fondo:
+    falta_mangohud = bool(raiz) and bool(juegos_sin_mangohud(raiz))
+    if estado is True and not falta_fondo and not falta_mangohud:
         return 0
     if estado is not None:
         if juegos_abiertos():
@@ -1046,6 +1163,7 @@ def preparar_steam():
             hilos_para_shaders(raiz)
             procesado_de_fondo(raiz, poner=True)
             ultimo_jugado_primero(raiz)
+            juegos_sin_mangohud(raiz, escribir=True)
         except OSError:
             pass
     if os.access(LANZAR, os.X_OK):

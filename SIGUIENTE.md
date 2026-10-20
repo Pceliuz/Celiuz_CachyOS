@@ -62,6 +62,17 @@ el fichero llegó a 1238 líneas).
   prueba. Si se repite a menudo, que esa comprobación ignore lo que escribe la
   sesión (el `lock.log`, los `lock-*.conf`).
 
+## 2026-10-20 (laptop): la barra de FPS no salía
+
+- Faltaba **MangoHud** en la laptop (instalado; ahora `instalar.sh` avisa).
+- Y Silksong es **nativo con OpenGL**: `MANGOHUD=1` solo vale para Vulkan. El
+  modo pone ahora `mangohud %command%` en las opciones de lanzamiento VACÍAS al
+  preparar Steam (`modo-gaming.juegos_sin_mangohud`, `unidad/mangohud-lanzamiento`).
+  Como Steam ya corría con el overlay, la próxima entrada al modo lo reinicia
+  una vez para escribirlo. La tecla estaba bien: «Ins» manda `Insert` (medido
+  con `xkbcli interactive-wayland`).
+- **Falta verlo**: SUPER+G (cierra y abre Steam), Silksong, Ins.
+
 ## 2026-10-20 (portátil): el repo pasa a privado y trae las imágenes del saludo
 
 El usuario lo hizo privado y las 455 imágenes de `~/Imágenes/terminal` se

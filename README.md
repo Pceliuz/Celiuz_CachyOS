@@ -314,6 +314,14 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 | `SUPER + DEL` | Cambiar de distribución de teclado (us ⇄ latam) |
 | `SUPER + SHIFT + P` | Menú de salida: bloquear, suspender, cerrar sesión, reiniciar, apagar (lo último pregunta otra vez) |
 
+> **El overlay necesita MangoHud** (`sudo pacman -S mangohud lib32-mangohud`;
+> `instalar.sh` avisa si falta). Y en los juegos **nativos con OpenGL**
+> (Silksong, por ejemplo) no basta el `MANGOHUD=1` con que el modo lanza Steam,
+> que solo vale para Vulkan: al entrar al modo gaming, con Steam cerrado, se pone
+> `mangohud %command%` en las opciones de lanzamiento de los juegos que las
+> tengan **vacías** (lo que hayas escrito tú no se toca). Para que no lo haga:
+> `"mangohud_lanzamiento": false` en `~/.config/celiuz/modo-gaming.json`.
+
 ---
 
 ## El cambiador de escritorios (SUPER + TAB)

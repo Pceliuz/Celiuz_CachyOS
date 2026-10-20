@@ -269,9 +269,10 @@ def _imagenes_steam(raiz, appid):
     }
 
 
-def _tiempos_steam(raiz):
-    """{appid: {"minutos", "ultima"}} de la cuenta con la que se entro la
-    ultima vez. Steam lo guarda por cuenta, en userdata/<id de 32 bits>."""
+def ruta_localconfig(raiz):
+    """El localconfig.vdf de la cuenta con la que se entro la ultima vez, o
+    None. Steam lo guarda por cuenta, en userdata/<id de 32 bits>: ahi van el
+    tiempo jugado y las opciones de lanzamiento de cada juego."""
     usuarios = _leer_vdf(os.path.join(raiz, "config", "loginusers.vdf")).get("users", {})
     candidatos = []
     for steamid, datos in usuarios.items():
@@ -281,10 +282,17 @@ def _tiempos_steam(raiz):
         candidatos.append((reciente, int(datos.get("timestamp", "0") or 0),
                            int(steamid) - 76561197960265728))
     if not candidatos:
+        return None
+    return os.path.join(raiz, "userdata", str(max(candidatos)[2]), "config", "localconfig.vdf")
+
+
+def _tiempos_steam(raiz):
+    """{appid: {"minutos", "ultima"}} de la cuenta con la que se entro la
+    ultima vez."""
+    ruta = ruta_localconfig(raiz)
+    if not ruta:
         return {}
-    cuenta = max(candidatos)[2]
-    local = _leer_vdf(os.path.join(raiz, "userdata", str(cuenta), "config",
-                                   "localconfig.vdf"))
+    local = _leer_vdf(ruta)
     apps_ = (local.get("userlocalconfigstore", {}).get("software", {})
              .get("valve", {}).get("steam", {}).get("apps", {}))
     tiempos = {}
