@@ -20,6 +20,18 @@ Lo que no cae en ninguno no se toca (avisos del sistema, el microfono de otro).
 El volumen se pone con `wpctl`, en su escala (la cubica, la que ensena todo
 el mundo), y se lee de `pw-dump` pasando la lineal a esa escala.
 
+LA SALIDA QUE MUEVEN LAS TECLAS DE VOLUMEN
+------------------------------------------
+`sonido.py salida` dice que salida tienen que mover las teclas (osd.sh): la
+predeterminada, SALVO que lo que esta sonando vaya por otra. Pasa en cuanto la
+predeterminada queda fijada a mano (WirePlumber la guarda en
+~/.local/state/wireplumber/default-nodes) y luego conectas unos auriculares:
+WirePlumber no cambia la predeterminada, pero si recuerda que la musica iba a
+los auriculares y la manda alli. Medido el 2026-10-19 en el portatil: las
+teclas bajaban los altavoces internos a 0 mientras Brave seguia sonando al
+100% por los TWS. Lo que suena se sabe por los enlaces de PipeWire de cada
+flujo en marcha (`state: running`), no por adivinar.
+
 LA MUSICA (MPRIS)
 -----------------
 Por D-Bus a pelo, sin playerctl: quien clona el repo no tiene por que tenerlo.
@@ -227,3 +239,55 @@ def controlar(bus_nombre, metodo):
                 "org.mpris.MediaPlayer2.Player", metodo)
     except Exception:  # noqa: BLE001 — el reproductor pudo cerrarse entre medias
         pass
+
+
+def salida_en_uso(dump=None):
+    """(id, nombre) de la salida que tienen que mover las teclas de volumen, o
+    None si da igual (sin nada sonando, o sonando por la predeterminada): ahi
+    vale @DEFAULT_AUDIO_SINK@. Ver la cabecera."""
+    dump = dump if dump is not None else _pw_dump()
+    salidas, en_marcha, enlaces = {}, set(), []
+    predeterminada = None
+    for o in dump:
+        tipo = o.get("type")
+        info = o.get("info") or {}
+        if tipo == "PipeWire:Interface:Node":
+            p = info.get("props") or {}
+            clase = p.get("media.class")
+            if clase == "Audio/Sink":
+                salidas[o.get("id")] = (p.get("node.name") or "",
+                                        p.get("node.nick") or p.get("node.description")
+                                        or p.get("node.name") or "")
+            elif clase == "Stream/Output/Audio" and info.get("state") == "running":
+                en_marcha.add(o.get("id"))
+        elif tipo == "PipeWire:Interface:Link":
+            enlaces.append((info.get("output-node-id"), info.get("input-node-id")))
+        elif tipo == "PipeWire:Interface:Metadata" and \
+                (o.get("props") or {}).get("metadata.name") == "default":
+            for m in o.get("metadata") or []:
+                if m.get("key") == "default.audio.sink" and isinstance(m.get("value"), dict):
+                    predeterminada = m["value"].get("name")
+    # Cuantos flujos en marcha van a cada salida (un flujo estereo son varios
+    # enlaces, pero cuenta una vez).
+    cuenta = {}
+    for flujo in en_marcha:
+        for destino in {d for o, d in enlaces if o == flujo and d in salidas}:
+            cuenta[destino] = cuenta.get(destino, 0) + 1
+    if not cuenta:
+        return None
+    if any(salidas[i][0] == predeterminada for i in cuenta):
+        return None
+    elegida = sorted(cuenta, key=lambda i: (-cuenta[i], i))[0]
+    return elegida, salidas[elegida][1]
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] == ["salida"]:
+        r = salida_en_uso()
+        # «id<TAB>nombre», o nada: osd.sh usa entonces la predeterminada.
+        if r:
+            print("%s\t%s" % r)
+        sys.exit(0)
+    print("uso: sonido.py salida", file=sys.stderr)
+    sys.exit(2)

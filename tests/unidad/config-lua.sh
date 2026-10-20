@@ -88,7 +88,7 @@ while read -r s; do
     afirmar "${s#\$HOME/.config/hypr/}" test -x "$ruta"
 done < "$TMP/scripts"
 afirmar_igual "1" "$(consulta "$TMP/laptop.json" 'R["arranques"]')" "un solo arranque (hyprland.start)"
-afirmar_igual "9" "$(consulta "$TMP/laptop.json" 'len(R["exec"])')" "que lanza los nueve de autostart"
+afirmar_igual "10" "$(consulta "$TMP/laptop.json" 'len(R["exec"])')" "que lanza los diez de autostart"
 
 titulo "5. personal.lua va el ultimo y puede pisarlo todo"
 cat > "$COPIA/hypr/lua/personal.lua" <<'EOF'

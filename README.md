@@ -45,9 +45,11 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`avisos.py`** — el historial de notificaciones. Un grabador escucha el bus y
   apunta todo lo que pasa por pantalla, con su hora; `SUPER + H` lo saca. Se
   borra al cerrar sesión salvo lo que apartes a mano. Ver su sección abajo.
-- **`calendar-panel.py`** — al pulsar el reloj se abre un calendario con los
-  feriados peruanos (`lib/pe_fechas.py`) y los eventos de Google Calendar
-  (`lib/gcal.py`).
+- **`calendar-panel.py`** — al pulsar el reloj se abre el panel del reloj: el
+  calendario con los feriados peruanos (`lib/pe_fechas.py`) y los eventos de
+  Google Calendar (`lib/gcal.py`), la hora con el tiempo de las próximas horas
+  girando alrededor (`lib/clima.py`), la luna y el zodiaco (`lib/cielo.py`).
+  Ver «El panel del reloj».
 - **`celiuzpaper`** — cambia el fondo de pantalla, en vídeo o en imagen fija. Al moverte por la tira
   el fondo cambia **de verdad** a pantalla completa; Enter lo fija, Escape
   restaura. Los fondos vienen de varios sitios y cada uno es un **módulo** en la
@@ -83,6 +85,8 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 - **`teclado.py`** — la sesión lleva dos distribuciones (us y latam). Este avisa
   por notificación de cuál hay puesta: al arrancar, y cada vez que la cambias con
   `SUPER + DEL`. Ver su sección abajo.
+- **`teclados.py`** — al enchufar un teclado que no conoce, pregunta **una vez**
+  si es latinoamericano o inglés y lo recuerda para ese teclado.
 - **`sesion.sh`** — el menú de salida de `SUPER + SHIFT + P`: bloquear,
   suspender, cerrar sesión, reiniciar o apagar, y lo que no tiene vuelta atrás
   **pregunta otra vez**. Ver su sección abajo.
@@ -161,9 +165,9 @@ Notas:
   instalador lo comprueba aparte por la misma razón que las teclas de función. Si
   falta, `SUPER + R` sí avisa —el script lo mira antes de nada—, pero el aviso
   necesita que el demonio de notificaciones esté vivo.
-- **`bluetui`** es lo que abre el clic en el icono del Bluetooth: buscar,
-  emparejar y conectar, en la terminal flotante, como `nmtui` en la red. Está en
-  el repo oficial `extra`. El instalador lo pide solo si hay un adaptador.
+- **`bluetui`** es lo que abre «Ajustes avanzados» en el panel del Bluetooth:
+  lo que el panel no cubre, como un teclado que pide escribir un PIN. Está en el
+  repo oficial `extra`. El instalador lo pide solo si hay un adaptador.
 
 ## Instalación
 
@@ -300,7 +304,7 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 | `CTRL + RePág` / `CTRL + AvPág` | Subir / bajar el volumen, para teclados sin esas teclas (en el navegador, cambiar de pestaña queda en `CTRL + TAB`) |
 | `SUPER + G` | Modo gaming: entrar / salir (pregunta antes; con un juego abierto no deja salir) |
 | `SUPER` + la tecla de al lado del 1 | Menú rápido del modo gaming (va por código de tecla: vale en `us` y en `latam`) |
-| `Supr` (dentro de un juego) | Enseñar / esconder el overlay de FPS (MangoHud) |
+| `Supr` en la PC, `Insert` (o `Ins`) en un portátil (dentro de un juego) | Enseñar / esconder el overlay de FPS (MangoHud) |
 | `SUPER + 1..7` | Ir al escritorio |
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
 | `SUPER + flechas` | Mover el foco |
@@ -550,6 +554,33 @@ puede cambiar a mano si te lo detectó mal:
 ```sh
 hypr/scripts/lib/maquina.py layout      # latam,us
 localectl list-x11-keymap-layouts       # los nombres válidos
+```
+
+### Cada teclado enchufado: se pregunta una vez (`teclados.py`)
+
+Lo de arriba decide la distribución **de todos** los teclados a la vez, y en una
+torre eso no puede saberse: el teclado es el que enchufes. Y el teclado tampoco
+lo dice (el campo del descriptor HID que debería decirlo contesta «Not
+supported» en los dos equipos del autor, como en casi todos). Así que **se
+pregunta**: al conectar un teclado que no conoce, sale una tarjeta
+
+> **¿Qué tiene la tecla de la derecha de la L?**   `Ñ`  ·  `; :`
+
+`Ñ` es latinoamericano y `; :` es inglés. La respuesta se aplica en el acto **a
+ese teclado y a ningún otro**, y se recuerda para siempre en
+`~/.config/celiuz/teclados.conf` (de cada equipo, fuera del repo), que
+`lua/teclados.lua` vuelve a leer en cada recarga. `SUPER+DEL` sigue alternando
+igual, porque cada teclado lleva las dos distribuciones, la suya delante.
+
+No pregunta por el teclado **interno de un portátil** (para ese vale lo de
+`vconsole.conf`, de arriba), ni por lo que no tiene letras (botón de encendido,
+teclas de brillo), ni por los **ratones que se anuncian también como teclado**
+—el ratón USB de la laptop lo hace, con todas las letras—. Si alguno se cuela,
+la tarjeta tiene «No es un teclado».
+
+```sh
+hypr/scripts/teclados.py ver               # qué teclados ve y qué hará con cada uno
+hypr/scripts/teclados.py olvidar <id>      # que vuelva a preguntar por ese
 ```
 
 `lua/maquina.lua` pone el valor de fábrica y solo lo pisa con lo que diga
@@ -1000,6 +1031,37 @@ defecto, así que sigue funcionando si cambias de cable o pasas a wifi.
 
 ---
 
+## La red
+
+El icono de red de la derecha (y la velocidad de la izquierda) abren
+`hypr/scripts/wifi-panel.py`, con el mismo aspecto que el del Bluetooth:
+
+- **Conectado**: la red en uso con su señal, banda, IP (todas, también la
+  secundaria de una oficina) y velocidad, y **Desconectar**. Si la red pide
+  iniciar sesión en una web (hotel, oficina), lo dice y la abre. El cable, si
+  está conectado, también sale aquí.
+- **Mis redes**: las guardadas. Las que están al alcance se conectan con un
+  botón, y si una se oye bastante mejor que la actual, lleva «mejor señal». El
+  cable sin enchufar sale aquí, para verlo de un vistazo.
+- **«⋯» → Compartir red**: un **QR** para entrar desde el móvil sin escribir, y
+  la contraseña (oculta, con un ojo y un botón para copiarla). También
+  «Conectar sola» y **Olvidar** (pide confirmación).
+- **Otras redes**: las de alrededor; la contraseña se escribe ahí mismo. Si es
+  incorrecta, lo dice y deja lo escrito para corregirlo. Las débiles van
+  plegadas.
+- Abajo, el **modo avión** (wifi y Bluetooth a la vez) y **«Ajustes
+  avanzados»**, que abre `nmtui` para lo que el panel no cubre: IP fija, la IP
+  secundaria de la oficina, redes de empresa (802.1X), WEP, redes ocultas.
+
+Dos cosas de seguridad que no se ven: al conectar a una red nueva la contraseña
+va a NetworkManager por D-Bus, no en una línea de órdenes que cualquier usuario
+del equipo podría leer, y la red se crea solo en memoria hasta que conecta, así
+que una contraseña mal escrita no deja perfiles a medias. El QR se hace con
+`qrencode` (repo oficial `extra`) pasándole los datos por la entrada estándar.
+`wifi-panel.py --ver` enseña en texto lo mismo que el panel.
+
+---
+
 ## El Bluetooth
 
 A la derecha de la red. Es el módulo de serie de waybar: el icono dice si está
@@ -1009,9 +1071,34 @@ sin Bluetooth no aparece.
 
 | | |
 |---|---|
-| clic | `bluetui` en una terminal flotante: buscar, emparejar, conectar (si no está instalado, te lo dice en vez de abrir una terminal que se cierra sola) |
+| clic | **el panel del Bluetooth** (abajo); otro clic lo cierra |
 | clic derecho | encender / apagar (y si lo apagó la tecla de modo avión, desbloquearlo) |
 | clic central | **soltar el auricular que llevas**: entra el otro que tengas encendido |
+
+### El panel
+
+`hypr/scripts/bluetooth-panel.py` cuelga del icono, con la paleta del
+escritorio, como el del calendario:
+
+- **En uso**: lo conectado, con su batería y un botón para soltarlo.
+- **Mis aparatos**: lo emparejado, cuándo lo usaste y en qué estado lo tiene el
+  demonio (esperando, en espera por el cerrojo, soltado, bloqueado por ti). Con
+  unos auriculares puestos, el botón es **«Usar este»**: suelta los que llevas y
+  conecta estos, sin pelearse con el cerrojo.
+- **Cerca, sin emparejar**: mientras está abierto busca, y lo que aparece con
+  nombre se empareja con un botón (los auriculares, primero). Al emparejar para
+  la búsqueda —con ella en marcha, unos TWS fallaron al emparejar y se
+  conectaron en cuanto se paró—, empareja, lo marca de confianza y lo conecta.
+- **«⋯»** en cada emparejado: cambiarle el nombre u olvidarlo. Cuando varios se
+  llaman igual (unos «TWS» y otros «TWS»), el panel los distingue por el final
+  de su dirección hasta que les pongas nombre.
+- Abajo, los dos ajustes del demonio (**conectar solo** y **uno a la vez**),
+  que escriben en `~/.config/celiuz/bluetooth.conf`, y **«Ajustes avanzados»**,
+  que abre `bluetui` para lo que el panel no cubre (un PIN que escribir).
+
+Se cierra con Escape, con otro clic en el icono o al alejar el puntero, salvo
+si está emparejando o escribiendo un nombre. `bluetooth-panel.py --ver` enseña
+en texto lo mismo que el panel, sin abrir nada.
 
 ### Los auriculares se conectan solos, y de uno en uno
 
@@ -1023,16 +1110,17 @@ sesión. Tres reglas:
    y se queda con el primero que conteste — el que tengas encendido. Con dos
    encendidos gana el de la última vez.
 2. **El cerrojo.** Con un auricular conectado, los demás **no pueden entrar**
-   hasta que lo sueltes: ni llamando ellos, ni conectándolos tú desde `bluetui`.
+   hasta que lo sueltes: ni llamando ellos, ni conectándolos tú desde `bluetui`
+   (el «Usar este» del panel sí: suelta primero el que llevas).
    Si uno se cuela, se le echa y sale un aviso diciendo por qué.
-3. **Soltar a mano no es una caída.** Si lo desconectas tú (clic central,
-   `bluetui`, `bluetooth.py soltar`), no vuelve solo: se prueba con los demás y
+3. **Soltar a mano no es una caída.** Si lo desconectas tú (el panel, clic
+   central, `bluetui`, `bluetooth.py soltar`), no vuelve solo: se prueba con los demás y
    ese se queda quieto **hasta que apagues y enciendas el Bluetooth** o lo
    conectes tú. Si en cambio lo apagas, lo metes en el estuche o te alejas, se le
    vuelve a buscar.
 
-O sea que **cambiar de auricular** es: enciendes el otro, clic central en el
-icono, y entra el nuevo.
+O sea que **cambiar de auricular** es: «Usar este» en el panel. O, sin abrirlo:
+enciendes el otro, clic central en el icono, y entra el nuevo.
 
 **Por qué hace falta un demonio.** BlueZ no persigue a nadie: *Trusted* solo
 significa que acepta la conexión si el aparato la pide, y muchos auriculares no
@@ -1100,11 +1188,13 @@ siguiente ronda (que se va espaciando de 10 s a 60 s cuando no contesta nadie,
 para no tener la radio buscando todo el rato: en un portátil suele ser la misma
 tarjeta que la del wifi).
 
-**Por qué no blueman.** Está en los repos oficiales, pero es GTK3 con su propio
-aspecto (no coge la paleta), deja un applet corriendo y trae su propia lógica de
-reconexión, que se pelearía con esta. Y un panel propio no compensa: lo difícil
-no es la ventana sino emparejar (los PIN, las confirmaciones), y eso `bluetui`
-ya lo hace bien.
+**Por qué un panel propio y no blueman.** blueman está en los repos oficiales,
+pero es GTK3 con su propio aspecto (no coge la paleta), deja un applet corriendo
+y trae su propia lógica de reconexión, que se pelearía con esta. El panel no
+decide nada: enseña lo que piensa el demonio y le da botones. Lo difícil de
+emparejar —los PIN, las confirmaciones— lo deja a `bluetui`: el panel registra
+un agente «sin teclado ni pantalla», que es lo que piden unos auriculares, y
+solo dice que sí al aparato que tú estás emparejando.
 
 ---
 
@@ -1249,11 +1339,85 @@ Desde un script: `hypr/scripts/modo-gaming.py on|off|estado --json`.
 
 ---
 
+## El panel del reloj
+
+Al pulsar la hora de la barra. A la izquierda, el calendario de siempre
+(feriados de Perú, tus eventos de Google, el detalle del día que elijas), el
+**próximo feriado**, la **fase de la luna** y el **signo del zodiaco** en curso.
+A la derecha, la temperatura y la **hora grande con las próximas 12 horas
+girando a su alrededor**, despacio (una vuelta cada 4 minutos): la que pasa por
+delante se resalta. Abajo, el arco del sol y viento, humedad, lluvia y
+sensación térmica.
+
+Todo es real: la hora y el calendario del equipo, la luna calculada (sin red),
+y el tiempo de [Open-Meteo](https://open-meteo.com) (gratis, sin cuenta ni
+clave). La animación solo corre con el panel abierto.
+
+**Tu ubicación, con cuidado:**
+
+- El tiempo se pide **solo al abrir el panel**, como mucho cada 15 minutos. No
+  hay nada preguntando en segundo plano.
+- La ciudad se averigua **una vez por red** (por la IP, a ipinfo.io por HTTPS);
+  en la misma red no se vuelve a preguntar.
+- Solo **la ciudad**: las coordenadas se redondean a ~10 km antes de guardarlas
+  y de pedir el tiempo. Se guarda **solo la última**, sin historial, en un
+  archivo que solo puede leer tu usuario.
+- Para no preguntar nunca, en `~/.config/celiuz/clima.conf` (no se versiona):
+
+```conf
+ubicacion = zona            # de la zona horaria del sistema: cero preguntas
+ubicacion = -12.05,-77.04 Lima   # o una fija
+clima = no                  # sin tiempo: hora, calendario, luna y zodiaco
+signo = acuario             # el tuyo: dice cuánto falta para tu temporada
+```
+
+`calendar-panel.py --ver` y `hypr/scripts/lib/clima.py --ver` enseñan lo que
+hay sin preguntar a nadie.
+
+Los tres paneles de la barra (Bluetooth, red y reloj) se excluyen: al abrir
+uno se cierra el que hubiera abierto.
+
+---
+
+## El saludo de la terminal
+
+Al abrir una terminal, fastfetch (`fastfetch/config.jsonc`, enlazado a
+`~/.config/fastfetch`) con una **imagen al azar** al lado. Las imágenes las pones
+tú en la carpeta `terminal` de tus imágenes —`~/Imágenes/terminal`, o
+`~/Pictures/terminal` en inglés; `celiuz-saludo --carpeta` te dice cuál—: PNG,
+JPG, WebP o GIF, y las de fondo transparente quedan mejor. El repo no trae
+ninguna. Para probar una concreta: `celiuz-saludo ruta/a/la/imagen.png`.
+
+Cada imagen se **adapta** antes de dibujarla (`hypr/scripts/lib/imagen_saludo.py`):
+se reduce, a un sticker se le recorta el aire transparente de alrededor (si no,
+el dibujo sale pequeño en su caja) y a una foto se le redondean las esquinas.
+La copia va a `~/.cache/celiuz/saludo` y tu fichero no se toca. Una imagen nueva
+sale tal cual la primera vez y adaptada desde la segunda (la copia se hace en
+segundo plano, para no retrasar la terminal); `celiuz-saludo --preparar` las
+deja todas listas de una vez.
+
+Se dibujan con el protocolo de imágenes de kitty (también Ghostty y WezTerm).
+En otra terminal, o con la carpeta vacía, sale el logo de la distro.
+
+`instalar.sh` lo engancha a **fish** con una línea al final de
+`~/.config/fish/config.fish` (si ya tienes tu `fish_greeting`, no lo toca). En
+bash o zsh, añade `celiuz-saludo` al final de tu `.bashrc` / `.zshrc`.
+
+---
+
 ## Volumen y brillo, a la vista
 
 Las teclas de volumen, silencio, micro y brillo hacen el cambio **y enseñan cómo
 queda**: un aviso abajo en el centro con el valor y una barra que se rellena
 (`hypr/scripts/osd.sh`). Antes se cambiaba a ciegas.
+
+- **Mueve la salida por la que suena**, no la predeterminada a ciegas. Si la
+  música va a unos auriculares Bluetooth y la predeterminada sigue siendo los
+  altavoces (pasa cuando la predeterminada quedó fijada a mano: WirePlumber no
+  la cambia al conectar los auriculares, pero sí recuerda mandarles la música),
+  las teclas mueven los auriculares y el aviso lo dice: «Volumen 45% · TWS».
+  Es el volumen **general** de esa salida; el de cada app va en el menú rápido
+  del modo gaming.
 
 - **Uno solo, que se reescribe**: mantener la tecla no apila veinte avisos.
 - **Sin sonido y fuera del historial** (`SUPER + H`): va como aviso

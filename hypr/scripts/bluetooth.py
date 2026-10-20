@@ -22,8 +22,8 @@ LO QUE HACE
        rechazo). O sea que desde bluetui se podria colar uno. Si pasa, se le
        echa en el acto y sale un aviso diciendo por que.
 
-3. SOLTAR A MANO NO ES UNA CAIDA. Si desconectas tu el auricular (bluetui, clic
-   central en la barra, `bluetooth.py soltar`), no se vuelve a conectar solo: se
+3. SOLTAR A MANO NO ES UNA CAIDA. Si desconectas tu el auricular (el panel de la
+   barra, bluetui, clic central, `bluetooth.py soltar`), no se vuelve a conectar solo: se
    prueba con los demas, y ese se queda quieto hasta que apagues y enciendas el
    Bluetooth o lo conectes tu. Si en cambio se apaga, se mete en el estuche o se
    sale de alcance, se le vuelve a buscar.
@@ -81,13 +81,15 @@ tocar nada versionado, en `$XDG_CONFIG_HOME/celiuz/bluetooth.conf`:
     cerrojo = no     deja conectar varios a la vez (unos cascos y un altavoz)
     auto = no        no llamar a nadie; conectar es cosa tuya
 
-Se relee solo al guardarlo. Sin ese fichero valen los dos en `si`.
+Se relee solo al guardarlo. Sin ese fichero valen los dos en `si`. Los dos
+interruptores de abajo del panel de la barra (bluetooth-panel.py) escriben ahi.
 
 USO
 ---
     bluetooth.py --demonio   lo de arriba (lo lanza conf/autostart.conf)
     bluetooth.py --ver       el estado, sin tocar nada
-    bluetooth.py gestionar   abre bluetui (clic en la barra), o avisa si falta
+    bluetooth.py gestionar   abre bluetui («Ajustes avanzados» del panel de la
+                             barra), o avisa si falta
     bluetooth.py conectar    conecta ya el primero que conteste
     bluetooth.py soltar      desconecta el que estes usando
     bluetooth.py alternar    enciende o apaga el Bluetooth (clic derecho en la
@@ -327,6 +329,45 @@ class Ajustes:
                 a.auto = si
         return a
 
+    def guardar(self):
+        """Escribe estos dos valores en bluetooth.conf sin llevarse lo demas.
+
+        Lo usa el panel de la barra. El fichero es tuyo y puede tener
+        comentarios o claves que este codigo no conoce: se cambia solo la linea
+        de cada clave (en cualquiera de sus dos nombres) y lo que falte se anade
+        al final."""
+        valores = {"cerrojo": self.cerrojo, "auto": self.auto}
+        alias = {"cerrojo": "cerrojo", "lock": "cerrojo",
+                 "auto": "auto", "conectar": "auto"}
+        ruta = fichero_ajustes()
+        try:
+            with open(ruta, encoding="utf-8") as f:
+                lineas = f.read().splitlines()
+        except OSError:
+            lineas = ["# Lo lee hypr/scripts/bluetooth.py. Lo cambia tambien el",
+                      "# panel de Bluetooth de la barra. Valores: si / no."]
+        hechas = set()
+        salida = []
+        for linea in lineas:
+            util = linea.split("#", 1)[0]
+            clave = util.partition("=")[0].strip().lower() if "=" in util else ""
+            if clave in alias:
+                nombre = alias[clave]
+                if nombre in hechas:
+                    continue   # una clave repetida: gana la que escribimos
+                hechas.add(nombre)
+                salida.append("%s = %s" % (clave, "si" if valores[nombre] else "no"))
+            else:
+                salida.append(linea)
+        for nombre in ("cerrojo", "auto"):
+            if nombre not in hechas:
+                salida.append("%s = %s" % (nombre, "si" if valores[nombre] else "no"))
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        temporal = ruta + ".tmp"
+        with open(temporal, "w", encoding="utf-8") as f:
+            f.write("\n".join(salida) + "\n")
+        os.replace(temporal, ruta)
+
 
 def por_preferencia(aparatos, recuerdo):
     """El ultimo que usaste primero. Los que nunca se usaron, al final y por
@@ -478,6 +519,7 @@ class Demonio:
         self._temporizador = None
         self._cola = []                # la ronda de llamadas en curso
         self._conectando = None
+        self._mios = {}                # mac -> cuando contesto una llamada NUESTRA
 
     # --- Escuchar -------------------------------------------------------------
 
@@ -685,8 +727,14 @@ class Demonio:
         if time.monotonic() - self._echados.get(mac, -1e9) < REINTENTO_ECHAR:
             return
         # Si era la llamada que estabamos haciendo nosotros (se cruzo con otro
-        # que entro por su cuenta), no hay nada que explicar.
-        nuestro = mac == self._conectando
+        # que entro por su cuenta), no hay nada que explicar. Y «haciendo» tiene
+        # que incluir la que ACABA de contestar: `_conectando` se vacia al
+        # llegar la respuesta, antes de esta pasada, y sin el margen salia un
+        # «No se conecto, desconectalo primero» por una llamada del propio
+        # demonio (lo destapo tests/e2e/bluetooth-panel.sh al cambiar de
+        # auricular desde el panel).
+        nuestro = (mac == self._conectando
+                   or time.monotonic() - self._mios.get(mac, -1e9) < MARGEN_ECHADO)
         self._echados[mac] = time.monotonic()
         log("echo a %s: %s ya esta en uso" % (self._nombre(mac), self._nombre(activo)))
         self._poner_blocked(mac, True)
@@ -764,6 +812,7 @@ class Demonio:
                 self._llamar_siguiente()
                 return
             log("conectado %s" % self._nombre(mac))
+            self._mios[mac] = time.monotonic()
             self._espera = ESPERA_MIN
             self._cola = []
             self._pedir_reconciliar()
@@ -920,7 +969,7 @@ def ver():
     plan = decidir(aparatos, recuerdo, ajustes)
     print()
     if not auriculares:
-        print("No hay auriculares emparejados. Se emparejan con bluetui "
+        print("No hay auriculares emparejados. Se emparejan desde el panel "
               "(clic en el Bluetooth de la barra).")
     else:
         print("Auriculares, en el orden en que se prueban:")

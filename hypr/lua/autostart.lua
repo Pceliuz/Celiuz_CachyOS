@@ -114,6 +114,14 @@ hl.on("hyprland.start", function()
     -- pierde sin dejar rastro.
     hl.exec_cmd(S .. "teclado.py avisar")
 
+    -- Al enchufar un teclado que no conoce, pregunta UNA vez si es
+    -- latinoamericano o ingles y lo recuerda para ese teclado
+    -- (~/.config/celiuz/teclados.conf, que relee lua/teclados.lua). No pregunta
+    -- por el teclado interno de un portatil ni por los ratones. Por que hay que
+    -- preguntar: cabecera de scripts/teclados.py. Mira lo que ve con
+    -- `teclados.py ver`.
+    hl.exec_cmd(S .. "teclados.py --demonio")
+
     -- Fondo de pantalla en video (mpvpaper, del repo oficial cachyos).
     -- El video activo es el enlace hypr/wallpapers/current; para cambiarlo se usa
     -- scripts/set-wallpaper.sh, no se toca este archivo.

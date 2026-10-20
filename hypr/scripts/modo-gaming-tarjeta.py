@@ -196,6 +196,16 @@ def main(argv):
         return 2
     if not solo_wayland() or not Gtk.init_check(sys.argv)[0]:
         return 1
+    cargar_estilo()
+    tarjeta = Tarjeta(argv[0], argv[1] if len(argv) > 1 else "")
+    tarjeta.show_all()
+    Gtk.main()
+    return tarjeta.respuesta
+
+
+def cargar_estilo(extra=""):
+    """La paleta y el ESTILO de la tarjeta (mas `extra`), para toda la
+    pantalla. Lo usa tambien teclados.py: sus tarjetas se ven iguales."""
     css = Gtk.CssProvider()
     try:
         with open(COLORES, encoding="utf-8") as fh:
@@ -208,13 +218,9 @@ def main(argv):
                    "@define-color amatista #b16cff; @define-color neon #c77dff;"
                    "@define-color luz #e4c7ff; @define-color tenue #8a7aa8;"
                    "@define-color atencion #f6c177;")
-    css.load_from_data((colores + ESTILO).encode())
+    css.load_from_data((colores + ESTILO + extra).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
                                              Gtk.STYLE_PROVIDER_PRIORITY_USER)
-    tarjeta = Tarjeta(argv[0], argv[1] if len(argv) > 1 else "")
-    tarjeta.show_all()
-    Gtk.main()
-    return tarjeta.respuesta
 
 
 if __name__ == "__main__":

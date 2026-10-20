@@ -305,6 +305,58 @@ PATH="$FALSOS:$MINIMO" "$GESTOR" gestionar
 afirmar_contiene "$REGISTRO/terminal.log" "monitor-tui bluetui" \
     "con bluetui, se abre en la terminal flotante"
 
+# --- Echar a uno que llamo el propio demonio no es «no se conecto» -------------------
+#
+# Si la llamada de una ronda contesta cuando otro ya entro (lo conectaste tu desde
+# el panel mientras el demonio llamaba a otro), el demonio echa al suyo. Eso es
+# correcto, pero NO toca avisar «No se conecto X, desconectalo primero»: X no lo
+# pidio nadie. Fallaba porque `_conectando` se vacia al llegar la respuesta, antes
+# de la pasada que echa. Se prueba con un bus de mentira que solo apunta.
+
+titulo "Echar a una llamada propia no avisa"
+rm -f "$REGISTRO/notify-send.log"
+PATH="$FALSOS:$PATH" python3 - "$REPO/hypr/scripts/bluetooth.py" > "$TMP/echar.txt" 2>&1 <<'PYEOF'
+import importlib.util
+import sys
+import time
+
+spec = importlib.util.spec_from_file_location("bluetooth", sys.argv[1])
+bt = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bt)
+
+
+class BusMudo:
+    def __init__(self):
+        self.llamadas = []
+
+    def call(self, _dest, ruta, _i, metodo, *_a):
+        self.llamadas.append((ruta, metodo))
+
+
+def demonio():
+    d = bt.Demonio(BusMudo())
+    d.recuerdo = bt.Recuerdo()
+    d.recuerdo.guardar = lambda: None
+    for mac, nombre in (("AA:00:00:00:00:01", "Propio"), ("AA:00:00:00:00:02", "Puesto")):
+        d.objetos["/dev_" + mac[-2:]] = {bt.DISPOSITIVO: {"Address": mac, "Alias": nombre}}
+    return d
+
+
+d = demonio()
+d._mios["AA:00:00:00:00:01"] = time.monotonic()      # contesto a NUESTRA llamada
+d._echar("AA:00:00:00:00:01", "AA:00:00:00:00:02")
+print("propio_echado=%s" % any(m == "Disconnect" for _, m in d.bus.llamadas))
+
+d = demonio()                                         # uno que se colo solo
+d._echar("AA:00:00:00:00:01", "AA:00:00:00:00:02")
+print("ajeno_echado=%s" % any(m == "Disconnect" for _, m in d.bus.llamadas))
+PYEOF
+sleep 0.3   # notify-send va por Popen
+afirmar_contiene "$TMP/echar.txt" "^propio_echado=True" "al que llamo el demonio se le echa igual"
+afirmar_contiene "$TMP/echar.txt" "^ajeno_echado=True" "y al que se colo, tambien"
+afirmar_igual "1" "$(grep -c 'No se conecto' "$REGISTRO/notify-send.log" 2>/dev/null || echo 0)" \
+    "pero solo el que se colo trae aviso"
+
 afirmar_intacta_la_casa_real
 
 resumen

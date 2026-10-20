@@ -26,10 +26,23 @@
 #
 # Sin mako (o sin servidor de avisos) el cambio se hace igual: enseñarlo es un
 # extra y nunca frena la tecla.
+#
+# EL VOLUMEN QUE SE MUEVE ES EL DE LA SALIDA POR LA QUE SUENA, no el de la
+# predeterminada a ciegas. Con la predeterminada fijada en los altavoces y la
+# musica yendo a unos auriculares Bluetooth, las teclas bajaban a 0 unos
+# altavoces mudos y no cambiaba nada de lo que se oia (2026-10-19, en el
+# portatil; en la PC pasaba lo mismo con Ctrl+RePag). Quien decide es
+# `lib/sonido.py salida`; si no sabe o no hay nada sonando, la predeterminada,
+# como siempre. Cuando no es la predeterminada, el aviso dice por cual va.
+#
+# Es el volumen GENERAL de esa salida. El de cada app va por separado, en el
+# menu rapido del modo gaming (lib/sonido.py, por grupos).
 
 set -uo pipefail
 
 PASO=5   # por ciento en cada pulsacion
+
+LIB="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib"
 
 ID="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/celiuz-osd.${HYPRLAND_INSTANCE_SIGNATURE:-sin-sesion}.id"
 
@@ -57,7 +70,12 @@ leer_wpctl() {
 }
 
 volumen() {
-    local sink=@DEFAULT_AUDIO_SINK@ pct mudo icono
+    local sink=@DEFAULT_AUDIO_SINK@ pct mudo icono id="" nombre="" donde=""
+    if IFS=$'\t' read -r id nombre < <(python3 "$LIB/sonido.py" salida 2>/dev/null) \
+            && [[ "$id" =~ ^[0-9]+$ ]]; then
+        sink="$id"
+        donde="${nombre:+  · $nombre}"
+    fi
     case "${1:-}" in
         subir)     wpctl set-mute "$sink" 0
                    wpctl set-volume -l 1.0 "$sink" "$PASO%+" ;;
@@ -70,7 +88,7 @@ volumen() {
         return 0
     fi
     if [ "$mudo" = 1 ]; then
-        mostrar "󰖁" "Silenciado" 0
+        mostrar "󰖁" "Silenciado$donde" 0
         return 0
     fi
     if   [ "$pct" -ge 66 ]; then icono="󰕾"
@@ -78,7 +96,7 @@ volumen() {
     elif [ "$pct" -gt 0 ];  then icono="󰕿"
     else                         icono="󰝟"
     fi
-    mostrar "$icono" "Volumen  $pct%" "$pct"
+    mostrar "$icono" "Volumen  $pct%$donde" "$pct"
 }
 
 micro() {

@@ -50,6 +50,11 @@ if require("lua.maquina").portatil then
     require("lua.teclado-laptop")
 end
 
+-- La distribucion de cada teclado que ya contestaste (la tarjeta de
+-- scripts/teclados.py). Despues de lo de la maquina, porque es mas concreto:
+-- habla de UN teclado, no de todos.
+require("lua.teclados")
+
 -- Y DESPUES DE TODO, lo tuyo. `lua/personal.lua` lo crea instalar.sh y NO se
 -- versiona: es donde van tus anadidos —un programa que arranque contigo, un
 -- atajo para algo que no esta en este repo, un ajuste que prefieres distinto—

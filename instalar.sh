@@ -126,14 +126,21 @@ comprobar_dependencias() {
         gris "    sudo pacman -S wf-recorder"
     fi
 
+    # El QR de «Compartir red» del panel de red sale de qrencode. Sin el, el
+    # panel lo dice en su sitio y enseña la contraseña igual: es un aviso.
+    if ! command -v qrencode >/dev/null 2>&1; then
+        aviso "«Compartir red» del panel de red no podra hacer el QR sin: qrencode"
+        gris "    sudo pacman -S qrencode"
+    fi
+
     # Y el Bluetooth, solo si el equipo tiene: sin adaptador el modulo de la
     # barra se esconde solo y no hay nada que pedir. Con adaptador faltan dos
-    # cosas que no avisan: el clic en el icono abre bluetui (un on-click que no
-    # existe no da ningun error, waybar se traga su stderr), y sin el servicio
-    # de BlueZ no hay icono ni auriculares que se conecten solos.
+    # cosas: el «Ajustes avanzados» del panel abre bluetui (sin el, avisa y no
+    # abre nada), y sin el servicio de BlueZ no hay icono ni auriculares que se
+    # conecten solos.
     if compgen -G '/sys/class/bluetooth/hci*' >/dev/null; then
         if ! command -v bluetui >/dev/null 2>&1; then
-            aviso "el clic en el Bluetooth de la barra no hara nada sin: bluetui"
+            aviso "«Ajustes avanzados» del panel de Bluetooth no hara nada sin: bluetui"
             gris "    sudo pacman -S bluetui"
         fi
         if ! systemctl is-active --quiet bluetooth.service 2>/dev/null; then
@@ -207,7 +214,7 @@ desplegar() {
                    "$REPO"/hypr/scripts/*.sh "$REPO"/hypr/scripts/*.py \
                    "$REPO"/waybar/scripts/*.sh
 
-    for pieza in hypr waybar fuzzel mako mpvpaper; do
+    for pieza in hypr waybar fuzzel mako mpvpaper fastfetch; do
         enlazar "$REPO/$pieza" "$CONFIG/$pieza"
     done
 
@@ -222,11 +229,51 @@ desplegar() {
     # preguntar que llego hoy sin saber donde esta clonado este repo.
     enlazar "$REPO/hypr/scripts/avisos.py" "$HOME/.local/bin/avisos"
 
+    # El saludo de la terminal (fastfetch con una imagen al azar), por el PATH
+    # para que lo pueda llamar cualquier shell. Lo engancha a fish saludo_fish().
+    enlazar "$REPO/hypr/scripts/saludo.sh" "$HOME/.local/bin/celiuz-saludo"
+
     # La config es LUA desde el 2026-09-25 (hypr/hyprland.lua): Hyprland 0.56 la
     # prefiere a hyprland.conf, y la 0.57 retira la de hyprlang. Un Hyprland mas
     # viejo no sabe leerla y arrancaria con la de hyprlang que queda de puente
     # (o sin nada, cuando el puente se borre), asi que se comprueba la version.
     comprobar_hyprland_lua
+}
+
+# saludo_fish — que fish salude con celiuz-saludo en vez del fastfetch a secas
+# de CachyOS. config.fish es del usuario, asi que no se enlaza: se le AÑADE una
+# linea marcada, al final (la config de CachyOS define fish_greeting dentro del
+# `source` del principio, y gana lo ultimo que se define; conf.d/ no sirve
+# porque fish lo lee ANTES que config.fish). Si el usuario ya tiene su propio
+# fish_greeting escrito ahi, no se toca. Bash y zsh: README.
+SALUDO_MARCA="# celiuz-saludo (lo puso instalar.sh; borra estas dos lineas para quitarlo)"
+saludo_fish() {
+    titulo "2b. El saludo de la terminal"
+    local fotos
+    fotos="$("$REPO/hypr/scripts/saludo.sh" --carpeta)"
+    if [ ! -d "$fotos" ]; then
+        hacer mkdir -p "$fotos"
+    fi
+    gris "  las imagenes van en: $fotos"
+    if ! command -v fastfetch >/dev/null 2>&1; then
+        aviso "el saludo de la terminal necesita: fastfetch"
+        gris "    sudo pacman -S fastfetch"
+    fi
+    command -v fish >/dev/null 2>&1 || { gris "  sin fish: nada que enganchar"; return 0; }
+    local conf="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+    if [ -f "$conf" ] && grep -qF "celiuz-saludo" "$conf"; then
+        gris "  ya enganchado en $conf"
+    elif [ -f "$conf" ] && grep -qE '^[[:space:]]*function[[:space:]]+fish_greeting' "$conf"; then
+        gris "  tienes tu propio fish_greeting en $conf: no lo toco"
+    else
+        if [ "$SOLO_REVISAR" -eq 1 ]; then
+            gris "  (haria) añadir el saludo al final de $conf"
+        else
+            mkdir -p "$(dirname "$conf")"
+            printf '\n%s\nfunction fish_greeting; celiuz-saludo; end\n' "$SALUDO_MARCA" >> "$conf"
+            hecho "  enganchado en $conf"
+        fi
+    fi
 }
 
 # comprobar_hyprland_lua — que el Hyprland instalado lee Lua, y en que idioma
@@ -868,6 +915,7 @@ elif [ "$SOLO_DOCK" -eq 1 ]; then
 else
     comprobar_dependencias
     desplegar
+    saludo_fish
     celiuzpaper
     dock
     maquina_local

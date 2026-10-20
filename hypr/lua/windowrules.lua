@@ -77,6 +77,19 @@ hl.layer_rule({
     blur = true, ignore_alpha = 0.3, animation = "slide",
 })
 
+-- Los paneles de la barra (scripts/bluetooth-panel.py, wifi-panel.py, calendar-panel.py). Mismo trato que las
+-- notificaciones: su fondo es casi opaco pero no del todo, y sin desenfoque el
+-- texto de la ventana de detras se leia a traves (visto en la sesion real del
+-- portatil, 2026-10-19). `ignore_alpha` deja fuera el margen transparente
+-- donde va su halo, o se veria un rectangulo borroso alrededor.
+for _, panel in ipairs({ "bluetooth-panel", "wifi-panel", "calendar-panel" }) do
+    hl.layer_rule({
+        name  = panel,
+        match = { namespace = panel },
+        blur = true, ignore_alpha = 0.3,
+    })
+end
+
 -- El cambiador de escritorios (SUPER+TAB, scripts/vista-escritorios.py).
 --
 -- SIN DESENFOQUE, y es a proposito: su capa ocupa la pantalla entera pero esta

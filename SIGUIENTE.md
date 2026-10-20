@@ -5,9 +5,79 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-09-25**, primero en el **portátil** y luego en la **PC**.
+Última sesión: **2026-10-19**, en el **portátil** (antes, 2026-09-25 en las dos).
 
 ---
+
+## 2026-10-20 (portátil): saludo sin repetir, Insert para el overlay, y cada teclado con su distribución
+
+- **El saludo** sale al azar **sin repetirse** hasta haber enseñado todas, y la
+  vuelta nueva no empieza por la última (`unidad/saludo`).
+- **El overlay de FPS**: Supr en la PC, **Insert** (o «Ins», el mismo keysym)
+  en un portátil — `modo-gaming.tecla_overlay()`, lo lee MangoHud
+  (`toggle_hud`). **Falta probarlo con un juego** en las dos máquinas.
+- **Cada teclado con su distribución** (`hypr/scripts/teclados.py` +
+  `hypr/lua/teclados.lua`), elegido por el usuario («preguntar una vez»): al
+  enchufar un teclado desconocido sale una tarjeta «¿Qué tiene la tecla de la
+  derecha de la L? Ñ / ; :», se aplica en el acto a ese teclado y se recuerda
+  en `~/.config/celiuz/teclados.conf`. Probado en anidado (aplica en caliente
+  y aguanta un `reload`) y en `unidad/teclados` (31). En la laptop no pregunta
+  nada (el interno y el ratón USB quedan fuera: `teclados.py ver`). Demonio
+  lanzado a mano en la sesión de la laptop; arranca solo al volver a entrar.
+  **Pendiente en la PC**: tras `git pull`, cerrar sesión y entrar; debe salir
+  la tarjeta por la X820 → contestar `; :`. Comprobar con `teclados.py ver` y
+  `hyprctl devices` que queda `us,latam`, y que SUPER+Supr sigue alternando.
+
+## 2026-10-19 (portátil): paneles que se excluyen y el saludo de la terminal
+
+- **Los paneles de la barra se excluyen** (`lib/panel_capa.PANELES`): abrir el
+  reloj cierra el de red, etc. Probado en la sesión real (WiFi → reloj →
+  Bluetooth: siempre una sola capa) y con `unidad/paneles-exclusivos` (12).
+- **El saludo de la terminal**: `fastfetch/config.jsonc` + `hypr/scripts/saludo.sh`
+  (`celiuz-saludo`), imagen al azar de `~/Imágenes/terminal` por el protocolo
+  de kitty, enganchado a fish por `instalar.sh` (`saludo_fish`). Visto en
+  anidado; `unidad/saludo` (21). Las imágenes se adaptan (`lib/imagen_saludo.py`:
+  recorte del aire transparente, esquinas redondeadas, 400 px) a una caché, en
+  segundo plano la primera vez. Aplicado a mano en la
+  laptop (los dos enlaces, la carpeta y la línea de config.fish).
+  Pendiente: que el usuario ponga sus imágenes; en la PC, `./instalar.sh`.
+
+## 2026-10-19 (portátil): el panel del Bluetooth
+
+Los auriculares no conectaban: unos TWS con dirección nueva, sin emparejar (ver
+la trampa en `CLAUDE.md`). Emparejados a mano, y de ahí salió **el panel**
+(`hypr/scripts/bluetooth-panel.py`), elegido por el usuario entre dos maquetas
+(un menú propio y blueman): el clic en el icono ya no abre bluetui, abre el
+panel. Probado en anidado con el BlueZ falso (capturas del abierto, del editor
+del «⋯», de emparejar) y con pruebas: `unidad/bluetooth-panel` (48) y
+`e2e/bluetooth-panel` (31, con el demonio delante).
+
+Pendiente:
+- **Probarlo en la sesión real de las dos máquinas** tras recargar las barras
+  (`SUPER+SHIFT+C`): abrir, cerrar, «Usar este» entre dos auriculares
+  encendidos, y emparejar unos de verdad. En la PC, con el televisor, que
+  salga bajo el icono de la pantalla donde se pincha.
+- Los dos TWS viejos de la laptop (`41:42:47…`, `41:42:39…`) ya no aparecen:
+  el usuario decide si se olvidan (el «⋯» del panel lo hace).
+- **El panel del reloj** (`calendar-panel.py`, reescrito sobre `PanelCapa`):
+  la maqueta 2 (`~/Imágenes/maqueta-reloj/`), con el tiempo girando despacio
+  alrededor de la hora, luna, zodiaco y el próximo feriado. El tiempo y la
+  ubicación con las reglas de privacidad del usuario (cabecera de
+  `lib/clima.py`). Probado en anidado y en `unidad/reloj-panel` (42).
+- **El panel de red** (`hypr/scripts/wifi-panel.py`): elegido por el usuario
+  sobre dos maquetas (`~/Imágenes/maqueta-wifi/`), con el QR dentro del «⋯» →
+  «Compartir red». Comparte base con el del Bluetooth (`lib/panel_capa.py` +
+  `lib/panel_estilo.py`). Probado en anidado con un `nmcli` de mentira y con
+  pruebas: `unidad/wifi-panel` (48), `e2e/wifi-panel` (18). **Falta probarlo en
+  la sesión real conectando a una red nueva de verdad** (la conexión por D-Bus
+  solo se ha ejercido contra el NetworkManager falso), y en la PC, que va por
+  cable y quizá sin wifi.
+- **Las teclas de volumen** movían la salida predeterminada (los altavoces) y
+  no la que sonaba (los TWS). Arreglado en `osd.sh` + `lib/sonido.py salida`,
+  comprobado en vivo en el portátil. **En la PC, comprobar Ctrl+RePag/AvPag**
+  con lo que suele usar (¿auriculares, HDMI?) tras el pull.
+- `unidad/modo-gaming` falló una vez en la tanda completa y pasó sola (78/78):
+  parece de tiempos. Vigilar.
 
 ## Lo PRIMERO la próxima vez
 
@@ -302,7 +372,7 @@ y teclado.
 | Entrar / salir | `SUPER+G` |
 | Menú rápido | `SUPER` + la tecla de al lado del 1, **por código** (`code:49`), no por símbolo: en `us` es `` ` `` y en `latam` es `\|`/`°` |
 | Menú rápido con mando | Select + Start (el Guide es de Steam) |
-| Overlay | `Delete` (es `DEL` y es `Supr`: el mismo keysym), atrapado por Hyprland y mandado con `mangohudctl` |
+| Overlay | `Delete` (`DEL`/`Supr`) en la PC, `Insert` (`Insert`/`Ins`, el mismo keysym) en un portátil: la lee MangoHud (`toggle_hud`, `modo-gaming.tecla_overlay()`), no Hyprland; el menú rápido lo alterna con `mangohudctl` |
 
 ### Overlay (MangoHud)
 Una config del repo con la paleta, que el modo pasa a todo lo que lanza (Steam

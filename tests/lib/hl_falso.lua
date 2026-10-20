@@ -16,7 +16,8 @@ local HOME = os.getenv("HOME")
 package.path = HOME .. "/.config/hypr/?.lua;" .. package.path
 
 local R = { opciones = {}, binds = {}, monitores = {}, env = {}, eventos = {},
-            exec = {}, curvas = {}, animaciones = {}, reglas = {}, capas = {} }
+            exec = {}, curvas = {}, animaciones = {}, reglas = {}, capas = {},
+            dispositivos = {} }
 
 local function fundir(dst, src, prefijo)
     for k, v in pairs(src) do
@@ -52,7 +53,7 @@ hl = {
     window_rule = function(t) R.reglas[#R.reglas + 1] = t; return { set_enabled = function() end } end,
     layer_rule = function(t) R.capas[#R.capas + 1] = t; return { set_enabled = function() end } end,
     workspace_rule = function(t) end,
-    device = function(t) end,
+    device = function(t) R.dispositivos[#R.dispositivos + 1] = t end,
     dsp = {
         exec_cmd = dsp("exec_cmd"), dpms = dsp("dpms"), focus = dsp("focus"), exit = dsp("exit"),
         window = { close = dsp("window.close"), float = dsp("window.float"), move = dsp("window.move"),

@@ -170,7 +170,8 @@
         // Los campos bandwidth* YA traen la unidad por segundo ("252.9kB/s"), asi
         // que anadir "/s" aqui daria "kB/s/s".
         "tooltip-format": "{ifname}\nBajada: {bandwidthDownBytes}\nSubida: {bandwidthUpBytes}\nTotal: {bandwidthTotalBytes}",
-        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui nmtui"
+        // El mismo panel que el icono de red de la derecha.
+        "on-click": "$HOME/.config/hypr/scripts/wifi-panel.py"
     },
 
     "network": {
@@ -181,8 +182,11 @@
         "tooltip-format-ethernet": "{ifname}\nIP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ifname} — IP: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓{bandwidthDownBytes} ↑{bandwidthUpBytes}",
         "interval": 5,
-        // nmtui viene con networkmanager, no hace falta instalar nada extra.
-        "on-click": "$HOME/.config/hypr/scripts/terminal.sh monitor-tui nmtui"
+        // Clic: el panel de red (hypr/scripts/wifi-panel.py): la red en uso, tus
+        // redes, las de alrededor con su contraseña ahi mismo, compartir con
+        // QR y el modo avion. Su «Ajustes avanzados» abre nmtui (viene con
+        // networkmanager) para la IP fija y lo raro. Otro clic lo cierra.
+        "on-click": "$HOME/.config/hypr/scripts/wifi-panel.py"
     },
 
     // --- DERECHA: Bluetooth ---
@@ -198,11 +202,11 @@
     // Los auriculares se conectan solos y de uno en uno: eso no es del modulo,
     // es de hypr/scripts/bluetooth.py (lo arranca conf/autostart.conf).
     //
-    //   clic         bluetui en la terminal flotante: buscar, emparejar,
-    //                conectar (repo oficial extra; lo comprueba instalar.sh).
-    //                Va por bluetooth.py y no por terminal.sh a secas para que,
-    //                si bluetui no esta, lo diga en vez de abrir una terminal
-    //                que se cierra sola
+    //   clic         el panel de Bluetooth (hypr/scripts/bluetooth-panel.py):
+    //                lo que esta en uso con su bateria, tus aparatos, y lo que
+    //                hay cerca para emparejar con un boton. Su «Ajustes
+    //                avanzados» abre bluetui por bluetooth.py, que avisa si
+    //                falta en vez de abrir una terminal que se cierra sola
     //   derecho      encender / apagar; si lo apago la tecla de modo avion,
     //                tambien lo desbloquea
     //   central      soltar el auricular que llevas puesto: entra el otro que
@@ -217,13 +221,13 @@
         // {status} sale en ingles («on», «off»), asi que cada estado lleva su
         // propio texto.
         "tooltip-format": "Bluetooth",
-        "tooltip-format-on": "Bluetooth encendido, nada conectado",
+        "tooltip-format-on": "Bluetooth encendido, nada conectado — clic para ver los aparatos",
         "tooltip-format-off": "Bluetooth apagado — clic derecho para encenderlo",
         "tooltip-format-disabled": "Bluetooth bloqueado (modo avion) — clic derecho para encenderlo",
         "tooltip-format-connected": "{device_enumerate}\n\nclic central: soltar el auricular",
         "tooltip-format-enumerate-connected": "{device_alias}",
         "tooltip-format-enumerate-connected-battery": "{device_alias} — {device_battery_percentage}%",
-        "on-click": "$HOME/.config/hypr/scripts/bluetooth.py gestionar",
+        "on-click": "$HOME/.config/hypr/scripts/bluetooth-panel.py",
         "on-click-right": "$HOME/.config/hypr/scripts/bluetooth.py alternar",
         "on-click-middle": "$HOME/.config/hypr/scripts/bluetooth.py soltar"
     },

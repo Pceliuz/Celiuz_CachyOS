@@ -831,10 +831,27 @@ def fuente_del_repo():
         return ""
 
 
+def tecla_overlay(tipo=None):
+    """La tecla que enseña y esconde el overlay: Supr en un sobremesa e Insert
+    en un portatil (lo pidio el usuario: en un portatil Supr va pegada a la de
+    borrar). «Insert» e «Ins» son la misma tecla con otra serigrafia (el mismo
+    keysym, `Insert`), asi que vale para cualquier portatil. MangoHud admite
+    UNA tecla (o una combinacion con «+»), no una lista: por eso se elige.
+    `tipo` es el de lib/maquina.py; sin el, se pregunta."""
+    if tipo is None:
+        try:
+            import maquina
+            tipo = maquina.detalle()["tipo"]
+        except Exception:
+            tipo = "escritorio"
+    return "Insert" if tipo == "laptop" else "Delete"
+
+
 def escribir_mangohud():
     """La config del overlay: una barra horizontal arriba a la izquierda con la
-    paleta del repo, ESCONDIDA hasta pulsar Supr (`toggle_hud=Delete`, la misma
-    tecla que ya usaba la config de Soulframe del autor). La tecla la lee el
+    paleta del repo, ESCONDIDA hasta pulsar su tecla (`tecla_overlay()`: Supr
+    en la PC, la misma que ya usaba la config de Soulframe del autor; Insert en
+    un portatil). La tecla la lee el
     propio MangoHud y no un atajo de Hyprland a proposito: un juego con su
     propia config de MangoHud con esa tecla (Soulframe) alternaria dos veces
     por pulsacion, o sea nada. `control=mangohud` deja ademas esconderlo y
@@ -876,7 +893,7 @@ def escribir_mangohud():
         "ram_color=%s" % c["tenue"],
         "engine_color=%s" % c["neon"],
         "horizontal_separator_color=%s" % c["apagado"],
-        "toggle_hud=Delete",
+        "toggle_hud=%s" % tecla_overlay(),
         "no_display",
         "control=mangohud",
     ]

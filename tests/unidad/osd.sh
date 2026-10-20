@@ -12,8 +12,12 @@
 # - Que una pulsacion REEMPLAZA el aviso de la anterior en vez de apilarse.
 # - Que sin notify-send, o sin salida de sonido, la tecla no se rompe.
 #
-# wpctl, brightnessctl y notify-send son de mentira: el volumen de verdad no se
-# toca.
+# - Que mueve la salida POR LA QUE SUENA cuando no es la predeterminada (la
+#   predeterminada fijada en los altavoces y la musica en unos auriculares
+#   Bluetooth: las teclas bajaban unos altavoces mudos), y lo dice en el aviso.
+#
+# wpctl, brightnessctl, notify-send y pw-dump son de mentira: el volumen de
+# verdad no se toca, y lo que suene en la maquina que corre la prueba no cuenta.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/../lib/comun.sh"
@@ -35,6 +39,9 @@ case "$1" in
                               || echo "$v [MUTED]" > "'"$TMP"'/vol" ;;
               esac ;;
 esac'
+# pw-dump de mentira: lo que haya en $TMP/pw.json. De entrada, nada sonando.
+echo "[]" > "$TMP/pw.json"
+binario_falso pw-dump 0 'cat "'"$TMP"'/pw.json"'
 binario_falso brightnessctl 0 'case "$*" in *-m*) echo "intel_backlight,backlight,300,40%,750" ;; esac'
 # notify-send de mentira: contesta un id nuevo en cada llamada, como mako.
 binario_falso notify-send 0 'echo $(( $(wc -l < "'"$REGISTRO"'/notify-send.log") + 100 ))'
@@ -84,7 +91,54 @@ afirmar "con su barra" grep -q -- "int:value:40" <<< "$(ultimo_aviso)"
 correr brillo subir
 afirmar_contiene "$REGISTRO/brightnessctl.log" "-q set 5%\+" "sube un 5%"
 
-titulo "6. Sin salida de sonido, o sin notify-send, la tecla no se rompe"
+titulo "6. La musica va por otra salida que la predeterminada"
+# Lo del 2026-10-19: predeterminada = altavoces (58), Brave sonando en los TWS
+# (96), y otro flujo parado en los altavoces, que no cuenta.
+pw_json() {   # pw_json <salida de Brave>
+    cat > "$TMP/pw.json" <<JSON
+[
+ {"id": 58, "type": "PipeWire:Interface:Node", "info": {"state": "suspended", "props": {
+   "media.class": "Audio/Sink", "node.name": "alsa_output.analog", "node.description": "Audio Interno"}}},
+ {"id": 96, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {
+   "media.class": "Audio/Sink", "node.name": "bluez_output.41_42", "node.description": "TWS", "node.nick": "TWS"}}},
+ {"id": 68, "type": "PipeWire:Interface:Node", "info": {"state": "running", "props": {
+   "media.class": "Stream/Output/Audio", "application.name": "Brave"}}},
+ {"id": 70, "type": "PipeWire:Interface:Node", "info": {"state": "suspended", "props": {
+   "media.class": "Stream/Output/Audio", "application.name": "Parado"}}},
+ {"id": 200, "type": "PipeWire:Interface:Link", "info": {"output-node-id": 68, "input-node-id": $1}},
+ {"id": 201, "type": "PipeWire:Interface:Link", "info": {"output-node-id": 68, "input-node-id": $1}},
+ {"id": 202, "type": "PipeWire:Interface:Link", "info": {"output-node-id": 70, "input-node-id": 58}},
+ {"id": 40, "type": "PipeWire:Interface:Metadata", "props": {"metadata.name": "default"},
+  "metadata": [{"subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON",
+                "value": {"name": "alsa_output.analog"}}]}
+]
+JSON
+}
+pw_json 96
+echo "0.45" > "$TMP/vol"
+: > "$REGISTRO/wpctl.log"
+correr volumen bajar
+afirmar_contiene "$REGISTRO/wpctl.log" "set-volume 96 5%-" "baja la salida por la que suena (los TWS)"
+afirmar_no_contiene "$REGISTRO/wpctl.log" "DEFAULT_AUDIO_SINK" "y no toca la predeterminada"
+afirmar "el aviso dice por donde va" grep -q "Volumen  45%  · TWS" <<< "$(ultimo_aviso)"
+
+pw_json 58
+: > "$REGISTRO/wpctl.log"
+correr volumen subir
+afirmar_contiene "$REGISTRO/wpctl.log" "set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%\+" \
+    "si suena por la predeterminada, se mueve la predeterminada"
+afirmar "y el aviso no lleva nombre" bash -c '! grep -q " · " <<< "$1"' _ "$(ultimo_aviso)"
+
+# Si pw-dump falla, la predeterminada: la tecla nunca se queda sin hacer nada.
+binario_falso pw-dump 1
+: > "$REGISTRO/wpctl.log"
+correr volumen bajar
+afirmar_contiene "$REGISTRO/wpctl.log" "set-volume @DEFAULT_AUDIO_SINK@ 5%-" \
+    "sin pw-dump, la predeterminada como siempre"
+echo "[]" > "$TMP/pw.json"
+binario_falso pw-dump 0 'cat "'"$TMP"'/pw.json"'
+
+titulo "7. Sin salida de sonido, o sin notify-send, la tecla no se rompe"
 binario_falso wpctl 1
 correr volumen subir
 afirmar_igual "0" "$codigo" "sin salida de sonido termina bien"

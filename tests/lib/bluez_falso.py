@@ -22,6 +22,13 @@ verdad donde importa:
   - Device1.Disconnect y la senal `Disconnected(motivo, mensaje)`.
   - Blocked=true sobre uno conectado lo desconecta, como el real.
   - Apagar el adaptador desconecta a todos con motivo `Local`.
+  - Lo que usa el panel (bluetooth-panel.py): StartDiscovery/StopDiscovery con
+    la propiedad `Discovering`, los aparatos sin emparejar que «aparecen» al
+    buscar (InterfacesAdded) con su RSSI, Device1.Pair, `Alias` y `Trusted`
+    escribibles, Adapter1.RemoveDevice (InterfacesRemoved), Battery1 y el
+    AgentManager1. Pair FALLA con `ConnectionAttemptFailed` si se pide con la
+    busqueda en marcha: es lo que hizo el real el 2026-10-19 con unos TWS, y el
+    panel tiene que parar la busqueda antes de emparejar.
 
 Y lo que el real no tiene, para mover los hilos desde la prueba (interfaz
 org.celiuz.Prueba en /prueba):
@@ -58,28 +65,53 @@ XML = """
     <signal name="InterfacesAdded">
       <arg type="o"/><arg type="a{sa{sv}}"/>
     </signal>
+    <signal name="InterfacesRemoved">
+      <arg type="o"/><arg type="as"/>
+    </signal>
+  </interface>
+  <interface name="org.bluez.AgentManager1">
+    <method name="RegisterAgent">
+      <arg type="o" direction="in"/><arg type="s" direction="in"/>
+    </method>
+    <method name="UnregisterAgent">
+      <arg type="o" direction="in"/>
+    </method>
+    <method name="RequestDefaultAgent">
+      <arg type="o" direction="in"/>
+    </method>
   </interface>
   <interface name="org.bluez.Adapter1">
+    <method name="StartDiscovery"/>
+    <method name="StopDiscovery"/>
+    <method name="RemoveDevice">
+      <arg type="o" direction="in"/>
+    </method>
     <property name="Powered" type="b" access="readwrite"/>
+    <property name="Discovering" type="b" access="read"/>
     <property name="Address" type="s" access="read"/>
     <property name="Alias" type="s" access="read"/>
+  </interface>
+  <interface name="org.bluez.Battery1">
+    <property name="Percentage" type="y" access="read"/>
   </interface>
   <interface name="org.bluez.Device1">
     <method name="Connect"/>
     <method name="Disconnect"/>
+    <method name="Pair"/>
     <signal name="Disconnected">
       <arg type="s"/><arg type="s"/>
     </signal>
     <property name="Address" type="s" access="read"/>
-    <property name="Alias" type="s" access="read"/>
+    <property name="Alias" type="s" access="readwrite"/>
     <property name="Name" type="s" access="read"/>
     <property name="Icon" type="s" access="read"/>
     <property name="UUIDs" type="as" access="read"/>
     <property name="Paired" type="b" access="read"/>
-    <property name="Trusted" type="b" access="read"/>
+    <property name="Trusted" type="b" access="readwrite"/>
     <property name="Blocked" type="b" access="readwrite"/>
     <property name="Connected" type="b" access="read"/>
     <property name="Adapter" type="o" access="read"/>
+    <property name="RSSI" type="n" access="read"/>
   </interface>
   <interface name="org.celiuz.Prueba">
     <method name="Encender">
@@ -99,12 +131,19 @@ XML = """
 FIRMAS = {
     "Address": "s", "Alias": "s", "Name": "s", "Icon": "s", "UUIDs": "as",
     "Paired": "b", "Trusted": "b", "Blocked": "b", "Connected": "b",
-    "Adapter": "o", "Powered": "b",
+    "Adapter": "o", "Powered": "b", "Discovering": "b", "RSSI": "n",
+    "Percentage": "y",
 }
+BATERIA = "org.bluez.Battery1"
+AGENTES = "org.bluez.AgentManager1"
 
 # Lo que tarda el falso en «buscar»: poco, para que la prueba vaya rapida, pero
 # no cero, para que las respuestas lleguen de verdad por el bucle y no pegadas.
 DEMORA_MS = 300
+
+
+def _variantes(props):
+    return {k: GLib.Variant(FIRMAS[k], x) for k, x in props.items()}
 
 
 def ruta_de(mac):
@@ -118,14 +157,19 @@ class Falso:
         # Sin adaptador se imita a un sobremesa sin Bluetooth: BlueZ corriendo
         # pero sin ninguna radio. El demonio tiene que quedarse quieto.
         self.con_adaptador = con_adaptador
-        self.adaptador = {"Powered": True, "Address": "00:00:00:00:00:00",
-                          "Alias": "falso"}
-        self.aparatos = {}      # ruta -> props de Device1
+        self.adaptador = {"Powered": True, "Discovering": False,
+                          "Address": "00:00:00:00:00:00", "Alias": "falso"}
+        self.aparatos = {}      # ruta -> props de Device1 (los que BlueZ ya ve)
+        self.ocultos = {}       # ruta -> props de los que solo salen al buscar
+        self.baterias = {}      # ruta -> porcentaje (Battery1)
         self.encendidos = {}    # ruta -> el auricular esta encendido
         self.llamadas = []      # macs a las que se llamo con Connect, en orden
+        self.emparejos = []     # macs a las que se llamo con Pair, en orden
+        self.agentes = []       # (ruta, capacidad) registrados
+        self.registros = {}     # ruta -> [ids de register_object]
         for a in aparatos:
             ruta = ruta_de(a["mac"])
-            self.aparatos[ruta] = {
+            props = {
                 "Address": a["mac"], "Alias": a["nombre"], "Name": a["nombre"],
                 "Icon": a.get("icono", "audio-headset"),
                 "UUIDs": a.get("uuids", []),
@@ -135,24 +179,50 @@ class Falso:
                 "Connected": a.get("conectado", False),
                 "Adapter": ADAPTADOR_RUTA,
             }
+            if "rssi" in a:
+                props["RSSI"] = a["rssi"]
+            if a.get("sin_nombre"):
+                # Lo que da BlueZ con un aparato LE que no dice su nombre: sin
+                # Name, y el Alias es la MAC con guiones.
+                del props["Name"]
+                props["Alias"] = a["mac"].replace(":", "-")
+            if "bateria" in a:
+                self.baterias[ruta] = a["bateria"]
             self.encendidos[ruta] = a.get("encendido", False)
+            if a.get("al_buscar"):
+                self.ocultos[ruta] = props
+            else:
+                self.aparatos[ruta] = props
 
         # Las llamadas a Properties.Get/Set van al method_call porque no se da
         # manejador de propiedades (asi lo hace GDBus con NULL).
         self._registrar("/", OBJETOS)
         self._registrar("/prueba", CONTROL)
         if con_adaptador:
+            self._registrar("/org/bluez", AGENTES)
             self._registrar(ADAPTADOR_RUTA, ADAPTADOR)
         for ruta in self.aparatos:
-            self._registrar(ruta, DISPOSITIVO)
+            self._registrar_aparato(ruta)
 
     def _registrar(self, ruta, interfaz):
         # register_object esta obsoleto desde GLib 2.84 y avisa por stderr; la
         # prueba exige un stderr limpio, asi que se usa el nuevo si lo hay.
         registrar = getattr(self.c, "register_object_with_closures2",
                             self.c.register_object)
-        registrar(ruta, self.info.lookup_interface(interfaz),
-                  self._llamada, None, None)
+        ident = registrar(ruta, self.info.lookup_interface(interfaz),
+                          self._llamada, None, None)
+        self.registros.setdefault(ruta, []).append(ident)
+
+    def _registrar_aparato(self, ruta):
+        self._registrar(ruta, DISPOSITIVO)
+        if ruta in self.baterias:
+            self._registrar(ruta, BATERIA)
+
+    def _ifaces_de(self, ruta):
+        ifaces = {DISPOSITIVO: _variantes(self.aparatos[ruta])}
+        if ruta in self.baterias:
+            ifaces[BATERIA] = _variantes({"Percentage": self.baterias[ruta]})
+        return ifaces
 
     # --- Senales --------------------------------------------------------------
 
@@ -186,6 +256,10 @@ class Falso:
                     GLib.Variant("(a{oa{sa{sv}}})", (self._todo(),)))
             if interfaz == DISPOSITIVO:
                 return self._dispositivo(ruta, metodo, invocacion)
+            if interfaz == ADAPTADOR:
+                return self._adaptador(metodo, params, invocacion)
+            if interfaz == AGENTES:
+                return self._agentes(metodo, params, invocacion)
             if interfaz == CONTROL:
                 return self._control(metodo, params, invocacion)
         except Exception as e:  # noqa: BLE001 — que la prueba lo vea, no que cuelgue
@@ -195,11 +269,10 @@ class Falso:
                                      metodo)
 
     def _todo(self):
-        def v(props):
-            return {k: GLib.Variant(FIRMAS[k], x) for k, x in props.items()}
-        todo = {ADAPTADOR_RUTA: {ADAPTADOR: v(self.adaptador)}} if self.con_adaptador else {}
-        for ruta, props in self.aparatos.items():
-            todo[ruta] = {DISPOSITIVO: v(props)}
+        todo = ({ADAPTADOR_RUTA: {ADAPTADOR: _variantes(self.adaptador)}}
+                if self.con_adaptador else {})
+        for ruta in self.aparatos:
+            todo[ruta] = self._ifaces_de(ruta)
         return todo
 
     def _propiedades(self, ruta, metodo, params, invocacion):
@@ -223,9 +296,57 @@ class Falso:
             if valor:
                 GLib.timeout_add(DEMORA_MS, lambda: self._desconectar(
                     ruta, "org.bluez.Reason.Local") or False)
+        elif interfaz == DISPOSITIVO and nombre in ("Alias", "Trusted") and ruta in self.aparatos:
+            self._cambiar(ruta, DISPOSITIVO, self.aparatos[ruta], **{nombre: valor})
         else:
             invocacion.return_dbus_error("org.bluez.Error.InvalidArguments", nombre)
             return
+        invocacion.return_value(None)
+
+    def _adaptador(self, metodo, params, invocacion):
+        if metodo == "StartDiscovery":
+            if not self.adaptador["Powered"]:
+                invocacion.return_dbus_error("org.bluez.Error.NotReady", "Resource Not Ready")
+                return
+            self._cambiar(ADAPTADOR_RUTA, ADAPTADOR, self.adaptador, Discovering=True)
+            # Los de alrededor aparecen al rato, como en el real.
+            def aparecer():
+                for ruta in list(self.ocultos):
+                    self.aparatos[ruta] = self.ocultos.pop(ruta)
+                    self._registrar_aparato(ruta)
+                    self.c.emit_signal(None, "/", OBJETOS, "InterfacesAdded",
+                                       GLib.Variant("(oa{sa{sv}})",
+                                                    (ruta, self._ifaces_de(ruta))))
+                return False
+            GLib.timeout_add(DEMORA_MS, aparecer)
+        elif metodo == "StopDiscovery":
+            if not self.adaptador["Discovering"]:
+                invocacion.return_dbus_error("org.bluez.Error.Failed", "No discovery started")
+                return
+            self._cambiar(ADAPTADOR_RUTA, ADAPTADOR, self.adaptador, Discovering=False)
+        elif metodo == "RemoveDevice":
+            (ruta,) = params.unpack()
+            if ruta not in self.aparatos:
+                invocacion.return_dbus_error("org.bluez.Error.DoesNotExist", "Does Not Exist")
+                return
+            self._desconectar(ruta, "org.bluez.Reason.Local")
+            del self.aparatos[ruta]
+            for ident in self.registros.pop(ruta, []):
+                self.c.unregister_object(ident)
+            ifaces = [DISPOSITIVO] + ([BATERIA] if self.baterias.pop(ruta, None) is not None else [])
+            self.c.emit_signal(None, "/", OBJETOS, "InterfacesRemoved",
+                               GLib.Variant("(oas)", (ruta, ifaces)))
+        else:
+            invocacion.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", metodo)
+            return
+        invocacion.return_value(None)
+
+    def _agentes(self, metodo, params, invocacion):
+        if metodo == "RegisterAgent":
+            self.agentes.append(list(params.unpack()))
+        elif metodo == "UnregisterAgent":
+            (ruta,) = params.unpack()
+            self.agentes = [a for a in self.agentes if a[0] != ruta]
         invocacion.return_value(None)
 
     def _dispositivo(self, ruta, metodo, invocacion):
@@ -237,6 +358,26 @@ class Falso:
                 invocacion.return_value(None)
                 return False
             GLib.timeout_add(DEMORA_MS // 3, cortar)
+            return
+        if metodo == "Pair":
+            self.emparejos.append(p["Address"])
+
+            def emparejar():
+                if p["Paired"]:
+                    invocacion.return_dbus_error("org.bluez.Error.AlreadyExists",
+                                                 "Already Exists")
+                elif self.adaptador["Discovering"]:
+                    # Medido con el real (ver la cabecera).
+                    invocacion.return_dbus_error("org.bluez.Error.ConnectionAttemptFailed",
+                                                 "Page Timeout")
+                elif not self.encendidos[ruta]:
+                    invocacion.return_dbus_error("org.bluez.Error.AuthenticationTimeout",
+                                                 "Authentication Timeout")
+                else:
+                    self._cambiar(ruta, DISPOSITIVO, p, Paired=True)
+                    invocacion.return_value(None)
+                return False
+            GLib.timeout_add(DEMORA_MS, emparejar)
             return
         if metodo != "Connect":
             invocacion.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod",
@@ -266,6 +407,9 @@ class Falso:
             estado = {
                 "powered": self.adaptador["Powered"],
                 "llamadas": self.llamadas,
+                "emparejos": self.emparejos,
+                "agentes": self.agentes,
+                "buscando": self.adaptador["Discovering"],
                 "aparatos": {p["Address"]: dict(p) for p in self.aparatos.values()},
             }
             invocacion.return_value(GLib.Variant("(s)", (json.dumps(estado),)))

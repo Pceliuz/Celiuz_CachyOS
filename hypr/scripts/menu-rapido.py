@@ -264,7 +264,7 @@ class Menu(Gtk.Window):
 
     def overlay(self):
         """Enseñar / esconder el overlay de MangoHud desde fuera del juego (por
-        si un juego no lee Supr). Sin juego con MangoHud, mangohudctl no tiene
+        si un juego no lee la tecla, Supr o Insert). Sin juego con MangoHud, mangohudctl no tiene
         a quien hablar y no pasa nada."""
         try:
             subprocess.run(["mangohudctl", "toggle", "no_display"], capture_output=True, timeout=3)

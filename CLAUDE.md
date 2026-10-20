@@ -14,7 +14,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (35 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (42 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -126,8 +126,15 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.config/celiuzpaper/carpetas.json` | las carpetas de fondos que añadió el usuario |
 | `~/.cache/celiuzpaper/lock-*.conf` | fondo y medidas del bloqueo, rehechos en cada bloqueo |
 | `~/.local/state/celiuz/bluetooth.json` | cuándo se usó cada auricular y a cuáles bloqueó el cerrojo de `bluetooth.py` |
+| `~/Imágenes/terminal/` (`xdg-user-dir PICTURES`) | las imágenes del saludo de la terminal; el repo no trae ninguna |
+| `~/.cache/celiuz/saludo/` | las copias adaptadas de esas imágenes (clave: tamaño + fecha + ruta) |
+| la línea `celiuz-saludo` al final de `~/.config/fish/config.fish` | el `fish_greeting`; `instalar.sh` la añade una vez y no toca un saludo propio |
+| `~/.config/celiuz/clima.conf` | `ubicacion` (auto / zona / fija), `clima = no`, `signo` del panel del reloj |
+| `~/.cache/celiuz/ubicacion.json`, `clima.json` | la ÚLTIMA ciudad (redondeada, 0600, sin historial) y el tiempo de hace menos de 15 min |
+| `~/.config/celiuz/bluetooth.conf` | `cerrojo` y `auto` del demonio; lo escriben también los interruptores del panel (`Ajustes.guardar`, que respeta lo escrito a mano) |
 | `~/.config/celiuz/modo-gaming.json` | apps permitidas jugando, juegos a ocultar, `cerrar_terminales` |
 | `~/.config/celiuz/modo-gaming.d/` | ganchos de cada equipo al entrar y salir del modo gaming |
+| `~/.config/celiuz/teclados.conf` | la distribución de cada teclado que se contestó en la tarjeta de `teclados.py` (la relee `lua/teclados.lua`) |
 | `~/.cache/celiuz/mangohud.conf` | el overlay, rehecho con la paleta en cada entrada al modo |
 | `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
@@ -602,6 +609,17 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   «arregla» esa asimetría creyendo que es un descuido, se arregla el portátil y
   se rompe la PC. Y el síntoma no avisa: las teclas simplemente dejan de dar lo
   que tienen serigrafiado.
+- **Ningún teclado dice si es latam o us, y por eso `teclados.py` PREGUNTA.**
+  `bCountryCode` del HID contesta «Not supported» en los dos equipos. Lo que sí
+  se mide (2026-10-20): `hyprctl eval 'hl.device({ name = ..., kb_layout = ... })'`
+  cambia ESE teclado en caliente y hereda `kb_options` del bloque global si no
+  lo nombra; un `reload` lo deshace, y por eso `lua/teclados.lua` lo relee. El
+  nombre de Hyprland es el del kernel en minúsculas con los espacios a guiones
+  (`USB OPTICAL MOUSE  Keyboard` → `usb-optical-mouse--keyboard`). Y **un ratón
+  puede anunciar todas las letras** (ese mismo, en la laptop): «tiene la fila
+  QWERTY» no basta para llamarlo teclado; se pregunta por APARATO
+  (bus:fabricante:producto), no por nombre, y la tarjeta tiene «No es un
+  teclado».
 - **Un `device {}` de Hyprland arregla UN teclado, no «el teclado».** El perfil
   de portátil devolvía el Ctrl derecho con
   `device { name = at-translated-set-2-keyboard }`, y eso dejaba fuera a todo lo
@@ -828,6 +846,83 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   `Connected` y **no se ha medido en qué orden**, así que no conviene contar con
   ninguno: nada que dependa del motivo se decide en el mismo ciclo en que llega
   el `Connected: false` (el demonio espera 1 s antes de volver a llamar).
+- **`Pair` con la búsqueda en marcha FALLA, y no dice por qué.** Medido el
+  2026-10-19 con unos TWS en el portátil (Realtek `0bda:c024`, la misma radio
+  que el wifi): `pair` durante un `scan on` dio
+  `org.bluez.Error.ConnectionAttemptFailed`, y el mismo aparato se conectó en
+  cuanto se paró la búsqueda. Por eso `bluetooth-panel.py` para de buscar,
+  empareja, conecta y vuelve a buscar; el BlueZ falso imita el fallo, y
+  `tests/e2e/bluetooth-panel.sh` falla 6 de 31 si se quita la parada.
+- **Unos auriculares que «dejan de conectarse» pueden haber cambiado de
+  DIRECCIÓN.** El síntoma del 2026-10-19: `br-connection-page-timeout` cada
+  minuto en `journalctl --user -u celiuz-bluetooth`, con el adaptador y el
+  servicio bien. Los dos TWS emparejados ya no aparecían al buscar y había un
+  «TWS» con otra MAC, sin emparejar, a -48 dBm (se habían reiniciado o eran
+  otros). Se arregla emparejando el nuevo. Para mirar qué hay cerca desde un
+  script, `bluetoothctl --timeout N scan on` **no imprime los aparatos**: se
+  busca y se lee `GetManagedObjects` (o `bluetooth-panel.py --ver`).
+- **Recién emparejado y con otros auriculares puestos, conectar a secas no
+  basta**: el demonio bloquea al nuevo en cuanto ve `Paired`, y si entra lo echa
+  por el cerrojo. El panel hace como «Usar este»: suelta el que había y conecta.
+  Y el demonio decía «No se conectó X, desconéctalo primero» al echar a uno que
+  había llamado **él mismo** (`_conectando` se vacía al llegar la respuesta,
+  antes de la pasada que echa); ahora recuerda sus llamadas recientes (`_mios`).
+- **Una capa de gtk-layer-shell toma el alto MÍNIMO de lo que lleva**, y el de
+  un `Gtk.ScrolledWindow` es casi cero: la lista del panel salía aplastada a
+  una raya. El alto se fija a mano tras cada repintado (`_ajustar_alto`), y en
+  ese orden: soltar el máximo, poner el mínimo, poner el máximo — GTK no admite
+  un mínimo mayor que el máximo vigente y lo dice con un `Gtk-CRITICAL`.
+- **Un `* { color: ... }` en un CSS de aplicación DESTAPA la «I» de los
+  `Gtk.Switch`.** adw-gtk3 la esconde con `switch image { color: transparent }`,
+  y un proveedor con más prioridad gana aunque su selector sea menos
+  específico. Quien ponga color a todo tiene que volver a esconderla.
+
+- **Los paneles que cuelgan de la barra comparten base: `lib/panel_capa.py`**
+  (la capa, colgar del puntero en la pantalla donde esté, el alto medido de la
+  lista, cerrarse al alejar el puntero salvo `ocupado()`, el interruptor de
+  abrir/cerrar y el `hold` de las barras) **y `lib/panel_estilo.py`** (el CSS,
+  sin GTK, entero de la paleta). Hoy los usan `bluetooth-panel.py`,
+  `wifi-panel.py` y `calendar-panel.py`. Un panel nuevo hereda de `PanelCapa`;
+  no se copia. **Y se excluyen**: abrir uno cierra los otros (`PANELES`, un
+  panel nuevo se añade ahí). `_cerrar_los_otros()` ESPERA a que el viejo salga:
+  su `release` a la barra tiene que llegar antes que el `hold` del nuevo,
+  porque el demonio guarda un sí/no y no una cuenta. Y antes de mandar SIGTERM
+  a un pid guardado se mira su `/proc/<pid>/cmdline`: un `.pid` viejo puede
+  apuntar a otro proceso. Lo vigila `tests/unidad/paneles-exclusivos.sh`.
+- **La ubicación del panel del reloj tiene reglas de privacidad que pidió el
+  usuario, y no son un detalle**: se pide solo al abrir el panel, una vez por
+  red (resumen sha256 del UUID de la conexión, no su nombre), redondeada a
+  0,1° antes de guardarla y de mandarla a Open-Meteo, solo la última (0600), y
+  con modos sin ninguna pregunta (`zona`, fija, `clima = no`). Todo pasa por
+  `clima.pedir()`, la única puerta a internet del módulo, que es lo que
+  sustituye `tests/unidad/reloj-panel.sh`. Si añades algo que salga a la red
+  desde un panel, que pase por ahí y que la prueba lo cuente.
+- **`nmcli -t` escapa `:` y `\` con una barra** (un SSID puede llevar dos
+  puntos), así que un `split(":")` parte mal; `wifi-panel.partir()` lo hace
+  bien. Y se llama con `LC_ALL=C`: en español cambian las palabras de estado.
+- **`nmcli device wifi connect SSID password XXX` deja la contraseña en
+  `/proc/<pid>/cmdline`**, que puede leer cualquier usuario del equipo. El panel
+  conecta las redes nuevas por D-Bus (`AddAndActivateConnection2`) con
+  `persist=memory`: si conecta, `Save`; si no, `Delete`, y una contraseña mal
+  escrita no deja perfiles a medias. Lo mismo con el QR: `qrencode` lee de
+  stdin. Lo vigila `tests/e2e/wifi-panel.sh`, que mira la línea de órdenes de
+  todos los procesos mientras conecta (contra un NetworkManager falso,
+  `tests/lib/nm_falso.py`).
+- **Desconectar es `nmcli connection down`, no `device disconnect`**: el
+  segundo deja la tarjeta sin conectarse sola a nada hasta que alguien la
+  conecte a mano.
+
+- **`@DEFAULT_AUDIO_SINK@` NO es «lo que estás oyendo».** Si la
+  predeterminada se fijó a mano alguna vez (`default.configured.audio.sink` en
+  `~/.local/state/wireplumber/default-nodes`), WirePlumber la mantiene al
+  conectar unos auriculares Bluetooth, pero manda la música a los auriculares
+  porque recuerda dónde iba cada app. Medido el 2026-10-19 en el portátil: las
+  teclas dejaban los altavoces a 0 y Brave seguía al 100 % en los TWS; en la PC
+  el usuario vio lo mismo con Ctrl+RePag. `osd.sh` pregunta a
+  `lib/sonido.py salida`, que sigue los enlaces de PipeWire de los flujos en
+  marcha, y solo si no sabe usa la predeterminada. Lo vigila `tests/unidad/osd.sh`
+  (falla 3 de 33 contra el script anterior).
+
 - **Las hints de una notificación pueden traer el icono en crudo** (`image-data`,
   un array de píxeles). Guardarlas enteras son cientos de KB por aviso, y el
   registro vive en `$XDG_RUNTIME_DIR`, que es el mismo tmpfs donde está el fifo

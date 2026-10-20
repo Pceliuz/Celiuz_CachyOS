@@ -147,7 +147,14 @@ vigilante="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["vi
 afirmar "arranca el vigilante de ventanas" test -n "$vigilante"
 afirmar_igual "3" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["origen"])' "$ESTADO")" "apunta de qué escritorio venías"
 afirmar "genera la config del overlay" test -s "$XDG_CACHE_HOME/celiuz/mangohud.conf"
-afirmar_contiene "$XDG_CACHE_HOME/celiuz/mangohud.conf" '^toggle_hud=Delete$' "el overlay se alterna con Supr"
+afirmar_contiene "$XDG_CACHE_HOME/celiuz/mangohud.conf" '^toggle_hud=(Delete|Insert)$' "el overlay se alterna con una tecla (Supr o Insert)"
+teclas="$(python3 -c "
+import importlib.util, sys
+sys.path.insert(0, '$REPO/hypr/scripts/lib')
+spec = importlib.util.spec_from_file_location('mg', '$REPO/hypr/scripts/modo-gaming.py')
+mg = importlib.util.module_from_spec(spec); spec.loader.exec_module(mg)
+print(mg.tecla_overlay('escritorio'), mg.tecla_overlay('laptop'))")"
+afirmar_igual "Delete Insert" "$teclas" "Supr en la PC, Insert (o «Ins») en un portatil"
 afirmar_contiene "$XDG_CACHE_HOME/celiuz/mangohud.conf" '^no_display$' "y empieza escondido"
 afirmar_contiene "$XDG_CACHE_HOME/celiuz/mangohud.conf" '^position=top-center$' "centrado"
 afirmar_contiene "$XDG_CACHE_HOME/celiuz/mangohud.conf" '^horizontal_stretch=0$' "y del ancho de lo que enseña, no de la pantalla"
