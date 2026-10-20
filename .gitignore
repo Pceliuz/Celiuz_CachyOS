@@ -52,3 +52,12 @@ credentials.json
 token.json
 *.pem
 *.key
+
+# Celiuz Remoto (remoto/). Lo que genera la compilacion de la app pesa cientos
+# de MB y se rehace solo; remoto/app/.gitignore lleva el detalle (node_modules,
+# android/, .expo/). Aqui va lo que NO puede subir nunca: un APK compilado y la
+# clave con la que se firma, que vive en ~/.config/celiuz/remoto/firma.keystore
+# y es lo que deja actualizar la app sin desinstalarla.
+*.apk
+*.aab
+*.keystore

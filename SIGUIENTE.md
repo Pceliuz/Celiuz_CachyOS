@@ -9,6 +9,33 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (PC): nace Celiuz Remoto (`remoto/`), solo la estructura
+
+**Sin commitear todavía** (a petición del usuario): `git status` lo enseña todo.
+
+Una app Android para manejar la PC y la laptop desde fuera: estado en tiempo
+real, apagar, ver y cerrar apps, archivos y terminal con sudo. **Todavía no hace
+nada**: hoy se cerró el diseño con el usuario y se armó el esqueleto.
+
+- **Léelo antes de tocar nada**: `remoto/DISEÑO.md` (cada decisión y su porqué:
+  contraseña propia creada en la PC, pase de 24 h exactas que solo se renueva
+  por cable, vigilancia que apaga la PC si el celular calla 2 h sin nadie
+  delante...) y `remoto/PROTOCOLO.md` (el contrato app ↔ servidor, v0).
+- Maquetas de las 9 pantallas, aprobadas por el usuario «tal cual»:
+  https://claude.ai/artifact/BGqHdnHe5W2Xu7LNuVwYUd
+- Lo que ya funciona: `remoto/servidor/celiuz-remoto.py revisar` (qué le falta
+  al equipo) y `rutas`; lo vigila `tests/unidad/remoto.sh`. Los módulos de
+  `servidor/celiuz_remoto/` solo tienen su cabecera con lo que harán.
+- La app (`remoto/app/`, Expo SDK 58 + TypeScript) arranca y pasa
+  `npm run typecheck`. `node_modules` (377 MB) no se versiona.
+- **A la PC le falta** `sudo pacman -S tailscale python-aiohttp android-tools`
+  (y para compilar el APK, `jdk17-openjdk` y el SDK de Android).
+- **Pendiente antes de la fase 1**: que `gen-colores.py` genere la paleta de la
+  app (`App.tsx` y `app.json` llevan el violeta copiado a mano, avisado en el
+  propio fichero); y decidir qué pasa con la PC en la pantalla de SDDM (el
+  servicio es de la sesión).
+- `tests/unidad/portabilidad.sh` se salta ahora `node_modules` y `.expo`.
+
 ## 2026-10-20 (PC): la barra de arriba ya no se escondía, y cada pantalla a sus Hz más altos
 
 - **Qué era**: una waybar de arriba de las 05:13 seguía viva como hija del

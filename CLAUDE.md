@@ -95,6 +95,18 @@ enumera SDL**, no si el device existe.
 
 ---
 
+## Y en construcción también: CELIUZ REMOTO (`remoto/`)
+
+Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
+apps, archivos, terminal). **Solo está la estructura** (2026-10-20). El diseño
+cerrado con el usuario está en `remoto/DISEÑO.md` y el contrato con la app en
+`remoto/PROTOCOLO.md`: léelos antes de escribir nada ahí. Dos cosas que no se
+negocian: **viene apagado** (se activa a mano desde la PC) y **escucha solo por
+Tailscale**. La app se compila en la PC (nunca en la nube de Expo) y su
+`node_modules` no se versiona.
+
+---
+
 ## Privado, y con cosas que no se pueden publicar
 
 Desde el 2026-10-20 el repo es **privado** en GitHub, y por eso lleva las 455
@@ -148,6 +160,7 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.cache/celiuz/mangohud.conf` | el overlay, rehecho con la paleta en cada entrada al modo |
 | `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
+| `~/.config/celiuz/remoto*` y `~/.local/state/celiuz/remoto/` | Celiuz Remoto: ajustes, clave de firma del APK, teléfonos emparejados (hashes), historial y registro |
 
 **No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio
 fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: con
