@@ -22,6 +22,7 @@ QtObject {
     readonly property color tenue: "#8a7aa8"
     readonly property color alerta: "#eb6f92"           // rojo  — algo va mal, mirame ya
     readonly property color atencion: "#f6c177"         // ambar — en marcha, espera
+    readonly property color exito: "#7dffb0"            // verde — hecho, en linea
     readonly property color glow_activo: "#ccc77dff"
     readonly property color halo: "#aa6a00f4"
     readonly property color sombra: "#cc000000"

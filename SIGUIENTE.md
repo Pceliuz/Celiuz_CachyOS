@@ -9,6 +9,41 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (PC): Celiuz Remoto, fase 3 — la app del celular
+
+**Sin commitear** (el usuario lo sube él).
+
+- **Pantallas** (las maquetas 1, 2 y 8, más Bienvenida y la del cable):
+  emparejar y renovar (las abre la PC por adb, con el puerto en el enlace
+  `?p=`), Entrar (equipos con «En línea / Apagada», 5 intentos, «Olvidar» si
+  la PC ya no lo reconoce), Inicio (estado cada segundo; solo lo que el equipo
+  tiene) y Pase vencido. Apagar, Apps, Archivos y Terminal se ven apagados con
+  «pronto». La huella («Usar la huella además») no está: irá con
+  `requireAuthentication` de expo-secure-store.
+- **Una clave Ed25519 por equipo**, en el almacén seguro de Android, sin copia
+  de seguridad (`allowBackup: false`).
+- **`remoto/app/compilar.sh`**: compila en la PC (Java 17 + `~/Android/Sdk`),
+  firma con `~/.config/celiuz/remoto/firma.keystore` (creada la primera vez,
+  contraseña al lado, 0600) y deja el APK en `~/.local/share/celiuz/remoto/`,
+  de donde lo instala la ventana. Solo ARM: 33 MB (con x86, 67).
+- **Paleta**: nuevo `$exito` (verde) en `colores.conf`, que vivía copiado a
+  mano. La app no lleva ni un color escrito: los translúcidos con `alfa()`.
+- **Probado en el HONOR X7b de verdad**: instalar desde la PC, emparejar por
+  cable, «En línea» por Tailscale, contraseña mala (quedan 4), entrar, estado en
+  vivo con los números de la PC, renovar el pase por cable, revocar desde la PC
+  con la sesión abierta (se cae al instante), Olvidar, y actualizar el APK
+  encima (misma firma). Capturas en la conversación.
+- **Fallo encontrado así**: `adb shell` se comía la contraseña que la CLI leía
+  por stdin. Arreglado y con prueba que lo caza.
+- **Pruebas**: `e2e/remoto-app` (40, el código de la app con Node contra el
+  servidor) y lo que se añadió a `e2e/remoto` (78) y `unidad/generados`.
+- **Lo dejé así**: servicio APAGADO, ningún teléfono emparejado (el de prueba
+  se revocó y se olvidó), la app instalada en el HONOR. El usuario empareja el
+  suyo con su contraseña desde la ventana.
+- **Lo siguiente: fase 4** — apagar / reiniciar / suspender con cuenta atrás,
+  ver y cerrar apps, la vigilancia (Tailscale `Online` + presencia) y el icono
+  de la barra.
+
 ## 2026-10-20 (PC): Celiuz Remoto, fase 2 — la ventana de la PC y el servicio
 
 **Sin commitear** (el usuario lo sube él).

@@ -85,7 +85,7 @@ comprobar("Redmi: su nombre, sin Tailscale, con la app 0.1.0",
 comprobar("sin ningun nombre: marca + modelo",
           adb.leer_sonda("nombre=null\nmarca=samsung\nmodelo=SM-A546B\n")["nombre"] == "Samsung SM-A546B")
 try:
-    adb.abrir_app("X", "emparejar", "codigo; rm -rf /")
+    adb.abrir_app("X", "emparejar", "codigo; rm -rf /", 47111)
     comprobar("un codigo con caracteres raros no llega al shell del celular", False)
 except adb.ErrorAdb:
     comprobar("un codigo con caracteres raros no llega al shell del celular", True)

@@ -19,6 +19,7 @@
 @define-color tenue       #8a7aa8;
 @define-color alerta      #eb6f92;            /* rojo  — algo va mal, mirame ya */
 @define-color atencion    #f6c177;            /* ambar — en marcha, espera */
+@define-color exito       #7dffb0;            /* verde — hecho, en linea */
 @define-color glow_activo rgba(199, 125, 255, 0.8);
 @define-color halo        rgba(106, 0, 244, 0.667);
 @define-color sombra      rgba(0, 0, 0, 0.8);

@@ -50,8 +50,12 @@ def hay_adb():
 def _adb(*args, serie=None, timeout=TIEMPO, entrada=None):
     orden = ["adb"] + (["-s", serie] if serie else []) + list(args)
     try:
+        # stdin cerrada si no hay entrada: `adb shell` se come la de quien lo
+        # llama, y se tragaba la contraseña que la CLI leia despues por stdin
+        # (medido emparejando el HONOR, 2026-10-20).
         r = subprocess.run(orden, capture_output=True, text=True, timeout=timeout,
-                           input=entrada, check=False)
+                           input=entrada, stdin=None if entrada is not None else subprocess.DEVNULL,
+                           check=False)
     except FileNotFoundError:
         raise ErrorAdb("no está instalado adb (sudo pacman -S android-tools)") from None
     except subprocess.TimeoutExpired:
@@ -145,14 +149,16 @@ def cerrar_canal(serie, puerto):
         pass
 
 
-def abrir_app(serie, modo, codigo):
-    """Abre nuestra app con el codigo, por intent explicito. El codigo es
+def abrir_app(serie, modo, codigo, puerto):
+    """Abre nuestra app con el codigo y el puerto USB (que en la PC se puede
+    cambiar en remoto.conf), por intent explicito. El codigo es
     base64url (letras, numeros, - y _): no hace falta escaparlo para el shell
     del celular, y se comprueba por si acaso."""
-    if modo not in ("emparejar", "renovar") or not re.fullmatch(r"[A-Za-z0-9_-]+", codigo):
+    if modo not in ("emparejar", "renovar") or not re.fullmatch(r"[A-Za-z0-9_-]+", codigo) \
+            or not 1024 <= int(puerto) <= 65535:
         raise ErrorAdb("código o modo no válidos")
     r = _adb("shell", "am", "start", "-n", ACTIVIDAD, "-a", "android.intent.action.VIEW",
-             "-d", f"{ESQUEMA}://{modo}/{codigo}", serie=serie)
+             "-d", f"{ESQUEMA}://{modo}/{codigo}?p={int(puerto)}", serie=serie)
     salida = _ok(r, "no pude abrir la app en el celular")
     if "Error" in salida:
         raise ErrorAdb("no pude abrir la app en el celular: "

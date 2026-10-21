@@ -59,7 +59,7 @@ def _por_cable(serie, cuerpo, avisar):
         adb.abrir_canal(serie, puerto)
         abierto = True
         avisar("Abriendo la app en el celular…")
-        adb.abrir_app(serie, cuerpo["modo"], v["codigo"])
+        adb.abrir_app(serie, cuerpo["modo"], v["codigo"], puerto)
         avisar("Esperando al celular…")
         _, fin = _pedir("GET", f"/control/ventana?espera={v['caduca']}",
                         timeout=v["caduca"] + ESPERA_EXTRA)

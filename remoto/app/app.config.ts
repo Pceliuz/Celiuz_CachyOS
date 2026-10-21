@@ -16,8 +16,19 @@ const config: ExpoConfig = {
   // codigo del canal USB (remoto/PROTOCOLO.md, «USB»).
   scheme: 'celiuzremoto',
   platforms: ['android'],
+  plugins: [
+    // HTTP sin TLS: Android lo bloquea de fabrica, y aqui hace falta porque la
+    // app solo habla por Tailscale (WireGuard ya cifra y autentica) o por el
+    // canal USB (127.0.0.1). remoto/PROTOCOLO.md, «Dónde escucha».
+    ['expo-build-properties', { android: { usesCleartextTraffic: true } }],
+    // Las claves del almacen seguro no van a la copia de Google: restauradas
+    // en otro celular no valdrian (el Keystore no viaja) y no deben salir.
+    ['expo-secure-store', { configureAndroidBackup: true }],
+  ],
   android: {
     package: 'com.celiuz.remoto',
+    versionCode: 1,
+    allowBackup: false,
     adaptiveIcon: {
       backgroundColor: paleta.colores.abismo,
       foregroundImage: './assets/android-icon-foreground.png',

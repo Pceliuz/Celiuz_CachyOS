@@ -68,7 +68,9 @@ afirmar_igual "rgba(106, 0, 244, 0.667)" \
     "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["colores"]["halo"])' "$COPIA/remoto/app/src/colores.json")" \
     "   un translucido sale en rgba(), sin hex de ocho digitos que leer al reves"
 # Y que nadie escriba un color a mano en la app (fuera node_modules y lo generado)
-a_mano="$(grep -rnE "#[0-9a-fA-F]{6}\b" "$REPO/remoto/app" --include='*.ts' --include='*.tsx' \
+# (y un rgba(...) con numeros tambien es un color a mano: los translucidos se
+# derivan de la paleta con alfa(), en componentes/ui.tsx)
+a_mano="$(grep -rnE "#[0-9a-fA-F]{6}\b|rgba?\([0-9]" "$REPO/remoto/app" --include='*.ts' --include='*.tsx' \
           --exclude-dir=node_modules 2>/dev/null)"
 afirmar_igual "" "$a_mano" "   la app no lleva ningun hex escrito a mano"
 

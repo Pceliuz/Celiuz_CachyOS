@@ -99,12 +99,16 @@ afirmar "   guarda la clave PÚBLICA del celular (la privada no salió de él)" 
 titulo "2b. Por el cable: adb reverse, el código por intent explícito, y cerrar al acabar"
 # adb de mentira con UN celular: contesta a la sonda y, cuando la PC abre la
 # app con el código, hace lo que haría la app de verdad (emparejarse).
+# `adb shell` de verdad se COME la entrada de quien lo llama: el de mentira
+# tambien, para que la contraseña por stdin de la CLI no llegue si adb la hereda
+# (paso emparejando el HONOR el 2026-10-20: «al menos 4 caracteres»).
 binario_falso adb 0 '
 case "$*" in
     "devices -l") printf "List of devices attached\nSERIE123 device usb:1-1 model:Celu_Prueba\n" ;;
-    *"shell echo"*) printf "nombre=null\ncomercial=Celu Prueba\nandroid=14\ntailscale=package:/x\napp=    versionName=0.1.0\n" ;;
+    *"shell echo"*) cat > /dev/null; printf "nombre=null\ncomercial=Celu Prueba\nandroid=14\ntailscale=package:/x\napp=    versionName=0.1.0\n" ;;
     *"am start"*)
-        uri="${*##* -d }"; codigo="${uri##*/}"
+        uri="${*##* -d }"; uri="${uri%%\?p=*}"; codigo="${uri##*/}"
+        echo "$*" | grep -q "?p='"$USB"'$" || echo "SIN PUERTO" >> "'"$TMP"'/cable.json"
         "'"$TEL"'" emparejar "'"$USB"'" "$codigo" "'"$TMP"'/cable" > "'"$TMP"'/cable.json" 2>&1 &
         echo "Starting: Intent" ;;
 esac'
@@ -113,6 +117,7 @@ afirmar_igual "0" "$codigo" "emparejar por el cable termina bien"
 afirmar_contiene "$REGISTRO/adb.log" "^-s SERIE123 reverse tcp:$USB tcp:$USB$" "   abre el adb reverse al puerto USB"
 afirmar_contiene "$REGISTRO/adb.log" "^-s SERIE123 shell am start -n com.celiuz.remoto/.MainActivity " \
     "   abre NUESTRA app con un intent explícito (-n), no cualquiera que entienda el esquema"
+afirmar_no_contiene "$TMP/cable.json" "SIN PUERTO" "   y le pasa el puerto USB en el enlace (?p=), que en la PC se puede cambiar"
 afirmar_contiene "$REGISTRO/adb.log" "^-s SERIE123 reverse --remove tcp:$USB$" "   y cierra el canal al acabar"
 afirmar_igual "SERIE123" "$(campo "$(cat "$ALMACEN")" '[x["serie"] for x in d["dispositivos"].values() if x["nombre"]=="Celu Prueba"][0]')" \
     "   el teléfono queda con su serie USB (para reconocerlo al enchufarlo)"

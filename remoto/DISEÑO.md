@@ -176,7 +176,7 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
 2. **La app de la PC y encenderlo** ✅: la ventana GTK (detectar el celular,
    emparejar, contraseña, permisos, renovar, revocar), `adb.py`, la unidad de
    systemd y lo que diga `instalar.sh --revisar`.
-3. **La app del celular, primera versión**: emparejar por cable, entrar,
+3. **La app del celular, primera versión** ✅: emparejar por cable, entrar,
    inicio con el estado en tiempo real. APK compilado en la PC.
 4. **Control**: apagar / reiniciar / suspender con cuenta atrás, ver y cerrar
    apps, y la vigilancia (con el icono de la barra: ¿activo?, ¿hay un celular?).

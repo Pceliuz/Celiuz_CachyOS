@@ -139,9 +139,11 @@ La app de la PC abre la ventana con un `codigo` de un solo uso y se lo pasa a
 la app del celular **por el cable**, abriéndola con un intent explícito:
 
 ```sh
-adb shell am start -n com.celiuz.remoto/.MainActivity -d 'celiuzremoto://emparejar/<codigo>'
-adb shell am start -n com.celiuz.remoto/.MainActivity -d 'celiuzremoto://renovar/<codigo>'
+adb shell am start -n com.celiuz.remoto/.MainActivity -d 'celiuzremoto://emparejar/<codigo>?p=47111'
+adb shell am start -n com.celiuz.remoto/.MainActivity -d 'celiuzremoto://renovar/<codigo>?p=47111'
 ```
+
+`p` es el puerto del canal USB, que en la PC se puede cambiar (`remoto.conf`).
 
 Un intent con `-n` solo lo recibe esa app. El código impide que otra app del
 celular, que también vería `127.0.0.1:47111` mientras dure el `adb reverse`,

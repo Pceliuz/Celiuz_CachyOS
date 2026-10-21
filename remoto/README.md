@@ -1,8 +1,16 @@
 # Celiuz Remoto
 
-> **En construcción.** Fases 1 y 2 de 8 hechas (2026-10-20): el servidor y la
-> ventana de la PC («Celiuz Remoto» en el lanzador) ya están; falta la app del
-> celular que los use. Las fases, en [`DISEÑO.md`](DISEÑO.md#fases).
+> **En construcción.** Fases 1, 2 y 3 de 8 hechas (2026-10-20): el servidor,
+> la ventana de la PC («Celiuz Remoto» en el lanzador) y la app del celular,
+> que ya empareja, entra y enseña el estado. Falta controlar (apagar, apps),
+> los archivos y la terminal. Las fases, en [`DISEÑO.md`](DISEÑO.md#fases).
+
+## Para empezar
+
+1. `remoto/app/compilar.sh` (una vez; pide Java 17 y el SDK de Android).
+2. Abre «Celiuz Remoto» en la PC, enciende el servicio, conecta el celular por
+   cable (con la «Depuración USB») e instala la app desde ahí.
+3. Crea la contraseña, elige qué puede hacer y pulsa «Emparejar».
 
 Una app Android para manejar tu PC o tu laptop desde cualquier sitio: ver su
 estado en tiempo real, apagarla, ver y cerrar sus apps, sacar archivos y abrir

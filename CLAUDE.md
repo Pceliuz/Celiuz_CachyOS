@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (49 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (50 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -100,10 +100,15 @@ enumera SDL**, no si el device existe.
 Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
 apps, archivos, terminal). **Va por fases (8, en `remoto/DISEÑO.md`), y cada
 una se cierra probada antes de empezar la siguiente**: lo pidió el usuario.
-Hechas la 1 y la 2 (2026-10-20): el servidor empareja por el canal USB, deja
-entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado en
-vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las maquetas)
-guía el cable, empareja, renueva, revoca y enciende el servicio. Lo prueba
+Hechas la 1, la 2 y la 3 (2026-10-20): el servidor empareja por el canal USB,
+deja entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado
+en vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las
+maquetas) guía el cable, empareja, renueva, revoca y enciende el servicio; y
+la app del celular (`remoto/app`, `compilar.sh`) empareja, entra por Tailscale
+y enseña el estado. Probado de punta a punta en el HONOR del usuario. La
+lógica de la app (`src/api/`, `src/formato.ts`) es TypeScript sin React
+Native y se prueba con Node contra el servidor de verdad
+(`tests/e2e/remoto-app.sh`). Lo prueba
 `tests/e2e/remoto.sh` atacándolo con un celular de mentira
 (`tests/lib/telefono_falso.py`) y un `adb` de mentira que hace de celular. El diseño cerrado con el usuario está en
 `remoto/DISEÑO.md` y el contrato con la app en `remoto/PROTOCOLO.md`: léelos
@@ -1251,6 +1256,14 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   la paleta de la app es un JSON (`remoto/app/src/colores.json`), que leen la
   config y la app. Comprobar con `npx expo config --type public`, no con el
   typecheck.
+- **`adb shell` se come la entrada estándar de quien lo llama.** La CLI miraba
+  el celular con adb y DESPUÉS leía la contraseña por stdin: llegaba vacía.
+  `adb.py` le cierra stdin siempre (`DEVNULL`); el `adb` de mentira de
+  `e2e/remoto` hace `cat > /dev/null` para que vuelva a fallar si se quita.
+- **La app del celular: lo que muerde** está en `remoto/app/LEEME.md`
+  («Trampas»): Hermes sin `crypto.getRandomValues`, el WebSocket de React
+  Native con las cabeceras en el tercer argumento, el HTTP sin TLS bloqueado
+  por Android, y un `fetch` a una IP de Tailscale apagada que cuelga un minuto.
 - **`systemctl --user disable` BORRA una unidad que sea un enlace** a un
   fichero de fuera de las carpetas de systemd (la trata como «linked»). Con
   `celiuz-remoto.service` enlazada, apagar el servicio desde la ventana se
