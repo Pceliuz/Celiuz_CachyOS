@@ -112,6 +112,19 @@ leer "$TMP/app5.txt"
 afirmar "   sin nada por stderr" test ! -s "$TMP/app5.err"
 afirmar "   y dijo algo" test "$(grep -c '^ok|' "$TMP/app5.txt")" -ge 10
 
+titulo "5. Ayudar a un amigo (fase 8): la invitación, con el código de la app"
+python3 - "$REPO/remoto/servidor" "$TMP/invitacion.json" <<'FINPY'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from celiuz_remoto import control
+codigo, d = control.pedir("POST", "/control/invitacion", {"horas": 1}, timeout=20)
+json.dump(d, open(sys.argv[2], "w"))
+FINPY
+TMP="$TMP" app "$RED" "$USB" - - invitacion > "$TMP/app6.txt" 2>"$TMP/app6.err"
+leer "$TMP/app6.txt"
+afirmar "   sin nada por stderr" test ! -s "$TMP/app6.err"
+afirmar "   y dijo algo" test "$(grep -c '^ok|' "$TMP/app6.txt")" -ge 5
+
 afirmar_no_contiene "$TMP/servidor.log" "Traceback" "el servidor no tuvo ni un traceback"
 afirmar_intacta_la_casa_real
 resumen

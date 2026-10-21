@@ -59,9 +59,19 @@ while True:
 FINPY
 PID_HYPR=$!
 
+# Wake-on-LAN (fase 8): el paquete a un receptor de la prueba, no a la red de
+# casa de quien la corre.
+PUERTO_WOL="$(python3 -c 'import socket; s=socket.socket(type=socket.SOCK_DGRAM); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
+export CELIUZ_REMOTO_WOL_DESTINO="127.0.0.1:$PUERTO_WOL"
+python3 -c 'import socket,sys
+s=socket.socket(type=socket.SOCK_DGRAM); s.bind(("127.0.0.1", int(sys.argv[1])))
+while True:
+    d,_=s.recvfrom(2048); open(sys.argv[2],"a").write(d.hex()+"\n")' "$PUERTO_WOL" "$TMP/wol.txt" &
+PID_WOL=$!
+
 "$CLI" servir 2>"$TMP/servidor.log" &
 PID_SERVIDOR=$!
-trap 'kill $PID_SERVIDOR $PID_HYPR 2>/dev/null; wait $PID_SERVIDOR 2>/dev/null; limpiar_entorno' EXIT INT TERM
+trap 'kill $PID_SERVIDOR $PID_HYPR $PID_WOL 2>/dev/null; wait $PID_SERVIDOR 2>/dev/null; limpiar_entorno' EXIT INT TERM
 esta_arriba() { test -S "$XDG_RUNTIME_DIR/celiuz-remoto.sock"; }
 esperar_a 10 esta_arriba
 
@@ -192,6 +202,21 @@ r="$("$TEL" vivo "$RED" "$TOKEN" 1)"
 afirmar_igual "armada" "$(campo "$r" 'd["mensajes"][0]["vigilancia"]')" "   y el celular lo ve en el estado en vivo"
 r="$("$CLI" vigilancia no --json)"
 afirmar_igual "False" "$(campo "$r" 'd["armada"]')" "y se desarma"
+
+titulo "6b. Despertar a otro equipo (Wake-on-LAN, fase 8)"
+r="$(pedir GET "$B/v0/equipo" "$TOKEN")"
+afirmar "/v0/equipo dice cómo despertar a este equipo" python3 -c 'import json,sys; d=json.loads(sys.argv[1])["cuerpo"]["despertar"]; assert d["wol"] in ("si","no","no_lo_se") and "motivo" in d, d' "$r"
+r="$(pedir POST "$B/v0/despertar" "$TOKEN" '{"mac":"34:5a:60:0d:39:89"}')"
+afirmar_igual "confirmar" "$(campo "$r" 'd["cuerpo"]["error"]')" "sin confirmar: 409"
+r="$(pedir POST "$B/v0/despertar" "$TOKEN" '{"mac":"no-es-mac","confirmado":true}')"
+afirmar_igual "400" "$(campo "$r" 'd["http"]')" "una MAC mala: 400"
+r="$(pedir POST "$B/v0/despertar" "$TOKEN" '{"mac":"34-5A-60-0D-39-89","confirmado":true}')"
+afirmar_igual "True" "$(campo "$r" 'd["cuerpo"]["enviado"]')" "despertar: enviado (con guiones y mayúsculas también vale)"
+llego() { test -s "$TMP/wol.txt"; }
+esperar_a 5 llego
+esperado="$(python3 -c 'print(("ff"*6 + "345a600d3989"*16))')"
+afirmar_igual "$esperado" "$(head -1 "$TMP/wol.txt")" "el paquete mágico: 6×FF y la MAC 16 veces"
+afirmar "lo apunta el registro" grep -q '"accion": "despertar"' "$XDG_STATE_HOME/celiuz/remoto/registro.jsonl"
 
 titulo "7. El icono de la barra"
 r="$("$CLI" barra)"

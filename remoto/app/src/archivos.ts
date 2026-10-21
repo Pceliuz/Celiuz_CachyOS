@@ -71,16 +71,14 @@ const MIMES: Record<string, string> = {
 };
 export const mime = (nombre: string) => MIMES[extension(nombre)] ?? 'application/octet-stream';
 
-// Donde guarda el celular su copia: una carpeta por equipo (dos PCs pueden
-// tener un Documentos/nota.txt cada una) y la ruta de la PC debajo, con cada
-// trozo limpio de lo que Android no admite en un nombre. Nunca «..»: la ruta
-// viene del servidor, pero la copia no puede salirse de su carpeta pase lo que
-// pase.
-export function rutaLocal(dispositivo: string, ruta: string): string[] {
-  const limpio = (t: string) => t.replace(/[\u0000-\u001f\\:*?"<>|]/g, '_');
-  const partes = ruta.split('/').filter((p) => p && p !== '.' && p !== '..').map(limpio);
-  return [limpio(dispositivo) || 'equipo', ...partes];
-}
+// La clave de una copia guardada en el celular (descargas.ts): el equipo y la
+// ruta de la PC. Dos PCs pueden tener cada una su Documentos/nota.txt.
+export const claveGuardado = (equipo: string, ruta: string) => `${equipo}\u0000${ruta}`;
+
+// Lo que la app sabe enseñar ella misma, sin tener una app de markdown en el
+// celular (el usuario no tenía ninguna para un .md).
+const TEXTO = new Set('txt md markdown csv json log conf ini toml yaml yml lua py sh ts tsx js css html xml desktop service srt'.split(' '));
+export const esTexto = (nombre: string) => TEXTO.has(extension(nombre)) || /^\.?[A-Za-z0-9_-]+rc$/.test(nombre);
 
 // Recientes agrupados como en la maqueta 6: Hoy, Ayer, Esta semana, Antes. El
 // día se cuenta en la zona de la PC (el ISO lleva su desfase), no en UTC.

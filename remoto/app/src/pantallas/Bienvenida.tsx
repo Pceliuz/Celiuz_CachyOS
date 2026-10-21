@@ -3,7 +3,7 @@
 import { View } from 'react-native';
 
 import { colores } from '../paleta';
-import { Pantalla, Tarjeta, Texto } from '../componentes/ui';
+import { Boton, Pantalla, Tarjeta, Texto } from '../componentes/ui';
 
 const PASOS = [
   'Instala Tailscale en este celular y entra con la misma cuenta que la PC.',
@@ -11,7 +11,7 @@ const PASOS = [
   'En la PC, abre «Celiuz Remoto», crea la contraseña y pulsa «Emparejar».',
 ];
 
-export default function Bienvenida() {
+export default function Bienvenida({ alInvitacion }: { alInvitacion?: () => void }) {
   return (
     <Pantalla>
       <View style={{ flex: 1, justifyContent: 'center', gap: 28 }}>
@@ -32,6 +32,7 @@ export default function Bienvenida() {
           ))}
         </Tarjeta>
         <Texto tipo="chico" centrado>La app se abrirá sola cuando la PC empiece a emparejar.</Texto>
+        {alInvitacion ? <Boton texto="Tengo una invitación (ayudar a alguien)" tipo="borde" alto={48} alPulsar={alInvitacion} /> : null}
       </View>
     </Pantalla>
   );

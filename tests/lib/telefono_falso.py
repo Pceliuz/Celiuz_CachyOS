@@ -14,6 +14,7 @@ Como libreria (Telefono) y como CLI para las pruebas de bash:
     telefono_falso.py pedir <metodo> <url> [token]
     telefono_falso.py vivo <puerto_red> <token> <n>
     telefono_falso.py renovar <puerto_usb> <codigo> <carpeta> <contrasena>
+    telefono_falso.py invitacion <puerto_red> <codigo> <carpeta> [nombre]
 
 Todas imprimen {"http": codigo, "cuerpo": {...}} en una linea.
 """
@@ -91,6 +92,18 @@ class Telefono:
                 fh.write(c["dispositivo"])
         return http, c
 
+    def aceptar_invitacion(self, puerto_red, codigo, nombre="Amigo"):
+        """Fase 8, sin cable. Se firma el codigo NORMALIZADO (solo letras y
+        numeros, en mayusculas): asi da igual como lo copie la persona."""
+        limpio = "".join(c for c in codigo.upper() if c.isalnum())
+        http, c = pedir("POST", f"http://127.0.0.1:{puerto_red}/v0/invitacion", {
+            "codigo": codigo, "nombre": nombre, "publica": self.publica,
+            "firma": self.firmar("invitacion", limpio)})
+        if http == 200:
+            with open(os.path.join(self.carpeta, "dispositivo"), "w") as fh:
+                fh.write(c["dispositivo"])
+        return http, c
+
     def entrar(self, puerto, contrasena, ident=None):
         ident = ident or self.dispositivo
         base = f"http://127.0.0.1:{puerto}"
@@ -131,6 +144,8 @@ def main(a):
         http, c = Telefono(a[3]).emparejar(int(a[1]), a[2], *(a[4:5] or []))
     elif orden == "entrar":
         http, c = Telefono(a[2]).entrar(int(a[1]), a[3])
+    elif orden == "invitacion":
+        http, c = Telefono(a[3]).aceptar_invitacion(int(a[1]), a[2], *(a[4:5] or []))
     elif orden == "renovar":
         http, c = Telefono(a[3]).renovar(int(a[1]), a[2], a[4])
     elif orden == "pedir":

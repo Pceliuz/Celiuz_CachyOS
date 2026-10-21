@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Solo para Android 9 y anteriores: ahi no hay MediaStore con carpetas, y
+       guardar en Descargas o en la galeria pide este permiso. Desde Android 10
+       no hace falta ninguno (lo que la app guarda en MediaStore es suyo). -->
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+  <!-- Para saber si hay una app que abra cada tipo (Android 11+ esconde las
+       demas apps salvo que se diga para que se las busca). -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:mimeType="*/*" />
+    </intent>
+  </queries>
+</manifest>

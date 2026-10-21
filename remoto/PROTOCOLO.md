@@ -53,6 +53,7 @@ valga para otra:
 | emparejar (prueba de que tiene la privada) | `celiuz-remoto/v0/emparejar:<codigo>` |
 | renovar el pase | `celiuz-remoto/v0/renovar:<codigo>` |
 | latido | `celiuz-remoto/v0/latido:<dispositivo>:<minuto>:<0\|1>` |
+| aceptar una invitación (fase 8) | `celiuz-remoto/v0/invitacion:<codigo normalizado>` (16 letras, sin guiones, en mayúsculas) |
 
 Las firmas van en base64 (64 bytes).
 
@@ -74,6 +75,8 @@ Las firmas van en base64 (64 bytes).
 | 409 | `confirmar` | acción peligrosa sin `"confirmado": true` |
 | 409 | `estado` | no toca ahora (entrar con la sesión ya abierta, o sin lo de root instalado); el `mensaje` dice por qué |
 | 423 | `pase_vencido` | lo pedido necesita el pase |
+| 413 | `peticion` | subir algo más grande que `subir_max_mb` |
+| 507 | `peticion` | subir algo que no cabe en la PC (se deja 1 GB libre) |
 
 Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
 (`401 firma`): por fuera no se puede saber qué ids existen.
@@ -93,7 +96,9 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
 
 ### Estado en tiempo real — permiso `estado`
 - `GET /v0/equipo` →
-  `{"nombre": "Celiuz-CachyOS", "tipo": "escritorio", "cpu": "AMD Ryzen 5 5500", "gpus": ["NVIDIA GeForce RTX 3050"], "ram": 31.2, "bateria": false, "protocolo": 0}`
+  `{"nombre": "Celiuz-CachyOS", "tipo": "escritorio", "cpu": "AMD Ryzen 5 5500", "gpus": ["NVIDIA GeForce RTX 3050"], "ram": 31.2, "bateria": false, "protocolo": 0, "despertar": {"mac", "tarjeta", "wol": "si"|"no"|"no_lo_se", "motivo"}}`
+  (`despertar`, fase 8: la MAC de la tarjeta de cable de la placa, para que el
+  celular la guarde y pueda despertar a este equipo desde otro).
 - `WS /v0/vivo` (con la cabecera `Authorization`) → cada segundo:
   ```json
   {"cpu": {"uso": 23, "temp": 52}, "gpu": [{"nombre": "RTX 3050", "uso": 31, "temp": 48, "vram": [1.2, 6]}],
@@ -141,6 +146,13 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
   cambio en `escritorio` por `/v0/vivo`. Sin pase `423`, sin confirmar `409
   confirmar`, si no toca `409 estado`.
 
+### Despertar a otro equipo (Wake-on-LAN) — permiso `energia`, SIN pase (fase 8)
+- `POST /v0/despertar` `{"mac": "aa:bb:cc:dd:ee:ff", "confirmado": true}` →
+  `{"enviado": true, "por": ["10.0.0.255:9", ...]}`. ESTE equipo (encendido)
+  manda el paquete mágico por sus redes de cable y wifi (nunca por
+  Tailscale: no cruza routers). Con guiones o mayúsculas vale igual; una MAC
+  mala, `400`.
+
 ### Ventanas — permiso `ventanas`
 - `GET /v0/ventanas` → `{"ventanas": [{"id": "0x55d...", "app": "Brave", "titulo": "...", "escritorio": "2"}], "sesion": true}`
   De la sesión de Hyprland viva (la busca el servidor en caliente).
@@ -181,9 +193,54 @@ navegadores y lo propio de Celiuz Remoto (la lista, `NUNCA` en
 |---|---|---|
 | 403 | `fuera` | la ruta sale de la carpeta personal o es de lo que nunca se enseña |
 
-### Terminal — **pase** + permiso `terminal` + contraseña otra vez **(fase 7)**
-- `POST /v0/terminal` `{"contrasena": "..."}` → `{"terminal": "<id>"}`
-- `WS /v0/terminal/<id>` → bytes en los dos sentidos; control `{"tamano": [filas, columnas]}`.
+### Subir a la PC — permiso `archivos` + **pase** (fase 8)
+- `POST /v0/archivos/subir?nombre=foto.jpg`, el cuerpo es el archivo tal cual
+  → `{"ruta": "Descargas/Celiuz Remoto/foto.jpg", "nombre", "tamano"}`. Va
+  SIEMPRE a `<Descargas>/Celiuz Remoto` (la de `XDG_DOWNLOAD_DIR`) y nunca pisa
+  nada: si el nombre existe, «foto (1).jpg». Del nombre solo cuenta el último
+  trozo, sin caracteres de control ni punto delante (`../../.bashrc` →
+  `bashrc`). Se escribe en un `.parcial` oculto y solo al acabar toma su
+  nombre. Límite: `subir_max_mb` de `remoto.conf` (4096 de fábrica). La PC
+  avisa y lo apunta.
+
+### Terminal — permiso `terminal` + **pase** + contraseña otra vez
+- `POST /v0/terminal` `{"contrasena": "..."}` → `{"terminal": "<billete>", "caduca": 30}`.
+  La contraseña de la app OTRA VEZ, aunque haya sesión; una mal cuenta como
+  fallo, igual que al entrar (`401 contrasena` con `intentos_restantes`; al 5.º,
+  `403 bloqueado`). Como mucho 3 terminales abiertas (`409 estado`).
+- `WS /v0/terminal/<billete>?filas=24&columnas=80` (con la cabecera
+  `Authorization`). El billete vale una vez, 30 s, y solo para ese teléfono
+  (`401 firma` si no). La shell es la del usuario (`$SHELL`, como de entrada:
+  `-l`), en su carpeta personal, con `TERM=xterm-256color`.
+  - Del servidor: **binario**, lo que sale de la shell.
+  - Del celular: **binario** o `{"texto": "..."}`, lo tecleado; y
+    `{"tamano": [filas, columnas]}`.
+  - Se cierra con **4000** si la shell termina, y con **4403** si con ella
+    abierta el teléfono pierde el pase, el permiso o la sesión (se mira cada 5 s).
+- La PC avisa al abrirla y apunta en el registro abrir y cerrar (cuánto duró y
+  por qué). **Lo tecleado no se apunta en ningún sitio**: por ahí pasa la
+  contraseña de sudo.
+
+### Escritorio remoto — permiso `pantalla` + **pase** + contraseña otra vez (fase 8)
+- `POST /v0/pantalla` `{"contrasena": "..."}` → `{"pantalla": "<billete>", "caduca": 30}`.
+  `409 estado` si falta wayvnc en la PC, si no hay sesión gráfica, o si ya hay
+  alguien mirando (uno a la vez).
+- `WS /v0/pantalla/<billete>`, subprotocolo `binary`, **sin** cabecera
+  `Authorization` (lo abre el WebView de la app, que no puede ponerla): la
+  llave es el billete, de un solo uso, 30 s y de ese teléfono. Es RFB (VNC)
+  tal cual: el servidor arranca `wayvnc --unix-socket` en la sesión de
+  Hyprland viva (socket en `$XDG_RUNTIME_DIR`, ningún puerto) y hace de
+  puente. Se cierra con `4403` si el teléfono pierde el permiso, el pase o lo
+  revocan; al cerrar, wayvnc se para.
+
+### Ayudar a un amigo: entrar SIN cable (fase 8)
+- La invitación la abre SOLO la PC (`POST /control/invitacion`, abajo).
+- `POST /v0/invitacion` `{"codigo", "nombre", "publica", "firma"}` → como
+  emparejar: `{"dispositivo", "equipo", "direccion", "permisos", "pase_hasta", "expira"}`.
+  El código vale una vez y 15 min; cinco códigos mal la queman. Sin invitación
+  abierta, un código malo, o una firma mala: `401 firma`, igual. El teléfono
+  que nace tiene `expira` (y el pase hasta esa hora): pasada, ni entra ni le
+  vale una sesión abierta, y se borra solo (en ≤ 60 s).
 
 ## USB: `/usb/...` (solo por `adb reverse`, solo con la app de la PC esperando)
 
@@ -229,5 +286,9 @@ de la PC; nadie de fuera llega aquí.
 - `DELETE /control/ventana` → cerrarla ya.
 - `GET /control/estado` → `{"red": "100.x.y.z:47110", "sesiones": 1, "ventana": null|"emparejar", "energia", "vigilancia", "escritorio", "linger": bool, "sistema": bool}`.
 - `DELETE /control/energia` → cancelar un apagado desde la PC.
+- `POST /control/invitacion` `{"permisos": [...], "horas": 1|2|4|8}` →
+  `{"estado": "abierta", "codigo": "ABCD-EFGH-JKMN-PQRS", "contrasena": "abcd-efgh-jkmn", "direccion", "texto", "caduca": 900, ...}`
+  (de fábrica: estado, ventanas y pantalla, 2 h). Una a la vez: una nueva
+  sustituye a la abierta. `GET` dice cómo está; `DELETE` la cancela.
 - `GET /control/vigilancia`, `POST /control/vigilancia` `{"armada": true}` →
   `{"armada", "estado", "presencia", "presencia_motivo", "telefonos": [...]}`.

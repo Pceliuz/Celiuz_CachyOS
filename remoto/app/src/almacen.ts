@@ -43,6 +43,13 @@ export async function actualizarPase(dispositivo: string, paseHasta: string | nu
   await guardarLista(lista.map((x) => (x.dispositivo === dispositivo ? { ...x, pase_hasta: paseHasta } : x)));
 }
 
+// La MAC de su tarjeta de cable, para despertarlo desde otro (fase 8).
+export async function actualizarMac(dispositivo: string, mac: string | null) {
+  const lista = await equipos();
+  if (!lista.some((x) => x.dispositivo === dispositivo && x.mac !== mac)) return;
+  await guardarLista(lista.map((x) => (x.dispositivo === dispositivo ? { ...x, mac } : x)));
+}
+
 export async function claveDe(dispositivo: string): Promise<string | null> {
   return SecureStore.getItemAsync(clave(dispositivo));
 }

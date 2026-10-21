@@ -33,7 +33,7 @@ campo() { python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(eval(sys
 puerto_libre() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])'; }
 RED="$(puerto_libre)"; USB="$(puerto_libre)"
 mkdir -p "$XDG_CONFIG_HOME/celiuz"
-printf 'puerto_red = %s\npuerto_usb = %s\n' "$RED" "$USB" > "$XDG_CONFIG_HOME/celiuz/remoto.conf"
+printf 'puerto_red = %s\npuerto_usb = %s\nsubir_max_mb = 1\n' "$RED" "$USB" > "$XDG_CONFIG_HOME/celiuz/remoto.conf"
 binario_falso tailscale 0 'case "$*" in "ip -4") echo 127.0.0.1 ;; *) echo "{\"Peer\":{}}" ;; esac'
 binario_falso systemctl 0
 binario_falso pgrep 1
@@ -222,6 +222,43 @@ else
     igual "la de .ssh tampoco: 403" "403" \
         "$(http_de "$(pedir GET "$B/v0/archivos/miniatura?ruta=.ssh/id_ed25519" "$TOKEN")")"
 fi
+
+titulo "9. Subir a la PC (fase 8): solo a Descargas/Celiuz Remoto, sin pisar nada"
+SUB="$HOME/Descargas/Celiuz Remoto"
+subir() {   # <token> <nombre> <fichero> -> {"http", "cuerpo"}
+    python3 - "$B" "$1" "$2" "$3" <<'FINPY'
+import json, sys, urllib.request, urllib.error, urllib.parse
+b, token, nombre, fichero = sys.argv[1:5]
+datos = open(fichero, "rb").read()
+p = urllib.request.Request(f"{b}/v0/archivos/subir?nombre={urllib.parse.quote(nombre)}", data=datos, method="POST",
+                           headers={"Authorization": "Bearer " + token, "Content-Type": "application/octet-stream"})
+try:
+    with urllib.request.urlopen(p, timeout=30) as r:
+        print(json.dumps({"http": r.status, "cuerpo": json.loads(r.read())}))
+except urllib.error.HTTPError as e:
+    print(json.dumps({"http": e.code, "cuerpo": json.loads(e.read() or b"{}")}))
+FINPY
+}
+head -c 300000 /dev/urandom > "$TMP/grande.bin"
+printf 'hola desde el celular' > "$TMP/nota.txt"
+igual "sin pase: 423" "423" "$(campo "$(subir "$SINPASE" nota.txt "$TMP/nota.txt")" 'd["http"]')"
+igual "sin permiso de archivos: 403" "403" "$(campo "$(subir "$SINPERMISO" nota.txt "$TMP/nota.txt")" 'd["http"]')"
+r="$(subir "$TOKEN" "foto del celular.bin" "$TMP/grande.bin")"
+igual "subir: 200" "200" "$(campo "$r" 'd["http"]')"
+igual "  a Descargas/Celiuz Remoto" "Descargas/Celiuz Remoto/foto del celular.bin" "$(campo "$r" 'd["cuerpo"]["ruta"]')"
+afirmar "  entero y sin cambiar un byte" cmp -s "$TMP/grande.bin" "$SUB/foto del celular.bin"
+r="$(subir "$TOKEN" "foto del celular.bin" "$TMP/nota.txt")"
+igual "otro con el mismo nombre no pisa: «(1)»" "foto del celular (1).bin" "$(campo "$r" 'd["cuerpo"]["nombre"]')"
+afirmar "  y el primero sigue igual" cmp -s "$TMP/grande.bin" "$SUB/foto del celular.bin"
+r="$(subir "$TOKEN" "../../.bashrc" "$TMP/nota.txt")"
+igual "«../../.bashrc» se queda dentro, sin carpetas y sin punto" "Descargas/Celiuz Remoto/bashrc" "$(campo "$r" 'd["cuerpo"]["ruta"]')"
+afirmar "  y no toca el .bashrc de casa" test ! -e "$HOME/.bashrc"
+head -c 1500000 /dev/urandom > "$TMP/enorme.bin"
+igual "más grande que subir_max_mb: 413" "413" "$(campo "$(subir "$TOKEN" enorme.bin "$TMP/enorme.bin")" 'd["http"]')"
+afirmar "  y no se queda" test ! -e "$SUB/enorme.bin"
+afirmar "no queda ningun .parcial" sh -c "! ls -A '$SUB' | grep -q parcial"
+afirmar "la PC avisa de lo recibido" grep -q "archivo recibido" "$REGISTRO/notify-send.log"
+afirmar "y lo apunta" grep -q '"accion": "subida"' "$XDG_STATE_HOME/celiuz/remoto/registro.jsonl"
 
 afirmar "el servidor no se quejo" sh -c "! grep -q Traceback '$TMP/servidor.log'"
 afirmar_intacta_la_casa_real

@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (55 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (58 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -95,34 +95,26 @@ enumera SDL**, no si el device existe.
 
 ---
 
-## Y en construcción también: CELIUZ REMOTO (`remoto/`)
+## Y también: CELIUZ REMOTO (`remoto/`), las 8 fases hechas
 
-Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
-apps, archivos, terminal). **Va por fases (8, en `remoto/DISEÑO.md`), y cada
-una se cierra probada antes de empezar la siguiente**: lo pidió el usuario.
-Hechas la 1, la 2, la 3 y la 4 (2026-10-20; la 4 trae apagar con cuenta
-atrás, ver y cerrar apps, la vigilancia y el icono de la barra), y la 5 y la 6
-escritas y con pruebas pero **sin probar de verdad** (la 5: tras reiniciar,
-linger y lo de root en `remoto/sistema/`; la 6: archivos, solo lectura y con
-una lista de lo que nunca se enseña, `NUNCA` en `archivos.py`; las recetas en
-`SIGUIENTE.md`): el servidor empareja por el canal USB,
-deja entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado
-en vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las
-maquetas) guía el cable, empareja, renueva, revoca y enciende el servicio; y
-la app del celular (`remoto/app`, `compilar.sh`) empareja, entra por Tailscale
-y enseña el estado. Probado de punta a punta en el HONOR del usuario. La
-lógica de la app (`src/api/`, `src/formato.ts`) es TypeScript sin React
-Native y se prueba con Node contra el servidor de verdad
-(`tests/e2e/remoto-app.sh`). Lo prueba
-`tests/e2e/remoto.sh` atacándolo con un celular de mentira
-(`tests/lib/telefono_falso.py`) y un `adb` de mentira que hace de celular. El diseño cerrado con el usuario está en
-`remoto/DISEÑO.md` y el contrato con la app en `remoto/PROTOCOLO.md`: léelos
-antes de escribir nada ahí. Dos cosas que no se
-negocian: **viene apagado** (se activa a mano desde la PC) y **escucha solo por
-Tailscale**. Y una tercera desde la fase 5: **lo que escucha por la red nunca
-corre como root**; lo poco que necesita root (`remoto/sistema/`) se COPIA a
-`/usr/local` con `./instalar.sh --remoto-sistema`, nunca se ejecuta desde el
-repo (cualquier programa tuyo podría editarlo). La app se compila en la PC (nunca en la nube de Expo) y su
+Una app Android para manejar la PC y la laptop desde fuera. **Las 8 fases
+(`remoto/DISEÑO.md`) están hechas al 2026-10-21**, cada una con sus pruebas, y
+casi todo probado en el HONOR del usuario manejándolo por adb (la receta y lo
+que falta probar a mano, en `SIGUIENTE.md`): estado, apagar, apps, vigilancia,
+entrar tras reiniciar (SDDM), archivos (que se GUARDAN en la galería o en
+Descargas del celular: módulo nativo propio `remoto/app/modules/celiuz-nativo`),
+terminal, subir a la PC, escritorio remoto (wayvnc + noVNC), despertar desde
+otro equipo y ayudar a un amigo (invitación sin cable). El diseño y su porqué
+en `remoto/DISEÑO.md`, el contrato con la app en `remoto/PROTOCOLO.md`: léelos
+antes de escribir nada ahí. La lógica de la app (`src/api/`, `src/formato.ts`,
+`src/archivos.ts`) es TypeScript sin React Native y se prueba con Node contra
+el servidor de verdad (`tests/e2e/remoto-app.sh`); el servidor, con un celular
+de mentira (`tests/lib/telefono_falso.py`). Lo que no se negocia: **viene
+apagado** (se activa a mano desde la PC), **escucha solo por Tailscale**, y
+**lo que escucha por la red nunca corre como root**; lo poco que necesita root
+(`remoto/sistema/`) se COPIA a `/usr/local` con `./instalar.sh
+--remoto-sistema`, nunca se ejecuta desde el repo (cualquier programa tuyo
+podría editarlo). La app se compila en la PC (nunca en la nube de Expo) y su
 `node_modules` no se versiona.
 
 ---
@@ -1307,6 +1299,33 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
 - **Reiniciar SDDM cierra todas las sesiones que arrancó.** Lo que lo haga
   (`remoto/sistema/entrar.py`) mira antes, como root, que no hay ninguna
   sesión `user*` en `seat0` — y «logind no contesta» cuenta como que sí.
+- **Lo que una app deja en su carpeta privada NO está «guardado» en el
+  celular.** Pasarlo a otra app por un FileProvider lo enseña pero no lo
+  guarda: Google Fotos veía la foto sin tenerla, el .docx no salía en el
+  explorador y el vídeo no se reproducía (el usuario, 2026-10-20). Lo que ven
+  todas las apps es MediaStore (`Pictures/`, `Movies/`, `Download/`...); desde
+  Android 10 no pide permiso. Lo hace `remoto/app/modules/celiuz-nativo`.
+- **Gboard dentro de un WebView repite lo que compone**: xterm.js recibía
+  «echo hola» como «echchho hholla». Lo tecleado va por un `TextInput` nativo
+  invisible con `keyboardType="visible-password"` (sin composición ni
+  sugerencias), comparando con lo ÚLTIMO que tenía el campo. Y en la
+  arquitectura nueva de React Native `setNativeProps({text})` en un TextInput
+  **no hace nada**: para vaciarlo, `clear()`.
+- **Con edge-to-edge (Expo 58, Android 15) la ventana NO se encoge al salir
+  el teclado**: tapaba la fila de teclas de la terminal. Se le deja sitio con
+  `Keyboard.addListener('keyboardDidShow')`.
+- **noVNC usa `await` en lo alto del módulo**: no se puede empaquetar en IIFE;
+  va en ESM, en un `<script type="module">` (el WebView de Android lo admite).
+- **react-native-webview 14 trae tipos que React 19 no acepta** (el componente
+  sale como `never`): se le da un tipo propio mínimo (ver `Terminal.tsx`).
+- **Con la sesión de fuera bloqueada, el Hyprland anidado no pinta**: no le
+  llegan fotogramas, y un `grim` contra él se queda colgado para siempre. Las
+  capturas de ventanas, con la sesión desbloqueada.
+- **Probar la app en el celular por adb**: el emparejamiento se puede hacer
+  con la CLI (`celiuz-remoto emparejar --celular <serie>`), y la app se maneja
+  con `adb shell input tap/text` y `adb exec-out screencap`. Ojo: lo que sale
+  en pantalla son cosas del usuario (notificaciones); no se leen ni se
+  copian, y nunca se elige «Siempre» en un selector de apps.
 - **`afirmar_contiene` usa `grep -E`**: un base64 (con `+`) o cualquier texto
   con metacaracteres no casa consigo mismo. Para buscar algo literal,
   `afirmar "..." grep -qF -- "$texto" fichero`.

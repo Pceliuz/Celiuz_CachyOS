@@ -9,15 +9,17 @@ que no se entiende se ignoran con un aviso por stderr, nunca tumban el servicio.
     puerto_usb = 47111        el canal USB (adb reverse), solo mientras se empareja
     sesion     = 300          segundos sin uso hasta que caduca una sesion
     cuenta_atras = 60         segundos de aviso en la PC antes de apagar/reiniciar/suspender
+    subir_max_mb = 4096       lo mas grande que se deja subir desde el celular (fase 8)
 """
 
 import sys
 
 from . import PUERTO_RED, PUERTO_USB, rutas
 
-DE_FABRICA = {"puerto_red": PUERTO_RED, "puerto_usb": PUERTO_USB, "sesion": 300, "cuenta_atras": 60}
+DE_FABRICA = {"puerto_red": PUERTO_RED, "puerto_usb": PUERTO_USB, "sesion": 300, "cuenta_atras": 60,
+              "subir_max_mb": 4096}
 LIMITES = {"puerto_red": (1024, 65535), "puerto_usb": (1024, 65535), "sesion": (30, 86400),
-           "cuenta_atras": (3, 600)}
+           "cuenta_atras": (3, 600), "subir_max_mb": (1, 1048576)}
 
 
 def leer(ruta=None):

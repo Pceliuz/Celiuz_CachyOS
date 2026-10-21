@@ -152,9 +152,10 @@ function cuentasDeArchivos() {
   comprobar('migas desde la carpeta personal', m.length === 3 && m[2].ruta === 'Documentos/CV' && m[0].ruta === '', m);
   comprobar('padre y unir', a.padre('Documentos/CV') === 'Documentos' && a.padre('Documentos') === ''
             && a.unir('', 'x') === 'x' && a.unir('a', 'x') === 'a/x');
-  comprobar('la copia local nunca se sale de su carpeta (..)',
-            JSON.stringify(a.rutaLocal('PC', '../../etc/./passwd')) === '["PC","etc","passwd"]', a.rutaLocal('PC', '../../etc/./passwd'));
-  comprobar('   y limpia lo que Android no admite en un nombre', a.rutaLocal('PC', 'a:b/c?.txt').join('/') === 'PC/a_b/c_.txt');
+  comprobar('cada copia, por equipo y ruta (dos PCs con el mismo Documentos/nota.txt)',
+            a.claveGuardado('PC', 'Documentos/nota.txt') !== a.claveGuardado('Laptop', 'Documentos/nota.txt'));
+  comprobar('los textos se ven en la app (un .md sin app de markdown)', a.esTexto('notas.md') && a.esTexto('kitty.conf')
+            && a.esTexto('.bashrc') && !a.esTexto('foto.png') && !a.esTexto('informe.docx'));
   comprobar('clase por extensión, sin mayúsculas', a.clase('Informe.PDF') === 'pdf' && a.clase('x', 'carpeta') === 'carpeta'
             && a.clase('sin-extension') === 'otro');
   comprobar('el tipo para abrirlo', a.mime('foto.JPG') === 'image/jpeg' && a.mime('raro.xyz') === 'application/octet-stream');
@@ -197,6 +198,28 @@ async function explorar() {
   comprobar('olvidarReciente()', (await con.recientes()).length === 0);
 }
 
+// Fase 8: entrar SIN cable con la invitación que abrió la PC. El texto es el
+// de verdad (remoto-app.sh lo pide al socket de control y lo deja en un
+// fichero), como lo pegaría la persona.
+async function invitacion() {
+  const d = JSON.parse(readFileSync(`${TMP}/invitacion.json`, 'utf8'));
+  const inv = c.leerInvitacion(d.texto);
+  comprobar('leerInvitacion() saca la dirección y el código del texto de la PC',
+            inv?.codigo === d.codigo.replaceAll('-', '') && inv?.direccion.endsWith(`:${puertoRed}`), { inv, texto: d.texto });
+  comprobar('   y vale pegado en minúsculas y con espacios',
+            c.leerInvitacion(`${inv!.direccion} ${d.codigo.toLowerCase().replaceAll('-', ' ')}`)?.codigo === inv!.codigo);
+  comprobar('   sin código no hay invitación', c.leerInvitacion(`Dirección: ${inv!.direccion}`) === null);
+  const clave = nuevaClave(azar);
+  const r = await c.aceptarInvitacion(h, inv!, clave, publica(clave), 'Amigo de Node');
+  comprobar('aceptarInvitacion(): entra, con su hora de caducidad', !!r.dispositivo && !!r.expira && r.permisos.includes('estado'), r);
+  const e: c.EquipoGuardado = { dispositivo: r.dispositivo, equipo: r.equipo, direccion: r.direccion,
+                                permisos: r.permisos, pase_hasta: r.pase_hasta, expira: r.expira };
+  const con = await c.entrar(h, e, clave, d.contrasena);
+  comprobar('   y luego entra con la contraseña de la invitación', !!con.sesion.token);
+  const otra = await error(c.aceptarInvitacion(h, inv!, nuevaClave(azar), publica(nuevaClave(azar)), 'Otro'));
+  comprobar('la misma invitación otra vez: «firma» (un solo uso)', otra?.codigo === 'firma', otra?.codigo);
+}
+
 async function sinPase() {
   const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
   const con = await c.entrar(h, equipo, clave, contrasena);
@@ -211,6 +234,7 @@ async function sinPase() {
 try {
   if (fase === 'emparejar') { enlacesYFormatos(); cuentasDeArchivos(); await emparejarYEntrar(); }
   else if (fase === 'archivos') await explorar();
+  else if (fase === 'invitacion') await invitacion();
   else if (fase === 'control') await controlar();
   else if (fase === 'sinpase') await sinPase();
   else await renovarPase();

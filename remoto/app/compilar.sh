@@ -78,6 +78,10 @@ fi
 ARQUITECTURAS="${ARQUITECTURAS:-arm64-v8a,armeabi-v7a}"
 cd "$APP"
 [ -d node_modules ] || npm ci
+# Las paginas de la terminal (xterm.js) y del escritorio remoto (noVNC) salen
+# de node_modules: se rehacen siempre.
+node scripts/gen-terminal.mjs
+node scripts/gen-pantalla.mjs
 echo "Generando el proyecto de Android (expo prebuild)..."
 CI=1 EXPO_NO_GIT_STATUS=1 npx expo prebuild --platform android --clean --no-install >/dev/null
 echo "Compilando (Gradle; la primera vez tarda varios minutos)..."

@@ -1,0 +1,17 @@
+// El modulo nativo propio de Celiuz Remoto (remoto/app/modules/celiuz-nativo).
+// Lo enlaza solo el autolinking de Expo, que mira la carpeta modules/.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.celiuz.remoto'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.celiuznativo"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}

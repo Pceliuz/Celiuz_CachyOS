@@ -49,8 +49,22 @@ export interface Socket {
   onmessage: ((ev: { data: unknown }) => void) | null;
   onclose: ((ev: { code: number; reason?: string }) => void) | null;
   onerror: ((ev: unknown) => void) | null;
+  onopen?: (() => void) | null;
+  binaryType?: string;
+  send?(datos: string | ArrayBuffer): void;
   close(code?: number): void;
 }
+
+// La terminal abierta (fase 7): lo que se le manda y como cerrarla.
+export interface TerminalAbierta {
+  escribir(texto: string): void;
+  tamano(filas: number, columnas: number): void;
+  cerrar(): void;
+}
+// Como se cierra una terminal (terminal.py): 4000 la shell salió, 4403 se le
+// quitó el pase o el permiso con ella abierta.
+export const TERMINAL_SALIO = 4000;
+export const TERMINAL_SIN_PERMISO = 4403;
 
 export interface Herramientas {
   fetch: typeof fetch;
@@ -65,6 +79,8 @@ export interface EquipoGuardado {
   direccion: string; // IP de Tailscale:puerto
   permisos: string[];
   pase_hasta: string | null; // lo ultimo que dijo la PC (solo para enseñarlo)
+  mac?: string | null; // fase 8: para despertarlo desde otro equipo de casa
+  expira?: string | null; // fase 8: entró por invitación y caduca a esta hora
 }
 
 async function pedir<T>(
@@ -238,9 +254,69 @@ export class Conexion {
       `${this.base}/v0/favoritos?ruta=${encodeURIComponent(ruta)}`, undefined, this.sesion.token)).favoritos;
   }
 
+  // --- terminal (fase 7): pase, permiso de terminal y la contraseña OTRA VEZ ---
+
+  // Devuelve el billete (vale 30 s y una sola vez) para abrir la terminal.
+  async billeteTerminal(contrasena: string): Promise<string> {
+    return (await pedir<{ terminal: string }>(this.h, 'POST', `${this.base}/v0/terminal`,
+      { contrasena }, this.sesion.token)).terminal;
+  }
+
+  // Lo que sale de la shell llega en bytes a `alDatos`; se escribe en texto
+  // (UTF-8, el servidor lo pasa tal cual al PTY).
+  terminal(billete: string, filas: number, columnas: number, alDatos: (b: Uint8Array) => void,
+           alCerrar: (codigo: number, motivo: string) => void): TerminalAbierta {
+    const url = `${this.base.replace(/^http/, 'ws')}/v0/terminal/${encodeURIComponent(billete)}`
+      + `?filas=${filas}&columnas=${columnas}`;
+    const s = this.h.abrirSocket(url, { Authorization: `Bearer ${this.sesion.token}` });
+    s.binaryType = 'arraybuffer';
+    const pendiente: string[] = [];
+    let abierta = false;
+    let cerrada = false;
+    const mandar = (m: string) => (abierta ? s.send?.(m) : pendiente.push(m));
+    s.onopen = () => {
+      abierta = true;
+      for (const m of pendiente.splice(0)) s.send?.(m);
+    };
+    s.onmessage = (ev) => {
+      const d = ev.data;
+      if (d instanceof ArrayBuffer) alDatos(new Uint8Array(d));
+      else if (typeof d === 'string') alDatos(new TextEncoder().encode(d));
+    };
+    s.onclose = (ev) => {
+      if (!cerrada) alCerrar(ev.code, ev.reason ?? '');
+      cerrada = true;
+    };
+    s.onerror = () => {};
+    return {
+      escribir: (texto) => mandar(JSON.stringify({ texto })),
+      tamano: (f, c) => mandar(JSON.stringify({ tamano: [f, c] })),
+      cerrar: () => { cerrada = true; s.close(1000); },
+    };
+  }
+
+  // --- escritorio remoto (fase 8): permiso de pantalla, pase y la contraseña otra vez ---
+
+  async billetePantalla(contrasena: string): Promise<string> {
+    return (await pedir<{ pantalla: string }>(this.h, 'POST', `${this.base}/v0/pantalla`,
+      { contrasena }, this.sesion.token)).pantalla;
+  }
+
+  // La abre la página del WebView (noVNC), que no puede poner cabeceras: la
+  // llave es el billete, de un solo uso.
+  urlPantalla(billete: string): string {
+    return `${this.base.replace(/^http/, 'ws')}/v0/pantalla/${encodeURIComponent(billete)}`;
+  }
+
   // Lo que bajan otros (el gestor de descargas, <Image>): la URL y la cabecera.
   urlDescarga(ruta: string): string {
     return `${this.base}/v0/archivos/descargar?ruta=${encodeURIComponent(ruta)}`;
+  }
+
+  // Subir (fase 8): el cuerpo es el archivo tal cual; la PC lo deja en
+  // <Descargas>/Celiuz Remoto y nunca pisa nada.
+  urlSubir(nombre: string): string {
+    return `${this.base}/v0/archivos/subir?nombre=${encodeURIComponent(nombre)}`;
   }
 
   urlMiniatura(ruta: string, lado = 256): string {
@@ -249,6 +325,13 @@ export class Conexion {
 
   cabeceras(): Record<string, string> {
     return { Authorization: `Bearer ${this.sesion.token}` };
+  }
+
+  // Despertar a OTRO equipo de la red de casa (Wake-on-LAN, fase 8): lo
+  // manda ESTE, que está encendido. Permiso de energía, sin pase.
+  async despertar(mac: string): Promise<boolean> {
+    return (await pedir<{ enviado: boolean }>(this.h, 'POST', `${this.base}/v0/despertar`,
+      { mac, confirmado: true }, this.sesion.token)).enviado;
   }
 
   async ventanas(): Promise<Ventana[]> {
@@ -281,6 +364,31 @@ export async function entrar(h: Herramientas, equipo: EquipoGuardado, clave: str
     dispositivo: equipo.dispositivo, reto, firma: firmar(clave, 'sesion', reto), contrasena,
   });
   return new Conexion(h, equipo, sesion);
+}
+
+// --- ayudar a un amigo (fase 8): entrar SIN cable con una invitación ---
+
+export interface Invitacion { direccion: string; codigo: string }
+
+// Lo que manda el amigo, pegado tal cual (el texto de su PC, de WhatsApp...):
+// la dirección de Tailscale con su puerto, y el código de 16 letras. El código
+// se normaliza (sin guiones ni espacios, en mayúsculas), que es lo que firma.
+export function leerInvitacion(texto: string): Invitacion | null {
+  const dir = /\b(100\.\d{1,3}\.\d{1,3}\.\d{1,3}|127\.0\.0\.1):(\d{2,5})\b/.exec(texto);
+  const grupos = '([A-Za-z0-9]{4})[- ]?([A-Za-z0-9]{4})[- ]?([A-Za-z0-9]{4})[- ]?([A-Za-z0-9]{4})';
+  // Con la etiqueta «Código:» primero (el texto de la PC la lleva); si no, el
+  // primer grupo de 16 que no sea de la dirección.
+  const cod = new RegExp(`C[óo]digo:?\\s*${grupos}\\b`, 'i').exec(texto)
+    ?? new RegExp(`\\b${grupos}\\b`).exec(texto.replace(/(Dirección|Direccion)[^\n]*/i, ''));
+  if (!dir || !cod) return null;
+  return { direccion: `${dir[1]}:${dir[2]}`, codigo: cod.slice(1, 5).join('').toUpperCase() };
+}
+
+export async function aceptarInvitacion(h: Herramientas, inv: Invitacion, clave: string, pub: string,
+                                        nombre: string): Promise<Emparejado> {
+  return pedir<Emparejado>(h, 'POST', `${urlRed(inv.direccion)}/v0/invitacion`, {
+    codigo: inv.codigo, nombre, publica: pub, firma: firmar(clave, 'invitacion', inv.codigo),
+  });
 }
 
 // ¿Contesta? Para el «En línea / Apagada» de la pantalla de entrar. Pide un

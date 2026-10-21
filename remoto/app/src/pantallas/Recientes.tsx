@@ -169,6 +169,7 @@ export default function Recientes({ conexion, alVolver, alAbrirCarpeta, alVerPas
         )}
         <Texto tipo="chico">El historial vive en la PC, no en el celular: si cambias de celular lo conservas, y si te lo roban no se llevan la lista.</Texto>
       </ScrollView>
+      {descargas.visor}
     </Pantalla>
   );
 }

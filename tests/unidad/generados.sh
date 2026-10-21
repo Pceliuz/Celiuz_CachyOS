@@ -67,11 +67,12 @@ FINPY
 afirmar_igual "rgba(106, 0, 244, 0.667)" \
     "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["colores"]["halo"])' "$COPIA/remoto/app/src/colores.json")" \
     "   un translucido sale en rgba(), sin hex de ocho digitos que leer al reves"
-# Y que nadie escriba un color a mano en la app (fuera node_modules y lo generado)
+# Y que nadie escriba un color a mano en la app (fuera node_modules y lo generado:
+# las paginas *.generada.ts llevan dentro xterm.js y noVNC, que no son nuestros)
 # (y un rgba(...) con numeros tambien es un color a mano: los translucidos se
 # derivan de la paleta con alfa(), en componentes/ui.tsx)
 a_mano="$(grep -rnE "#[0-9a-fA-F]{6}\b|rgba?\([0-9]" "$REPO/remoto/app" --include='*.ts' --include='*.tsx' \
-          --exclude-dir=node_modules 2>/dev/null)"
+          --exclude-dir=node_modules --exclude='*.generada.ts' 2>/dev/null)"
 afirmar_igual "" "$a_mano" "   la app no lleva ningun hex escrito a mano"
 
 titulo "2. Es idempotente (generar dos veces da lo mismo)"

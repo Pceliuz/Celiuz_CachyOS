@@ -5,7 +5,7 @@ export const VERSION_PROTOCOLO = 0;
 export const PUERTO_RED = 47110;
 export const PUERTO_USB = 47111;
 
-export type Permiso = 'estado' | 'energia' | 'ventanas' | 'archivos' | 'terminal';
+export type Permiso = 'estado' | 'energia' | 'ventanas' | 'archivos' | 'terminal' | 'pantalla';
 
 export type CodigoError =
   | 'peticion'
@@ -23,7 +23,7 @@ export type CodigoError =
 // Lo que se firma con la clave privada Ed25519 del telefono: siempre con
 // prefijo, para que la firma de una cosa no valga para otra.
 export const PREFIJO_FIRMA = 'celiuz-remoto/v0/';
-export type Firmable = 'sesion' | 'emparejar' | 'renovar';
+export type Firmable = 'sesion' | 'emparejar' | 'renovar' | 'invitacion';
 export const textoFirmado = (para: Firmable, dato: string) => `${PREFIJO_FIRMA}${para}:${dato}`;
 
 // El WebSocket /v0/vivo se cierra con este codigo cuando caduca la sesion.
@@ -52,6 +52,15 @@ export interface Equipo {
   bateria: boolean;
   protocolo: number;
   cuenta_atras: number; // segundos de aviso en la PC antes de apagar
+  despertar?: Despertar; // fase 8: como despertar a ESTE equipo desde otro
+}
+
+// Wake-on-LAN (fase 8): la MAC de la tarjeta de cable y si tiene pinta de poder.
+export interface Despertar {
+  mac: string | null;
+  tarjeta: string | null;
+  wol: 'si' | 'no' | 'no_lo_se';
+  motivo: string;
 }
 
 export interface Gpu {
@@ -104,6 +113,7 @@ export interface Emparejado {
   direccion: string; // IP de Tailscale:puerto
   permisos: Permiso[];
   pase_hasta: string; // emparejar da el pase de 24 h
+  expira?: string; // solo por invitación (fase 8): a esta hora deja de valer
 }
 
 export type AccionEnergia = 'apagar' | 'reiniciar' | 'suspender';

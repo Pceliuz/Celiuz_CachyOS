@@ -15,6 +15,7 @@ CASILLAS = [
     ("Ver y cerrar apps", ("ventanas",), True),
     ("Archivos", ("archivos",), True),
     ("Terminal con sudo", ("terminal",), False),
+    ("Ver y manejar la pantalla", ("pantalla",), False),
 ]
 
 ACCIONES = {
@@ -50,6 +51,19 @@ ACCIONES = {
     "entrar_escritorio_mal": "No pudo abrir la sesión desde la pantalla de inicio",
     "descarga": "Bajó un archivo",
     "favorito": "Fijó un favorito",
+    "terminal_abierta": "Abrió una terminal",
+    "terminal_cerrada": "Se cerró su terminal",
+    "terminal_mal": "Intento de abrir la terminal fallido",
+    "pantalla_abierta": "Empezó a ver y manejar la pantalla",
+    "pantalla_cerrada": "Dejó de ver la pantalla",
+    "pantalla_mal": "Intento de ver la pantalla fallido",
+    "pantalla_fallo": "No arrancó el escritorio remoto (wayvnc)",
+    "subida": "Subió un archivo a la PC",
+    "despertar": "Mandó despertar a otro equipo (Wake-on-LAN)",
+    "invitacion_abierta": "Se abrió una invitación (ayudar a un amigo)",
+    "invitado": "Entró con una invitación, sin cable",
+    "invitacion_quemada": "Se canceló una invitación: 5 códigos mal",
+    "invitado_caducado": "Se acabó el acceso de un invitado",
 }
 
 VIGILANCIA = {

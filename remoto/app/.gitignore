@@ -39,3 +39,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Lo que compila Gradle del modulo nativo propio
+modules/*/android/build/
+modules/*/android/.cxx/
+
+# Las paginas de la terminal y del escritorio remoto, hechas de node_modules
+# (scripts/gen-terminal.mjs y gen-pantalla.mjs)
+src/terminal/pagina.generada.ts
+src/pantalla/pagina.generada.ts

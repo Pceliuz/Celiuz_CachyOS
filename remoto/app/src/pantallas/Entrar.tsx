@@ -11,8 +11,9 @@ import { herramientas } from '../herramientas';
 import { colores } from '../paleta';
 import { Aviso, Boton, Campo, Pantalla, Texto, fondoAmbar, fondoRojo, verde } from '../componentes/ui';
 
-export default function Entrar({ equipos, aviso, alEntrar, alCambiarEquipos }: {
+export default function Entrar({ equipos, aviso, alEntrar, alCambiarEquipos, alInvitacion }: {
   equipos: EquipoGuardado[];
+  alInvitacion?: () => void;
   aviso?: string;
   alEntrar: (c: Conexion) => void;
   alCambiarEquipos: () => void;
@@ -123,8 +124,20 @@ export default function Entrar({ equipos, aviso, alEntrar, alCambiarEquipos }: {
         <Boton texto="Entrar" alPulsar={alPulsarEntrar} cargando={entrando} desactivado={!contrasena} />
         {error?.olvidable ? <Boton texto={`Olvidar ${equipo?.equipo}`} tipo="peligro" alto={48} alPulsar={olvidar} /> : null}
 
+        {alInvitacion ? <Boton texto="Tengo una invitación" tipo="borde" alto={44} alPulsar={alInvitacion} /> : null}
+
+        {/* Un invitado (fase 8) no tiene pase que renovar: tiene una hora a la que se acaba. */}
+        {equipo?.expira && !error?.olvidable ? (
+          <View style={{ marginTop: 'auto' }}>
+            <Aviso texto={new Date(equipo.expira) > new Date()
+              ? `Entraste a ${equipo.equipo} por invitación: vale hasta las ${f.horaDe(equipo.expira)}.`
+              : `La invitación a ${equipo.equipo} ya caducó. Mantén pulsado el equipo para olvidarlo.`}
+                   color={colores.atencion} fondo={fondoAmbar} />
+          </View>
+        ) : null}
+
         {/* Si la PC ya no reconoce al celular, el pase guardado no vale: no se enseña. */}
-        {pase && !error?.olvidable ? (
+        {pase && !equipo?.expira && !error?.olvidable ? (
           <View style={{ marginTop: 'auto' }}>
             <Aviso
               texto={pase.vigente

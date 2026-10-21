@@ -35,7 +35,7 @@ import tempfile
 
 from . import rutas
 
-PERMISOS = ("estado", "energia", "ventanas", "archivos", "terminal")
+PERMISOS = ("estado", "energia", "ventanas", "archivos", "terminal", "pantalla")
 # Lo que se da al emparejar si no se dice otra cosa (DISEÑO.md, «Qué pide cada
 # cosa»): ver y apagar. Lo demas se activa a mano por telefono.
 PERMISOS_DE_FABRICA = ("estado", "energia")
@@ -145,7 +145,7 @@ class Almacen:
 
     # --- escritura ---
 
-    def crear(self, nombre, publica, hash_contra, permisos, ahora, serie=None):
+    def crear(self, nombre, publica, hash_contra, permisos, ahora, serie=None, expira=None):
         if not publica_valida(publica):
             raise ErrorDispositivo("la clave publica no es Ed25519 (32 bytes en base64)")
         malos = [x for x in permisos if x not in PERMISOS]
@@ -173,6 +173,9 @@ class Almacen:
                 # la PC sepa si el celular enchufado ya es uno de estos. No es
                 # un secreto ni sirve para entrar.
                 "serie": serie,
+                # Solo los invitados sin cable (invitacion.py): a esta hora deja
+                # de existir para todo y se borra solo.
+                "expira": expira,
             }
             return dict(d["dispositivos"][ident], sustituye=sustituidos)
 
@@ -196,6 +199,13 @@ class Almacen:
             if disp["fallos"] >= MAX_FALLOS:
                 disp["bloqueado"] = True
             return disp["fallos"], nuevo
+
+    def caducados(self, ahora_iso):
+        """Los invitados cuya hora ya paso (comparando como fechas)."""
+        from . import pase
+        ahora = pase.leer(ahora_iso)
+        return [x["id"] for x in self.todos()
+                if x.get("expira") and (pase.leer(x["expira"]) or ahora) <= ahora]
 
     def revocar(self, ident):
         with self._abierto(True) as d:

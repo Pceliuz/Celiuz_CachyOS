@@ -13,6 +13,7 @@ tambien sirve los /v0/vivo de cada segundo, y no puede pararse a hacer cuentas.
 """
 
 import asyncio
+import datetime as dt
 import contextlib
 import hmac
 import json
@@ -27,9 +28,10 @@ import urllib.parse
 from aiohttp import WSCloseCode, web
 
 from . import VERSION_PROTOCOLO, ajustes, archivos, dispositivos as dsp, escritorio, historial, inicio, pase, red, registro, rutas
+from . import despertar as wol, invitacion as inv, pantalla as vnc, terminal as term
 from .energia import ACCIONES, Energia
 from .vigilancia import CADA as VIGILANCIA_CADA, Vigilancia
-from .sesion import FIRMA_MALA, Rechazo, Sesiones, firma_buena, texto_firmado
+from .sesion import FIRMA_MALA, Rechazo, Sesiones, caducado, firma_buena, texto_firmado
 
 VENTANA_DURA = 120          # segundos que se queda abierto el canal USB
 VIVO_CADA = 1.0
@@ -44,6 +46,15 @@ def avisar_en_la_pc(titulo, cuerpo):
         with contextlib.suppress(OSError):
             subprocess.Popen(["notify-send", "-a", "Celiuz Remoto", "-u", "critical",
                               titulo, cuerpo],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def avisar_normal_en_la_pc(titulo, cuerpo):
+    """Como avisar_en_la_pc, pero sin urgencia: es para que conste, no una alarma."""
+    if shutil.which("notify-send"):
+        with contextlib.suppress(OSError):
+            subprocess.Popen(["notify-send", "-a", "Celiuz Remoto", titulo, cuerpo],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
 
@@ -99,8 +110,10 @@ class Ventana:
 
 
 class Servicio:
-    def __init__(self, ip, almacen=None, muestreador=None, valores=None, avisar=avisar_en_la_pc):
+    def __init__(self, ip, almacen=None, muestreador=None, valores=None, avisar=avisar_en_la_pc,
+                 avisar_normal=avisar_normal_en_la_pc):
         self.ip = ip
+        self.avisar_normal = avisar_normal
         self.valores = valores or ajustes.leer()
         self.almacen = almacen or dsp.Almacen()
         self.avisar = avisar
@@ -117,6 +130,10 @@ class Servicio:
         self._tareas = set()
         self._pendiente = None     # (runner, plazo) del canal USB que se esta soltando
         self._miniaturas = asyncio.Semaphore(2)   # ffmpeg de dos en dos, no de cien en cien
+        self.terminales = term.Terminales()
+        self.billetes_pantalla = {}     # billete -> Billete (terminal.py)
+        self.pantalla_abierta = None    # (Vnc, dispositivo) mientras alguien mira
+        self.invitacion = None          # invitacion.Invitacion: ayudar a un amigo, sin cable
 
     # --- utilidades ---
 
@@ -190,8 +207,23 @@ class Servicio:
 
     async def v0_equipo(self, peticion):
         self._telefono(peticion, "estado")
+        despertar = await asyncio.get_running_loop().run_in_executor(None, wol.info)
         return web.json_response(dict(self.muestreador.equipo(), protocolo=VERSION_PROTOCOLO,
-                                      cuenta_atras=self.valores["cuenta_atras"]))
+                                      cuenta_atras=self.valores["cuenta_atras"], despertar=despertar))
+
+    async def v0_despertar(self, peticion):
+        """Despertar a OTRO equipo de la red de casa (fase 8). Permiso de
+        energia y sin pase, como apagar: encender no le hace daño a nadie."""
+        _, disp = self._telefono(peticion, "energia")
+        d = await _cuerpo(peticion, "mac")
+        if d.get("confirmado") is not True:
+            raise _rechazo(409, "confirmar", "Falta confirmarlo.")
+        try:
+            por = await asyncio.get_running_loop().run_in_executor(None, wol.despertar, d["mac"])
+        except ValueError as e:
+            raise _rechazo(400, "peticion", str(e)) from None
+        registro.apuntar("despertar", disp["id"], mac=d["mac"].lower(), por=len(por))
+        return web.json_response({"enviado": bool(por), "por": por})
 
     async def v0_vivo(self, peticion):
         token, disp = self._telefono(peticion, "estado")
@@ -342,6 +374,44 @@ class Servicio:
             destino = await self._en_hilo(archivos.miniatura, peticion.query.get("ruta", ""), lado)
         return web.FileResponse(destino, headers={"Cache-Control": "private, max-age=86400"})
 
+    async def v0_subir(self, peticion):
+        """Del celular a la PC (fase 8). El cuerpo es el archivo tal cual; va a
+        <Descargas>/Celiuz Remoto y nunca pisa nada (archivos.py, «subir»).
+        Se escribe en un «.parcial» oculto y solo al acabar entero toma su
+        nombre: una subida cortada no deja medio archivo con cara de bueno."""
+        disp = self._de_archivos(peticion)
+        nombre = archivos.nombre_limpio(peticion.query.get("nombre"))
+        maximo = self.valores["subir_max_mb"] * 1024 * 1024
+        largo = peticion.content_length
+        if largo is not None and largo > maximo:
+            raise _rechazo(413, "peticion", f"Es más grande de lo que se deja subir ({self.valores['subir_max_mb']} MB).")
+        carpeta = archivos.carpeta_subidas()
+        os.makedirs(carpeta, exist_ok=True)
+        libre = shutil.disk_usage(carpeta).free
+        if largo is not None and largo > libre - 1024 ** 3:
+            raise _rechazo(507, "peticion", "No cabe en la PC (se deja siempre 1 GB libre).")
+        parcial = os.path.join(carpeta, f".{secrets.token_hex(6)}.parcial")
+        escritos = 0
+        try:
+            with open(parcial, "wb") as fh:
+                async for trozo in peticion.content.iter_chunked(256 * 1024):
+                    escritos += len(trozo)
+                    if escritos > maximo:
+                        raise _rechazo(413, "peticion", "Es más grande de lo que se deja subir.")
+                    fh.write(trozo)
+            if largo is not None and escritos != largo:
+                raise _rechazo(400, "peticion", "La subida llegó incompleta.")
+            destino = archivos.destino_libre(carpeta, nombre)
+            os.link(parcial, destino)      # falla si ya existe: no pisa nunca
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(parcial)
+        relativa = os.path.relpath(destino, archivos.casa())
+        registro.apuntar("subida", disp["id"], ruta=relativa, tamano=escritos)
+        self.avisar_normal("Celiuz Remoto: archivo recibido",
+                           f"«{disp['nombre']}» subió «{os.path.basename(destino)}» a {os.path.dirname(relativa)}.")
+        return web.json_response({"ruta": relativa, "nombre": os.path.basename(destino), "tamano": escritos})
+
     async def v0_recientes(self, peticion):
         self._de_archivos(peticion)
         if peticion.method == "DELETE":
@@ -360,6 +430,293 @@ class Servicio:
         elif peticion.method == "DELETE":
             await self._en_hilo(historial.soltar, peticion.query.get("ruta", ""))
         return web.json_response({"favoritos": await self._en_hilo(historial.favoritos)})
+
+    # --- terminal (fase 7): permiso `terminal`, pase y la contraseña OTRA VEZ ---
+
+    async def v0_abrir_terminal(self, peticion):
+        _, disp = self._telefono(peticion, "terminal")
+        self._pase(disp)
+        d = await _cuerpo(peticion)
+        try:
+            await asyncio.get_running_loop().run_in_executor(
+                None, self.sesiones.comprobar_contrasena, disp, d.get("contrasena"))
+        except Rechazo as r:
+            registro.apuntar("terminal_mal", disp["id"], motivo=r.error)
+            raise
+        b = self.terminales.dar_billete(disp)
+        if b is None:
+            raise _rechazo(409, "estado", f"Ya hay {term.MAX_ABIERTAS} terminales abiertas: cierra alguna.")
+        return web.json_response({"terminal": b.id, "caduca": term.BILLETE_DURA})
+
+    def _sigue_valiendo(self, token):
+        disp = self.sesiones.quien(token)    # tambien la mantiene viva
+        if disp is None:
+            return None, term.CIERRE_SIN_PERMISO, "sin_sesion"
+        if "terminal" not in disp.get("permisos", []):
+            return None, term.CIERRE_SIN_PERMISO, "sin_permiso"
+        if not pase.vigente(disp):
+            return None, term.CIERRE_SIN_PERMISO, "pase_vencido"
+        return disp, None, None
+
+    async def v0_terminal(self, peticion):
+        token, disp = self._telefono(peticion, "terminal")
+        self._pase(disp)
+        if not self.terminales.gastar_billete(peticion.match_info["id"], disp):
+            raise _rechazo(401, "firma", "Ese billete de terminal no vale (caducó o ya se usó).")
+        try:
+            filas = int(peticion.query.get("filas", "24"))
+            columnas = int(peticion.query.get("columnas", "80"))
+        except ValueError:
+            filas, columnas = 24, 80
+        ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1024 * 1024)
+        await ws.prepare(peticion)
+        try:
+            pty = term.Pty(filas, columnas)
+        except OSError as e:
+            await ws.close(code=WSCloseCode.INTERNAL_ERROR, message=f"no pude abrir la shell: {e}".encode()[:120])
+            return ws
+        ident = peticion.match_info["id"]
+        self.terminales.abiertas[ident] = (pty, disp["id"])
+        registro.apuntar("terminal_abierta", disp["id"], shell=term.shell_del_usuario())
+        self.avisar_normal("Celiuz Remoto: terminal abierta",
+                           f"«{disp['nombre']}» abrió una terminal en esta PC.")
+        motivo = "cerrada"
+
+        async def salida():
+            async for datos in pty.leer():
+                if ws.closed:
+                    return
+                await ws.send_bytes(datos)
+
+        async def vigilar():
+            while True:
+                await asyncio.sleep(5)
+                _, codigo, por_que = self._sigue_valiendo(token)
+                if codigo:
+                    return codigo, por_que
+
+        t_salida = asyncio.ensure_future(salida())
+        t_vigia = asyncio.ensure_future(vigilar())
+        t_entrada = asyncio.ensure_future(self._entrada_terminal(ws, pty))
+        try:
+            hecho, _ = await asyncio.wait({t_salida, t_vigia, t_entrada}, return_when=asyncio.FIRST_COMPLETED)
+            if t_salida in hecho:
+                motivo = "salio"
+                if not ws.closed:
+                    await ws.close(code=term.CIERRE_SALIO, message=b"salio")
+            elif t_vigia in hecho:
+                codigo, motivo = t_vigia.result()
+                if not ws.closed:
+                    await ws.close(code=codigo, message=motivo.encode())
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        finally:
+            for t in (t_salida, t_vigia, t_entrada):
+                t.cancel()
+            await pty.cerrar()
+            self.terminales.abiertas.pop(ident, None)
+            registro.apuntar("terminal_cerrada", disp["id"], por=motivo,
+                             segundos=round(time.time() - pty.desde))
+            if not ws.closed:
+                await ws.close(code=WSCloseCode.GOING_AWAY)
+        return ws
+
+    # --- escritorio remoto (fase 8): permiso `pantalla`, pase y contraseña otra vez ---
+
+    async def v0_abrir_pantalla(self, peticion):
+        _, disp = self._telefono(peticion, "pantalla")
+        self._pase(disp)
+        d = await _cuerpo(peticion)
+        try:
+            await asyncio.get_running_loop().run_in_executor(
+                None, self.sesiones.comprobar_contrasena, disp, d.get("contrasena"))
+        except Rechazo as r:
+            registro.apuntar("pantalla_mal", disp["id"], motivo=r.error)
+            raise
+        if not vnc.wayvnc():
+            raise _rechazo(409, "estado", "En la PC falta wayvnc: sudo pacman -S wayvnc.")
+        if await asyncio.get_running_loop().run_in_executor(None, vnc.sesion) is None:
+            raise _rechazo(409, "estado", "No hay ninguna sesión abierta en la PC que enseñar.")
+        if self.pantalla_abierta is not None:
+            raise _rechazo(409, "estado", "Ya hay alguien viendo la pantalla.")
+        ahora = time.monotonic()
+        self.billetes_pantalla = {k: b for k, b in self.billetes_pantalla.items() if b.hasta > ahora}
+        b = term.Billete(disp)
+        self.billetes_pantalla[b.id] = b
+        return web.json_response({"pantalla": b.id, "caduca": term.BILLETE_DURA})
+
+    def _pantalla_vale(self, ident):
+        disp = self.almacen.uno(ident)
+        if disp is None or caducado(disp):
+            return None, "revocado"
+        if "pantalla" not in disp.get("permisos", []):
+            return None, "sin_permiso"
+        if not pase.vigente(disp):
+            return None, "pase_vencido"
+        return disp, None
+
+    async def v0_pantalla(self, peticion):
+        """El puente WebSocket <-> wayvnc. Sin cabecera Authorization (lo abre
+        el WebView): la llave es el billete (pantalla.py)."""
+        b = self.billetes_pantalla.pop(peticion.match_info["id"], None)
+        if b is None or b.hasta < time.monotonic():
+            raise _rechazo(401, "firma", "Ese billete de pantalla no vale (caducó o ya se usó).")
+        disp, por_que = self._pantalla_vale(b.dispositivo)
+        if disp is None:
+            raise _rechazo(403, "sin_permiso", f"Ya no se puede: {por_que}.")
+        if self.pantalla_abierta is not None:
+            raise _rechazo(409, "estado", "Ya hay alguien viendo la pantalla.")
+        datos_sesion = await asyncio.get_running_loop().run_in_executor(None, vnc.sesion)
+        if datos_sesion is None:
+            raise _rechazo(409, "estado", "No hay ninguna sesión abierta en la PC.")
+        servidor = vnc.Vnc(*datos_sesion)
+        self.pantalla_abierta = (servidor, disp["id"])
+        ws = web.WebSocketResponse(protocols=("binary",), heartbeat=30, max_msg_size=8 * 1024 * 1024)
+        motivo = "cerrada"
+        try:
+            await ws.prepare(peticion)
+            if not await servidor.listo():
+                motivo = "wayvnc_no_arranco"
+                registro.apuntar("pantalla_fallo", disp["id"], error=servidor.error())
+                await ws.close(code=term.CIERRE_SALIO, message=b"wayvnc no arranco")
+                return ws
+            lector, escritor = await asyncio.open_unix_connection(servidor.socket)
+            registro.apuntar("pantalla_abierta", disp["id"])
+            self.avisar_normal("Celiuz Remoto: pantalla compartida",
+                               f"«{disp['nombre']}» está viendo y manejando esta pantalla.")
+
+            async def hacia_el_celular():
+                while True:
+                    trozo = await lector.read(256 * 1024)
+                    if not trozo:
+                        return
+                    await ws.send_bytes(trozo)
+
+            async def desde_el_celular():
+                async for m in ws:
+                    if m.type == web.WSMsgType.BINARY:
+                        escritor.write(m.data)
+                        await escritor.drain()
+                    elif m.type in (web.WSMsgType.CLOSE, web.WSMsgType.ERROR):
+                        return
+
+            async def vigilar():
+                while True:
+                    await asyncio.sleep(5)
+                    _, por = self._pantalla_vale(disp["id"])
+                    if por:
+                        return por
+
+            tareas = {asyncio.ensure_future(hacia_el_celular()), asyncio.ensure_future(desde_el_celular()),
+                      asyncio.ensure_future(vigilar())}
+            hecho, pendientes = await asyncio.wait(tareas, return_when=asyncio.FIRST_COMPLETED)
+            for t in pendientes:
+                t.cancel()
+            for t in hecho:
+                if isinstance(t.result(), str):
+                    motivo = t.result()
+                    if not ws.closed:
+                        await ws.close(code=term.CIERRE_SIN_PERMISO, message=motivo.encode())
+            escritor.close()
+        except (ConnectionResetError, OSError, asyncio.CancelledError):
+            pass
+        finally:
+            await servidor.cerrar()
+            self.pantalla_abierta = None
+            if motivo != "wayvnc_no_arranco":
+                registro.apuntar("pantalla_cerrada", disp["id"], por=motivo,
+                                 segundos=round(time.time() - servidor.desde))
+            if not ws.closed:
+                await ws.close(code=WSCloseCode.GOING_AWAY)
+        return ws
+
+    @staticmethod
+    async def _entrada_terminal(ws, pty):
+        """Binario: lo que teclea el celular, al PTY. Texto: control en JSON
+        ({"tamano": [filas, columnas]}). Lo tecleado no se apunta NUNCA."""
+        async for m in ws:
+            if m.type == web.WSMsgType.BINARY:
+                await asyncio.get_running_loop().run_in_executor(None, pty.escribir, m.data)
+            elif m.type == web.WSMsgType.TEXT:
+                with contextlib.suppress(ValueError, TypeError, KeyError):
+                    d = json.loads(m.data)
+                    if isinstance(d.get("tamano"), list) and len(d["tamano"]) == 2:
+                        pty.tamano(*d["tamano"])
+                    elif isinstance(d.get("texto"), str):
+                        await asyncio.get_running_loop().run_in_executor(
+                            None, pty.escribir, d["texto"].encode("utf-8"))
+            elif m.type in (web.WSMsgType.CLOSE, web.WSMsgType.ERROR):
+                return
+
+    # --- ayudar a un amigo (fase 8): entrar SIN cable, con invitacion ---
+
+    async def v0_invitacion(self, peticion):
+        """El celular del amigo acepta la invitacion que abrio la PC
+        (invitacion.py). Como emparejar, pero por la red, con un codigo de un
+        solo uso, y lo que nace caduca solo."""
+        d = await _cuerpo(peticion, "codigo", "publica", "firma")
+        i = self.invitacion
+        if i is None or not i.abierta():
+            raise Rechazo(*FIRMA_MALA)
+        if not i.codigo_bueno(d["codigo"]):
+            if i.fallo():
+                registro.apuntar("invitacion_quemada")
+                self.avisar("Celiuz Remoto: invitación cancelada",
+                            f"Alguien probó {inv.MAX_FALLOS} códigos mal. La invitación ya no vale.")
+            raise Rechazo(*FIRMA_MALA)
+        if not dsp.publica_valida(d["publica"]) or not firma_buena(
+                d["publica"], texto_firmado("invitacion", i.codigo), d["firma"]):
+            raise Rechazo(*FIRMA_MALA)
+        expira = pase.iso(pase.ahora() + dt.timedelta(hours=i.horas))
+        nombre = (str(d.get("nombre") or "").strip() or "Invitado")[:40]
+        disp = self.almacen.crear(f"{nombre} (invitado)", d["publica"], i.hash, i.permisos,
+                                  pase.iso(pase.ahora()), expira=expira)
+        disp = self.almacen.cambiar(disp["id"], pase_hasta=expira)
+        i.estado, i.dispositivo, i.contrasena = "usada", disp["id"], None
+        registro.apuntar("invitado", disp["id"], nombre=disp["nombre"], permisos=disp["permisos"],
+                         expira=expira)
+        self.avisar("Celiuz Remoto: entró un invitado",
+                    f"«{disp['nombre']}» puede entrar hasta las {expira[11:16]}. Lo quitas en la ventana.")
+        return web.json_response({
+            "dispositivo": disp["id"], "equipo": self.equipo(),
+            "direccion": f"{self.ip}:{self.valores['puerto_red']}",
+            "permisos": disp["permisos"], "pase_hasta": expira, "expira": expira,
+        })
+
+    async def control_invitar(self, peticion):
+        if peticion.method == "DELETE":
+            if self.invitacion is not None and self.invitacion.abierta():
+                self.invitacion.estado = "cancelada"
+                self.invitacion.contrasena = None
+            return web.json_response({"ok": True})
+        if peticion.method == "GET":
+            return web.json_response(self.invitacion.resumen() if self.invitacion else {"estado": None})
+        d = await _cuerpo(peticion)
+        permisos = d.get("permisos") or list(inv.PERMISOS_DE_FABRICA)
+        if not isinstance(permisos, list) or any(p not in dsp.PERMISOS for p in permisos):
+            raise _rechazo(400, "peticion", f"Permisos: {', '.join(dsp.PERMISOS)}.")
+        horas = d.get("horas", 2)
+        if horas not in inv.HORAS:
+            raise _rechazo(400, "peticion", f"Horas: {', '.join(map(str, inv.HORAS))}.")
+        contrasena = inv.contrasena_nueva()
+        hash_c = await asyncio.get_running_loop().run_in_executor(None, dsp.hash_contrasena, contrasena)
+        if self.invitacion is not None and self.invitacion.abierta():
+            self.invitacion.estado = "cancelada"     # una a la vez: la nueva sustituye
+        self.invitacion = inv.Invitacion(permisos, horas, hash_c, contrasena)
+        registro.apuntar("invitacion_abierta", permisos=permisos, horas=horas)
+        direccion = f"{self.ip}:{self.valores['puerto_red']}"
+        codigo = inv.bonito(self.invitacion.codigo)
+        texto = (f"Celiuz Remoto — invitación a {self.equipo()}\n"
+                 f"Dirección: {direccion}\nCódigo: {codigo}\nContraseña: {contrasena}\n"
+                 f"Vale 15 minutos y una sola vez. El acceso dura {horas} h.")
+        return web.json_response(dict(self.invitacion.resumen(), direccion=direccion, texto=texto,
+                                      caduca=inv.VALE))
+
+    def _purgar_caducados(self):
+        for ident in self.almacen.caducados(pase.iso(pase.ahora())):
+            self.almacen.revocar(ident)
+            self.sesiones.echar(ident)
+            registro.apuntar("invitado_caducado", ident)
 
     async def v0_latido(self, peticion):
         """«Me estan apagando» (y de paso, una señal). Sin sesion: lo manda un
@@ -567,6 +924,7 @@ class Servicio:
         return web.json_response({
             "red": f"{self.ip}:{self.valores['puerto_red']}",
             "sesiones": self.sesiones.cuantas(),
+            "terminales": self.terminales.cuantas(),
             "ventana": v.modo if v is not None and v.estado == "abierta" else None,
             "equipo": self.equipo(),
             "energia": self.energia.estado(),
@@ -583,6 +941,7 @@ class Servicio:
         loop = self._bucle = asyncio.get_running_loop()
         while True:
             try:
+                await loop.run_in_executor(None, self._purgar_caducados)
                 await loop.run_in_executor(None, self.vigilancia.vuelta)
             except Exception as e:  # noqa: BLE001  una vuelta rota no para la vigilancia
                 print(f"celiuz-remoto: la vigilancia falló una vuelta: {e!r}", file=sys.stderr)
@@ -604,17 +963,24 @@ class Servicio:
             web.get("/v0/ventanas", self.v0_ventanas),
             web.post("/v0/ventanas/{id}/cerrar", self.v0_cerrar_ventana),
             web.post("/v0/latido", self.v0_latido),
+            web.post("/v0/despertar", self.v0_despertar),
+            web.post("/v0/invitacion", self.v0_invitacion),
             web.get("/v0/escritorio", self.v0_escritorio),
             web.post("/v0/escritorio/entrar", self.v0_entrar_escritorio),
             web.get("/v0/archivos", self.v0_archivos),
             web.get("/v0/archivos/buscar", self.v0_buscar),
             web.get("/v0/archivos/descargar", self.v0_descargar),
             web.get("/v0/archivos/miniatura", self.v0_miniatura),
+            web.post("/v0/archivos/subir", self.v0_subir),
             web.get("/v0/recientes", self.v0_recientes),
             web.delete("/v0/recientes", self.v0_recientes),
             web.get("/v0/favoritos", self.v0_favoritos),
             web.put("/v0/favoritos", self.v0_favoritos),
             web.delete("/v0/favoritos", self.v0_favoritos),
+            web.post("/v0/terminal", self.v0_abrir_terminal),
+            web.get("/v0/terminal/{id}", self.v0_terminal),
+            web.post("/v0/pantalla", self.v0_abrir_pantalla),
+            web.get("/v0/pantalla/{id}", self.v0_pantalla),
         ])
         return app
 
@@ -628,6 +994,9 @@ class Servicio:
             web.delete("/control/energia", self.control_energia),
             web.get("/control/vigilancia", self.control_vigilancia),
             web.post("/control/vigilancia", self.control_vigilancia),
+            web.post("/control/invitacion", self.control_invitar),
+            web.get("/control/invitacion", self.control_invitar),
+            web.delete("/control/invitacion", self.control_invitar),
         ])
         return app
 
@@ -658,6 +1027,9 @@ class Servicio:
     async def parar(self):
         for tarea in list(self._tareas):
             tarea.cancel()
+        await self.terminales.cerrar_todas()
+        if self.pantalla_abierta is not None:
+            await self.pantalla_abierta[0].cerrar()
         self.energia.cancelar(silencio=True)
         self._cerrar_ventana("cancelada")
         if self._usb is not None:

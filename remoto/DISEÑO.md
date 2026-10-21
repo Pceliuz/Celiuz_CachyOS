@@ -97,6 +97,9 @@ si hay una partida, `lib/canales.py` para lo que sea de una sesión.
 | Cerrar apps | contraseña + pase |
 | Archivos: explorar, descargar, recientes, favoritos | contraseña + pase |
 | Terminal (con sudo) | contraseña OTRA VEZ + pase + permiso de terminal para ese teléfono |
+| Subir archivos a la PC (fase 8) | contraseña + pase + permiso de archivos |
+| Ver y manejar la pantalla (fase 8) | contraseña OTRA VEZ + pase + permiso de pantalla |
+| Despertar a otro equipo (fase 8) | contraseña + permiso de energía (sin pase, como apagar) |
 
 Apagar va sin pase a propósito: estando de viaje es justo cuando más falta hace,
 y apagar no le hace daño a nadie.
@@ -204,10 +207,17 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
   robado con la contraseña vista por encima del hombro: se puede sacar un
   documento, no lo que abre las demás puertas. Para eso, la terminal (fase 7),
   que pide la contraseña otra vez y su propio permiso.
-- **La copia vive en la carpeta de la app**, no en Descargas de Android: no pide
-  permisos de almacenamiento y la app sabe sola qué tiene bajado («Abrir
-  copia»). Para llevarla a otro sitio, «Compartir»; «Abrir» se la da a la app
-  que toque.
+- **Lo bajado se guarda donde lo ven las demás apps** (MediaStore, con el
+  módulo nativo propio `app/modules/celiuz-nativo`): fotos en
+  `Pictures/Celiuz Remoto` y vídeos en `Movies/Celiuz Remoto` (galería, Google
+  Fotos), música en `Music/`, y lo demás en `Download/Celiuz Remoto`. La primera
+  versión lo dejaba en la carpeta privada de la app y no servía: Google Fotos
+  enseñaba la foto sin tenerla, el .docx no aparecía en el explorador y el
+  vídeo no se reproducía (lo probó el usuario el 2026-10-20). Desde Android 10
+  no pide permisos; en el 9 y antes, el de escribir. «Bajar otra vez» sustituye
+  la copia. «Abrir» usa la app del celular para ese tipo (o el selector), y los
+  textos (.md, .txt, .conf...) se ven en la propia app, que no todo celular
+  tiene una app para markdown.
 
 ### Terminal con sudo
 - Una terminal de verdad (un PTY), con la shell del usuario.
@@ -215,6 +225,14 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
   y va directa a `sudo`. **No se guarda en ningún sitio.**
 - Apagada por defecto; se activa por teléfono desde la app de la PC.
 - Queda registrado que se abrió, cuándo y desde qué teléfono.
+- **Cómo es (fase 7)**: xterm.js dentro de un WebView, empaquetado en el APK
+  (sin red). Lo tecleado NO pasa por xterm: va por un campo nativo invisible
+  con `keyboardType="visible-password"`, porque Gboard dentro del WebView
+  compone palabras y xterm las recibía repetidas («echo hola» llegaba
+  «echchho hholla», medido en el HONOR). Encima del teclado, una fila con Esc,
+  Tab, Ctrl, Alt, flechas, Inicio/Fin y RePág/AvPág.
+- El permiso se da o se quita por teléfono en la ventana de la PC
+  («Permisos», en la tarjeta de cada uno); quitarlo cierra la terminal abierta.
 
 ## Fases
 
@@ -239,13 +257,54 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
    verdad): linger, la parte de root (`sistema/`, `instalar.sh
    --remoto-sistema`), `/v0/escritorio` y la tarjeta «Entrar» de la app (ver
    «Tras reiniciar» arriba).
-6. **Archivos** ✅ (con pruebas; falta probarlo en el celular de verdad):
+6. **Archivos** ✅ (probado en el HONOR el 2026-10-20 tras el arreglo: lo
+   bajado va a la galería o a Descargas y se abre con las apps del celular):
    explorador, buscar, descargas con `Range`, miniaturas, recientes con su
    estado contra la PC, favoritos.
-7. **Terminal**.
-8. **Extras**: subir archivos a la PC, escritorio remoto (`wayvnc`), encender a
-   distancia (Wake-on-LAN, necesita otro aparato despierto en casa), modo
-   «ayudar a un amigo» (compartir un equipo por Tailscale).
+7. **Terminal** ✅ (probada en el HONOR el 2026-10-20: escribir, borrar,
+   Ctrl+C, tamaño, `exit`, el registro; `sudo` no, que pide la contraseña del
+   usuario).
+8. **Extras** ✅ (2026-10-21; ver «Fase 8» abajo): subir archivos a la PC,
+   escritorio remoto (`wayvnc`), encender a distancia (Wake-on-LAN desde otro
+   equipo de casa), y «ayudar a un amigo» (invitación sin cable). Probado en
+   el HONOR: subir y la pantalla; el despertar y la invitación, con pruebas
+   (hacen falta dos equipos). Queda fuera, a propósito, el «me están
+   apagando» de Android (ver abajo).
+
+### Fase 8: cómo es cada extra, y por qué
+- **Subir a la PC**: SIEMPRE a `<Descargas>/Celiuz Remoto`, sin pisar nada.
+  Si el celular eligiera dónde, uno robado podría dejar un `~/.bashrc` o algo
+  en `~/.config/autostart` y tener la PC en la siguiente sesión.
+- **Escritorio remoto**: `wayvnc` (opcional: `sudo pacman -S wayvnc`) se
+  arranca solo mientras se mira, en la sesión de Hyprland viva, y escucha en
+  un socket Unix de `$XDG_RUNTIME_DIR`, no en un puerto. El servicio hace de
+  puente con un WebSocket; en el celular lo pinta noVNC en un WebView. Pide lo
+  mismo que la terminal (permiso propio apagado de fábrica, pase y la
+  contraseña otra vez). Con la PC bloqueada se ve el bloqueo: no se salta
+  nada. Probado en el HONOR con un wayvnc bajado sin instalar.
+- **Despertar (Wake-on-LAN)**: una PC apagada no contesta, así que la
+  despierta OTRO equipo encendido de casa (la laptop), mandando el paquete por
+  la red de casa. La tarjeta que vale es la de cable de la placa (ni wifi ni
+  USB: en la PC del usuario la salida a internet iba por un USB y la buena es
+  `enp34s0`). Hace falta activarlo una vez: en la BIOS («Wake on LAN» /
+  «Power On By PCI-E») y en la tarjeta (`sudo ethtool -s enp34s0 wol g`, o
+  para que dure, `nmcli connection modify <la de cable> 802-3-ethernet.wake-on-lan magic`).
+  `celiuz-remoto despertar` dice si tiene pinta de poder (sin root no se
+  puede saber del todo: «no lo sé»).
+- **Ayudar a un amigo**: emparejar pide el cable, y aquí cada uno está en su
+  casa. Lo que se abre es más pequeño y se cierra solo: la persona DELANTE de
+  la PC crea una invitación (ventana, «Invitar a alguien», o `celiuz-remoto
+  invitar`) con un código de 16 letras y una contraseña que inventa la PC;
+  vale 15 min y una vez, cinco códigos mal la queman, y el teléfono que entra
+  caduca en 1-8 h (no se renueva). De fábrica solo ve el estado, las apps y la
+  pantalla. Antes, la PC tiene que estar compartida con su cuenta de
+  Tailscale (consola → Share).
+- **«Me están apagando» (Android), fuera**: hacía falta un receptor nativo de
+  `ACTION_SHUTDOWN` que leyera la clave del almacén seguro de Expo y mandara
+  una petición firmada mientras el celular se apaga. Es de mejor esfuerzo por
+  diseño (sin red no llega), Android no garantiza que ese aviso llegue a una
+  app cerrada, y la vigilancia ya funciona sin él (2 h de silencio). El
+  servidor lo sigue aceptando (`/v0/latido`) por si un día se hace.
 
 ## Lo que NO entra en git (la regla de oro)
 
@@ -258,6 +317,8 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
 | `~/.local/state/celiuz/remoto/dispositivos.json` (0600) | teléfonos: hash de su clave, hash de su contraseña, permisos, pase, último latido |
 | `~/.local/state/celiuz/remoto/historial.json` (0600) | recientes y favoritos |
 | `~/.cache/celiuz/remoto/miniaturas/` | las miniaturas del explorador (se puede borrar: se rehacen) |
+| `<Descargas>/Celiuz Remoto/` | lo que se sube desde el celular (fase 8) |
+| `$XDG_RUNTIME_DIR/celiuz-remoto/vnc*.sock` | los sockets de wayvnc mientras alguien mira la pantalla |
 | `~/.local/state/celiuz/remoto/registro.jsonl` | qué hizo cada teléfono y cuándo |
 | `~/.local/state/celiuz/remoto/linger-nuestro` | que el linger lo encendió la ventana (y por eso lo puede apagar) |
 | `$XDG_RUNTIME_DIR/celiuz-remoto/entrar-bloqueada` | la marca de «esta sesión la abrió el celular: bloquéala» |

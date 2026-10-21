@@ -26,6 +26,9 @@ import Entrar from './src/pantallas/Entrar';
 import Apps from './src/pantallas/Apps';
 import Archivos from './src/pantallas/Archivos';
 import Recientes from './src/pantallas/Recientes';
+import Terminal from './src/pantallas/Terminal';
+import Invitacion from './src/pantallas/Invitacion';
+import VerPantalla from './src/pantallas/Pantalla';
 import Inicio from './src/pantallas/Inicio';
 import PaseVencido from './src/pantallas/PaseVencido';
 
@@ -38,6 +41,8 @@ export default function App() {
   const [pestana, setPestana] = useState<Pestana>('inicio');
   const [aviso, setAviso] = useState<string | undefined>();
   const [verRecientes, setVerRecientes] = useState(false);
+  const [verPantalla, setVerPantalla] = useState(false);
+  const [verInvitacion, setVerInvitacion] = useState(false);
   const [carpetaInicial, setCarpetaInicial] = useState('');
   // Lo que la pantalla de dentro quiera hacer con «Atrás» antes que App (el
   // explorador sube de carpeta). Un ref y no otro listener: el orden en que
@@ -76,37 +81,50 @@ export default function App() {
   useEffect(() => {
     const s = BackHandler.addEventListener('hardwareBackPress', () => {
       if (verPase) { setVerPase(false); return true; }
+      if (verInvitacion) { setVerInvitacion(false); return true; }
       if (verRecientes) { setVerRecientes(false); return true; }
+      if (verPantalla) { setVerPantalla(false); return true; }
       if (atrasDeDentro.current?.()) return true;
       if (pestana !== 'inicio') { setPestana('inicio'); return true; }
       if (conexion) { salir(); return true; }
       return false;
     });
     return () => s.remove();
-  }, [verPase, verRecientes, pestana, conexion, salir]);
+  }, [verPase, verRecientes, verPantalla, verInvitacion, pestana, conexion, salir]);
 
   const entrar = useCallback((c: Conexion) => {
     setAviso(undefined);
     setPestana('inicio');
     setVerRecientes(false);
+    setVerPantalla(false);
     setCarpetaInicial('');
     setConexion(c);
     setDatos(null);
-    c.datosEquipo().then(setDatos).catch(() => setDatos(null));
+    c.datosEquipo().then((d) => {
+      setDatos(d);
+      if (d.despertar?.mac !== undefined) almacen.actualizarMac(c.equipo.dispositivo, d.despertar.mac).then(recargar);
+    }).catch(() => setDatos(null));
   }, []);
 
   let pantalla;
   if (enlace) {
     pantalla = <Cable enlace={enlace} alTerminar={() => { setEnlace(null); recargar(); }} />;
+  } else if (verInvitacion && !conexion) {
+    pantalla = <Invitacion alVolver={() => setVerInvitacion(false)}
+                           alTerminar={() => { setVerInvitacion(false); recargar(); }} />;
   } else if (equipos === null) {
     pantalla = null;
   } else if (equipos.length === 0) {
-    pantalla = <Bienvenida />;
+    pantalla = <Bienvenida alInvitacion={() => setVerInvitacion(true)} />;
   } else if (!conexion) {
-    pantalla = <Entrar equipos={equipos} aviso={aviso} alEntrar={entrar} alCambiarEquipos={recargar} />;
+    pantalla = <Entrar equipos={equipos} aviso={aviso} alEntrar={entrar} alCambiarEquipos={recargar}
+                       alInvitacion={() => setVerInvitacion(true)} />;
   } else if (verPase) {
     pantalla = <PaseVencido equipo={conexion.equipo.equipo} paseHasta={conexion.sesion.pase_hasta}
                             alVolver={() => setVerPase(false)} />;
+  } else if (verPantalla) {
+    pantalla = <VerPantalla conexion={conexion} alVolver={() => setVerPantalla(false)} alCaducar={caducar}
+                            alVerPase={() => setVerPase(true)} />;
   } else if (pestana === 'archivos' && verRecientes) {
     pantalla = <Recientes conexion={conexion} alVolver={() => setVerRecientes(false)} alCaducar={caducar}
                           alVerPase={() => setVerPase(true)}
@@ -115,11 +133,15 @@ export default function App() {
     pantalla = <Archivos conexion={conexion} inicial={carpetaInicial} alCambiar={setPestana} alCaducar={caducar}
                          alVerPase={() => setVerPase(true)} alRecientes={() => setVerRecientes(true)}
                          fijarAtras={fijarAtras} />;
+  } else if (pestana === 'terminal') {
+    pantalla = <Terminal conexion={conexion} alCambiar={setPestana} alCaducar={caducar}
+                         alVerPase={() => setVerPase(true)} />;
   } else if (pestana === 'apps') {
     pantalla = <Apps conexion={conexion} alCambiar={setPestana} alVerPase={() => setVerPase(true)}
                      alCaducar={caducar} />;
   } else {
-    pantalla = <Inicio conexion={conexion} datos={datos} alSalir={salir} alCaducar={caducar}
+    pantalla = <Inicio conexion={conexion} datos={datos} otros={(equipos ?? []).filter((x) => x.dispositivo !== conexion.equipo.dispositivo)}
+                       alSalir={salir} alCaducar={caducar} alVerPantalla={() => setVerPantalla(true)}
                        alVerPase={() => setVerPase(true)} alCambiar={setPestana} />;
   }
 

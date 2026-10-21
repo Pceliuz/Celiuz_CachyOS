@@ -22,6 +22,9 @@ remoto/servidor/celiuz-remoto.py — el servicio de Celiuz Remoto.
     celiuz-remoto.py inicio             ¿sesion abierta o pantalla de inicio? ¿se puede entrar?
     celiuz-remoto.py entrar             con la PC en SDDM: entra y la sesion arranca bloqueada
     celiuz-remoto.py al-entrar          lo pregunta lua/autostart.lua: sale 0 si hay que bloquear
+    celiuz-remoto.py despertar [MAC]    sin MAC: la de este equipo y si puede despertarse; con MAC: despierta a ese
+    celiuz-remoto.py invitar [--horas 2] [--permisos estado,ventanas,pantalla] [--cancelar]
+                                        ayudar a un amigo: una invitación sin cable, de un solo uso
 
 Un <id> vale entero, por su principio o por el nombre del telefono. El diseño,
 en remoto/DISEÑO.md; lo que se dicen la app y el servidor, en PROTOCOLO.md.
@@ -47,6 +50,12 @@ NECESIDADES = [
     ("cryptography", "modulo", "comprobar la firma de cada celular", "python-cryptography"),
     ("adb", "programa", "instalar la app y emparejar por cable", "android-tools"),
 ]
+# Lo que no hace falta para lo basico: sin esto, solo se pierde esa parte (y se
+# dice), pero no es un aviso.
+OPCIONALES = [
+    ("ffmpeg", "programa", "las miniaturas de fotos y vídeos en el explorador", "ffmpeg"),
+    ("wayvnc", "programa", "ver y manejar la pantalla desde el celular", "wayvnc"),
+]
 
 
 def _hay(nombre, clase):
@@ -66,18 +75,28 @@ def revisar():
     return filas, faltan
 
 
+def revisar_opcionales():
+    filas = []
+    for nombre, clase, para, paquete in OPCIONALES:
+        filas.append({"que": nombre, "para": para, "paquete": paquete, "hay": _hay(nombre, clase)})
+    return filas
+
+
 def arranque():
     """Lo de la fase 5, que no son paquetes: ¿arranca con el equipo? ¿se puede
     entrar desde la pantalla de inicio? (remoto/DISEÑO.md, «Tras reiniciar»)."""
-    from celiuz_remoto import inicio
-    return {"linger": inicio.linger(), "sistema": inicio.sistema_instalado()}
+    from celiuz_remoto import despertar, inicio
+    return {"linger": inicio.linger(), "sistema": inicio.sistema_instalado(), "despertar": despertar.info()}
 
 
 def cmd_revisar(args):
     filas, faltan = revisar()
+    opcionales = revisar_opcionales()
     tras = arranque()
     if args.json:
-        print(json.dumps({"necesidades": filas, "faltan": faltan, "arranque": tras},
+        print(json.dumps({"necesidades": filas, "faltan": faltan, "arranque": tras,
+                          "opcionales": opcionales,
+                          "opcionales_faltan": [o["paquete"] for o in opcionales if not o["hay"]]},
                          ensure_ascii=False, indent=2))
     else:
         for f in filas:
@@ -87,11 +106,18 @@ def cmd_revisar(args):
             print(f"\n  Para instalarlo: sudo pacman -S {' '.join(faltan)}")
         else:
             print("\n  No falta nada.")
+        print("\n  Opcionales:")
+        for o in opcionales:
+            marca = "ok   " if o["hay"] else "no   "
+            print(f"  {marca} {o['que']:<10} {o['para']}" + ("" if o["hay"] else f"  (sudo pacman -S {o['paquete']})"))
         print("\n  Tras reiniciar:")
         print("    arranca con el equipo       " + (
             "sí (linger)" if tras["linger"] else "no: se enciende con el servicio, desde la ventana"))
         print("    entrar desde SDDM           " + (
             "sí" if tras["sistema"] else "no: ./instalar.sh --remoto-sistema (pide sudo)"))
+        w = tras["despertar"]
+        print("    despertarlo desde otro      " + {"si": "sí", "no": "no", "no_lo_se": "no lo sé"}[w["wol"]]
+              + f" — {w['motivo']}")
     # Que falte algo no es un error de este programa: es la respuesta.
     return 0
 
@@ -456,6 +482,52 @@ def cmd_al_entrar(args):
     return 0 if inicio.al_entrar() else 1
 
 
+def cmd_despertar(args):
+    from celiuz_remoto import despertar
+    if not args.mac:
+        i = despertar.info()
+        print(f"  tarjeta   {i['tarjeta'] or '—'}")
+        print(f"  MAC       {i['mac'] or '—'}")
+        print(f"  despertar {i['wol']} — {i['motivo']}")
+        if i["wol"] != "si" and i["tarjeta"]:
+            print(f"  Para activarlo (una vez, con root): sudo ethtool -s {i['tarjeta']} wol g")
+            print("  y en la BIOS: «Wake on LAN» / «Power On By PCI-E». Ver remoto/DISEÑO.md.")
+        return 0
+    try:
+        por = despertar.despertar(args.mac)
+    except ValueError as e:
+        print(f"  {e}", file=sys.stderr)
+        return 2
+    print(f"  Paquete mágico enviado a {args.mac} por {', '.join(por) or 'ningún sitio'}.")
+    return 0 if por else 1
+
+
+def cmd_invitar(args):
+    from celiuz_remoto import control
+    try:
+        if args.cancelar:
+            control.pedir("DELETE", "/control/invitacion")
+            print("  Invitación cancelada.")
+            return 0
+        cuerpo = {"horas": args.horas}
+        if args.permisos:
+            cuerpo["permisos"] = [p for p in args.permisos.split(",") if p]
+        codigo, d = control.pedir("POST", "/control/invitacion", cuerpo, timeout=20)
+    except control.SinServicio as e:
+        print(e, file=sys.stderr)
+        return 1
+    if codigo != 200:
+        print(f"  El servicio contestó {codigo}: {d.get('mensaje')}", file=sys.stderr)
+        return 1
+    print()
+    for linea in d["texto"].splitlines():
+        print("  " + linea)
+    print()
+    print("  Mándaselo a quien te va a ayudar. Antes, comparte esta PC con su cuenta")
+    print("  de Tailscale (login.tailscale.com -> Machines -> esta PC -> Share).")
+    return 0
+
+
 def cmd_registro(args):
     from celiuz_remoto import registro
     for linea in registro.ultimas(args.n):
@@ -543,6 +615,16 @@ def main(argv=None):
 
     s = sub.add_parser("al-entrar", help="lo pregunta el arranque de la sesion")
     s.set_defaults(func=cmd_al_entrar)
+
+    s = sub.add_parser("despertar", help="Wake-on-LAN: lo de este equipo, o despertar a otro")
+    s.add_argument("mac", nargs="?")
+    s.set_defaults(func=cmd_despertar)
+
+    s = sub.add_parser("invitar", help="ayudar a un amigo: invitacion sin cable")
+    s.add_argument("--horas", type=int, default=2, choices=[1, 2, 4, 8])
+    s.add_argument("--permisos")
+    s.add_argument("--cancelar", action="store_true")
+    s.set_defaults(func=cmd_invitar)
 
     s = sub.add_parser("registro", help="lo ultimo que paso")
     s.add_argument("-n", type=int, default=30)

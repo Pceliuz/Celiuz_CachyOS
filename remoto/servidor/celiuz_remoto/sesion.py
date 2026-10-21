@@ -20,7 +20,13 @@ import time
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from . import dispositivos as dsp
+from . import dispositivos as dsp, pase
+
+
+def caducado(disp):
+    """Un invitado sin cable cuya hora ya paso (invitacion.py)."""
+    hasta = pase.leer((disp or {}).get("expira"))
+    return hasta is not None and pase.ahora() >= hasta
 
 PREFIJO = "celiuz-remoto/v0/"
 RETO_VALE = 30          # segundos
@@ -114,6 +120,8 @@ class Sesiones:
         ident = str(ident or "")
         reto_ok = self._gastar_reto(ident, reto)
         disp = self.almacen.uno(ident)
+        if disp is not None and caducado(disp):
+            disp = None
         if not disp or not reto_ok or not firma_buena(
                 disp["publica"], texto_firmado("sesion", reto), firma):
             raise Rechazo(*FIRMA_MALA)
@@ -132,7 +140,7 @@ class Sesiones:
         if s is None:
             return None
         disp = self.almacen.uno(s["dispositivo"])
-        if disp is None or disp.get("bloqueado"):
+        if disp is None or disp.get("bloqueado") or caducado(disp):
             self.tokens.pop(token, None)
             return None
         if tocar:

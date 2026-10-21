@@ -25,6 +25,7 @@ Lo que tarda (adb, emparejar) va en un hilo y vuelve con GLib.idle_add: GTK
 solo se toca desde el hilo principal.
 """
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -349,7 +350,10 @@ class Ventana(Gtk.Window):
         der = caja(espacio=14)
         der.set_size_request(340, -1)
         der.set_hexpand(False)
-        der.pack_start(etiqueta("Teléfonos emparejados", ("h2",)), False, False, 0)
+        cabecera = caja(vertical=False, espacio=8)
+        cabecera.pack_start(etiqueta("Teléfonos emparejados", ("h2",)), True, True, 0)
+        cabecera.pack_end(boton("Invitar a alguien", ("discreto",), self.invitar), False, False, 0)
+        der.pack_start(cabecera, False, False, 0)
         desliza = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         self.lista = caja(espacio=12)
         desliza.add(self.lista)
@@ -631,6 +635,8 @@ class Ventana(Gtk.Window):
         if pase.vigente(d):
             botones.pack_start(boton("Quitar el pase", ("discreto",),
                                      lambda i=d["id"]: self.quitar_pase(i)), False, False, 0)
+        botones.pack_start(boton("Permisos", ("discreto",), lambda x=d: self.cambiar_permisos(x)),
+                           False, False, 0)
         botones.pack_start(boton("Revocar", ("peligro",), lambda x=d: self.revocar(x)),
                            False, False, 0)
         t.pack_start(botones, False, False, 0)
@@ -646,6 +652,120 @@ class Ventana(Gtk.Window):
 
     def quitar_pase(self, ident):
         self._cambio(ident, "pase_quitado", pase_hasta=None)
+
+    def invitar(self):
+        """Ayudar a un amigo (fase 8, remoto/servidor/celiuz_remoto/invitacion.py):
+        dejar entrar a un celular SIN cable, una vez y por unas horas. Lo abre
+        quien esta delante de esta PC, como el emparejamiento."""
+        dialogo = Gtk.Dialog(title="Invitar a alguien a esta PC", transient_for=self, modal=True)
+        dialogo.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dialogo.add_button("Crear la invitación", Gtk.ResponseType.OK)
+        cuerpo = dialogo.get_content_area()
+        cuerpo.set_spacing(10)
+        cuerpo.set_border_width(16)
+        cuerpo.pack_start(etiqueta(
+            "Para que alguien te ayude desde su celular, sin venir con el cable. Entra una sola "
+            "vez con un código que vale 15 minutos, y su acceso caduca solo.", ("chico",),
+            envolver=True, ancho=48), False, False, 0)
+        de_fabrica = ("estado", "ventanas", "pantalla")
+        casillas = []
+        for nombre, permisos, _ in textos.CASILLAS:
+            c = Gtk.CheckButton(label=nombre)
+            c.set_active(all(p in de_fabrica for p in permisos))
+            cuerpo.pack_start(c, False, False, 0)
+            casillas.append(c)
+        fila = caja(vertical=False, espacio=8)
+        fila.pack_start(etiqueta("Durante"), False, False, 0)
+        horas = Gtk.ComboBoxText()
+        for h in (1, 2, 4, 8):
+            horas.append(str(h), f"{h} h")
+        horas.set_active_id("2")
+        fila.pack_start(horas, False, False, 0)
+        cuerpo.pack_start(fila, False, False, 0)
+        dialogo.show_all()
+        respuesta = dialogo.run()
+        marcadas = [i for i, c in enumerate(casillas) if c.get_active()]
+        cuantas = int(horas.get_active_id() or "2")
+        dialogo.destroy()
+        if respuesta != Gtk.ResponseType.OK:
+            return
+        permisos = [p for p in dispositivos.PERMISOS if p in textos.permisos_de(marcadas)]
+        try:
+            codigo, d = control.pedir("POST", "/control/invitacion",
+                                      {"permisos": permisos, "horas": cuantas}, timeout=20)
+        except control.SinServicio:
+            self.op(AVISO_SERVICIO, "error")
+            return
+        if codigo != 200:
+            self.op(d.get("mensaje", "No se pudo crear la invitación."), "error")
+            return
+        self._ensenar_invitacion(d)
+
+    def _ensenar_invitacion(self, d):
+        dialogo = Gtk.Dialog(title="Invitación creada", transient_for=self, modal=True)
+        dialogo.add_button("Cancelar la invitación", Gtk.ResponseType.REJECT)
+        dialogo.add_button("Copiar", Gtk.ResponseType.APPLY)
+        dialogo.add_button("Cerrar", Gtk.ResponseType.CLOSE)
+        cuerpo = dialogo.get_content_area()
+        cuerpo.set_spacing(10)
+        cuerpo.set_border_width(16)
+        cuerpo.pack_start(etiqueta(d["texto"], ("fuerte",), envolver=True, seleccionable=True, ancho=50),
+                          False, False, 0)
+        cuerpo.pack_start(etiqueta(
+            "1. Comparte esta PC con su cuenta de Tailscale: en la consola, esta PC → «Share».\n"
+            "2. Mándale este texto (WhatsApp, o díctaselo).\n"
+            "3. En la app, «Tengo una invitación»: pega el texto, y al entrar pone la contraseña.\n"
+            "Cuando entre, te sale un aviso; lo quitas cuando quieras con «Revocar».",
+            ("tenue", "chico"), envolver=True, ancho=50), False, False, 0)
+        enlace = Gtk.LinkButton.new_with_label(TAILSCALE_CONSOLA, "Abrir la consola de Tailscale")
+        enlace.set_halign(Gtk.Align.START)
+        cuerpo.pack_start(enlace, False, False, 0)
+        dialogo.show_all()
+        while True:
+            respuesta = dialogo.run()
+            if respuesta == Gtk.ResponseType.APPLY:
+                Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(d["texto"], -1)
+                self.op("Invitación copiada.", "ok")
+                continue
+            if respuesta == Gtk.ResponseType.REJECT:
+                with contextlib.suppress(control.SinServicio):
+                    control.pedir("DELETE", "/control/invitacion")
+                self.op("Invitación cancelada.", "ok")
+            break
+        dialogo.destroy()
+        self.refrescar()
+
+    def cambiar_permisos(self, d):
+        """Lo que puede hacer un celular ya emparejado (la terminal viene
+        apagada y se da aqui: remoto/DISEÑO.md, «Terminal con sudo»). Quitar
+        uno corta en el acto lo que estuviera usando (el servidor lo mira en
+        cada peticion, y la terminal cada 5 s)."""
+        dialogo = Gtk.Dialog(title=f"Permisos de «{d['nombre']}»", transient_for=self, modal=True)
+        dialogo.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dialogo.add_button("Guardar", Gtk.ResponseType.OK)
+        cuerpo = dialogo.get_content_area()
+        cuerpo.set_spacing(8)
+        cuerpo.set_border_width(16)
+        casillas = []
+        for nombre, permisos, _ in textos.CASILLAS:
+            c = Gtk.CheckButton(label=nombre)
+            c.set_active(all(p in d["permisos"] for p in permisos))
+            cuerpo.pack_start(c, False, False, 0)
+            casillas.append(c)
+        cuerpo.pack_start(etiqueta("La terminal y los archivos piden además el pase de 24 h; "
+                                   "la terminal, la contraseña otra vez.", ("tenue", "chico"),
+                                   envolver=True, ancho=40), False, False, 0)
+        dialogo.show_all()
+        respuesta = dialogo.run()
+        marcadas = [i for i, c in enumerate(casillas) if c.get_active()]
+        dialogo.destroy()
+        if respuesta != Gtk.ResponseType.OK:
+            return
+        nuevos = [p for p in dispositivos.PERMISOS if p in textos.permisos_de(marcadas)]
+        self.almacen.cambiar(d["id"], permisos=nuevos)
+        registro.apuntar("permisos", d["id"], permisos=nuevos)
+        self.op(f"«{d['nombre']}»: {textos.resumen_permisos(nuevos)}.", "ok")
+        self.refrescar()
 
     def revocar(self, d):
         dialogo = Gtk.MessageDialog(transient_for=self, modal=True,

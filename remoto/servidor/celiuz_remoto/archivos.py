@@ -233,3 +233,59 @@ def miniatura(ruta, lado):
     except FileNotFoundError:
         pass
     raise NoExiste(ruta)
+
+
+# --- subir (fase 8): del celular a la PC ------------------------------------------
+#
+# Lo subido va SIEMPRE a <Descargas>/Celiuz Remoto y nunca sobrescribe nada. Si
+# el celular pudiera elegir donde escribir, un celular robado con la contraseña
+# podria dejar un ~/.bashrc o un ~/.config/autostart/ y tener la PC en la
+# siguiente sesion. Asi lo peor que deja es un archivo de mas en Descargas.
+
+SUBCARPETA_SUBIDAS = "Celiuz Remoto"
+
+
+def carpeta_descargas():
+    """La de XDG (xdg-user-dir DOWNLOAD): «Descargas» en español, «Downloads» en
+    ingles. Leida de user-dirs.dirs y no de xdg-user-dir para no lanzar nada."""
+    base = casa()
+    conf = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(base, ".config"),
+                        "user-dirs.dirs")
+    try:
+        with open(conf, encoding="utf-8") as fh:
+            for linea in fh:
+                if linea.startswith("XDG_DOWNLOAD_DIR="):
+                    valor = linea.split("=", 1)[1].strip().strip('"').replace("$HOME", base)
+                    if valor and valor != base:
+                        return valor
+    except OSError:
+        pass
+    for nombre in ("Descargas", "Downloads"):
+        if os.path.isdir(os.path.join(base, nombre)):
+            return os.path.join(base, nombre)
+    return os.path.join(base, "Descargas")
+
+
+def carpeta_subidas():
+    return os.path.join(carpeta_descargas(), SUBCARPETA_SUBIDAS)
+
+
+def nombre_limpio(nombre):
+    """Solo el nombre (ni carpetas ni «..»), sin caracteres de control y sin
+    punto delante (nada de ficheros ocultos que nadie vea)."""
+    nombre = os.path.basename(str(nombre or "").replace("\\", "/"))
+    nombre = "".join(c for c in nombre if c.isprintable() and c not in "/\0")
+    nombre = nombre.strip().lstrip(".").strip()
+    if len(nombre.encode("utf-8")) > 200:
+        base, ext = os.path.splitext(nombre)
+        nombre = base.encode("utf-8")[:200 - len(ext.encode("utf-8"))].decode("utf-8", "ignore") + ext
+    return nombre or "archivo"
+
+
+def destino_libre(carpeta, nombre):
+    base, ext = os.path.splitext(nombre)
+    candidato, n = nombre, 1
+    while os.path.lexists(os.path.join(carpeta, candidato)):
+        candidato = f"{base} ({n}){ext}"
+        n += 1
+    return os.path.join(carpeta, candidato)

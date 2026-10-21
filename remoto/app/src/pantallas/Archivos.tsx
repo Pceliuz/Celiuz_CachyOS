@@ -6,11 +6,12 @@
 // tarjeta de Descargar / Ver / Favorito. «Atrás» sube de carpeta antes de salir
 // de la pestaña (lo pide App.tsx con `fijarAtras`).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Image, Modal, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 
 import { ErrorRemoto, type Conexion } from '../api/cliente';
 import type { Entrada, Listado } from '../api/protocolo';
 import { migas, padre, tamano, tieneMiniatura, unir } from '../archivos';
+import { elegirYSubir, type ProgresoSubida } from '../subidas';
 import * as f from '../formato';
 import { colores } from '../paleta';
 import IconoArchivo from '../componentes/IconoArchivo';
@@ -41,6 +42,29 @@ export default function Archivos({ conexion, inicial = '', alCambiar, alVerPase,
   const ahora = new Date();
   const errores = { alVerPase, alCaducar };
   const descargas = useDescargas(conexion, errores);
+  const [subiendo, setSubiendo] = useState<ProgresoSubida | null>(null);
+
+  // Del celular a la PC (fase 8): siempre a Descargas/Celiuz Remoto.
+  async function subir() {
+    if (subiendo) return;
+    setSubiendo({ nombre: '', enviado: 0, total: 0, cual: 0, cuantos: 0 });
+    try {
+      const hechos = await elegirYSubir(conexion, setSubiendo);
+      if (!hechos) return;
+      const carpeta = padre(hechos[0].ruta);
+      Alert.alert(hechos.length === 1 ? `Subido «${hechos[0].nombre}»` : `Subidos ${hechos.length} archivos`,
+        `Está en la PC, en ${carpeta}.`,
+        [{ text: 'Cerrar', style: 'cancel' }, { text: 'Ver la carpeta', onPress: () => ir(carpeta) }]);
+      if (carpeta === ruta) cargar(ruta);
+    } catch (e) {
+      const err = e as Error & { codigo?: string };
+      if (err.codigo === 'pase_vencido') setSinPase(true);
+      else if (err.codigo === 'sin_sesion') alCaducar(true);
+      else Alert.alert('No se pudo subir', err.message);
+    } finally {
+      setSubiendo(null);
+    }
+  }
 
   const tratar = useCallback((e: unknown) => {
     const err = e as ErrorRemoto;
@@ -140,6 +164,11 @@ export default function Archivos({ conexion, inicial = '', alCambiar, alVerPase,
       <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, gap: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View style={{ flex: 1 }}><Texto tipo="grande">Archivos</Texto></View>
+          <Pressable accessibilityRole="button" onPress={subir} disabled={!!subiendo}
+                     style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 999,
+                              borderWidth: 1, borderColor: colores.apagado, opacity: subiendo ? 0.5 : 1 }}>
+            <Texto tipo="chico" color={colores.neon}>Subir</Texto>
+          </Pressable>
           <Pressable accessibilityRole="button" onPress={alRecientes}
                      style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 999,
                               borderWidth: 1, borderColor: colores.apagado }}>
@@ -149,7 +178,7 @@ export default function Archivos({ conexion, inicial = '', alCambiar, alVerPase,
         <TextInput accessibilityLabel="Buscar en la PC" value={q} onChangeText={setQ} onSubmitEditing={buscar}
                    placeholder={`Buscar en ${carpeta[carpeta.length - 1].nombre}…`} returnKeyType="search"
                    autoCapitalize="none" autoCorrect={false} placeholderTextColor={colores.tenue}
-                   selectionColor={colores.neon} style={[estilos.campo, { height: 48 }]} />
+                   selectionColor={colores.neon} style={[estilos.campo, { height: 48, letterSpacing: 0, fontSize: 15 }]} />
         {resultados ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{ flex: 1 }}>
@@ -173,6 +202,14 @@ export default function Archivos({ conexion, inicial = '', alCambiar, alVerPase,
           </ScrollView>
         )}
         {error ? <Aviso texto={error} color={colores.alerta} fondo={fondoRojo} /> : null}
+        {subiendo && subiendo.cuantos > 0 ? (
+          <Tarjeta estilo={{ gap: 8 }}>
+            <Texto tipo="chico" lineas={1}>
+              {`Subiendo ${subiendo.cuantos > 1 ? `${subiendo.cual} de ${subiendo.cuantos} · ` : ''}${subiendo.nombre}`}
+            </Texto>
+            <Barra valor={subiendo.total > 0 ? subiendo.enviado / subiendo.total : 0} />
+          </Tarjeta>
+        ) : null}
       </View>
 
       <FlatList
@@ -245,6 +282,7 @@ export default function Archivos({ conexion, inicial = '', alCambiar, alVerPase,
 
       <Pestanas actual="archivos" permisos={conexion.sesion.permisos} alCambiar={alCambiar} />
 
+      {descargas.visor}
       <Modal visible={!!visor} transparent animationType="fade" onRequestClose={() => setVisor(null)}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={() => setVisor(null)}
                    style={{ flex: 1, backgroundColor: colores.abismo, justifyContent: 'center', padding: 12, gap: 12 }}>

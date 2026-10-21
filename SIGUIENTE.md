@@ -5,13 +5,69 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-10-20**, en la **PC** (antes, el mismo día en el portátil).
+Última sesión: **2026-10-20/21** (toda la noche), en la **PC**.
 
 ---
 
+## 2026-10-20/21 (PC, de noche): arreglo de la fase 6, y fases 7 y 8 — Celiuz Remoto TERMINADO
+
+**Sin commitear**: el usuario pidió hacer todo sin parar y subirlo él al final.
+Él durmió; todo se probó en su HONOR manejándolo por adb.
+
+**LO QUE TIENE QUE HACER EL USUARIO** (no se podía sin él):
+1. **El HONOR está emparejado con una contraseña TEMPORAL**: `prueba-noche-2026`
+   (registro `316a993b…`, con todos los permisos, para poder probar). Su
+   emparejamiento de antes (`c0615dcf`) estaba roto desde la fase 4. Lo suyo:
+   emparejar otra vez desde la ventana con SU contraseña y los permisos que
+   quiera (se sustituye solo, por la serie USB).
+2. **Commit** de todo (la lista de ficheros nuevos, abajo).
+3. **Fase 5 sin probar todavía**: `./instalar.sh --remoto-sistema`, apagar y
+   encender el servicio en la ventana (linger), reiniciar y «Entrar» desde el
+   celular. Receta en la entrada de la fase 5, más abajo.
+4. **Para ver la pantalla**: `sudo pacman -S wayvnc` (se probó con uno bajado
+   a una carpeta temporal, sin instalar, y ya se quitó del servicio).
+5. **Para despertar a la PC desde la laptop**: activar Wake-on-LAN en la BIOS
+   y en `enp34s0` (`celiuz-remoto despertar` dice cómo), con la PC por cable.
+   Ahora mismo la PC sale a internet por un adaptador USB (`enp22s0f0u1`) y
+   `enp34s0` no tiene cable: así no se puede despertar.
+6. **Mirar la ventana de la PC** (el botón «Invitar a alguien» y «Permisos» en
+   cada teléfono): no se pudo retratar, la sesión estaba bloqueada y el
+   anidado no pinta así.
+
+**El arreglo de la fase 6** (lo que reportó el usuario: lo bajado no se
+guardaba): módulo nativo propio `remoto/app/modules/celiuz-nativo` (Kotlin):
+MediaStore → `Pictures/Movies/Music/Download` + `/Celiuz Remoto`, abrir con la
+app predeterminada o el selector (o el visor de texto de la app para .md,
+.txt...), compartir, «Bajar otra vez» sustituye. **Probado en el HONOR**: el
+vídeo en Google Fotos reproduciéndose (con «Papelera»: es suyo), la foto en la
+galería, el .md en Download y en el visor, sin copias repetidas.
+
+**Fase 7, terminal**: `terminal.py` (PTY, billete de 30 s tras la contraseña
+otra vez, vigilante cada 5 s, SIGHUP al grupo), xterm.js en un WebView
+(`scripts/gen-terminal.mjs`, generado y sin versionar). **Probado en el HONOR**
+con su fish: teclear, Borrar, Ctrl+C, `stty size`, `exit`, el registro.
+Fallos encontrados probando: Gboard repetía letras en el WebView (→ campo
+nativo visible-password), el campo controlado reenviaba todo, `setNativeProps`
+no vaciaba (→ `clear()`), el teclado tapaba la fila de teclas (edge-to-edge).
+Y en la ventana de la PC: «Permisos» por teléfono (antes solo por la CLI).
+
+**Fase 8**: subir (a `Descargas/Celiuz Remoto`, sin pisar; probado: llegó
+idéntico), Wake-on-LAN (`despertar.py`, `/v0/despertar`, tarjeta «Otros
+equipos» en Inicio), escritorio remoto (`pantalla.py`: wayvnc en socket unix +
+puente WebSocket + noVNC; probado: se veía el bloqueo de la PC en el celular),
+invitación (`invitacion.py`, `/v0/invitacion`, `/control/invitacion`, ventana
+«Invitar a alguien», app «Tengo una invitación»). El «me están apagando» de
+Android se quedó fuera a propósito (DISEÑO.md, «Fase 8»).
+
+**Pruebas nuevas**: `e2e/remoto-terminal` (28), `e2e/remoto-pantalla` (24),
+`e2e/remoto-invitacion` (26), y secciones nuevas en `e2e/remoto-archivos`
+(subir), `e2e/remoto-control` (WoL), `e2e/remoto-app` (invitación con el
+código de la app). Cada una se comprobó rompiendo a propósito lo que vigila.
+58 pruebas en verde.
+
 ## 2026-10-20 (PC): Celiuz Remoto, fase 6 — archivos
 
-**Sin commitear** (el usuario lo sube él). Escrita, con pruebas y el APK
+Subida (el arreglo de guardar en el celular va en la entrada de arriba). Escrita, con pruebas y el APK
 instalado en el HONOR; **falta probarla en el celular** (hace falta entrar con
 la contraseña de la app, que es del usuario). El usuario pidió seguir sin haber
 hecho aún la prueba de verdad de la fase 5 (sigue pendiente, abajo).

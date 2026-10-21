@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 
-import type { Conexion, ErrorRemoto } from '../api/cliente';
+import type { Conexion, EquipoGuardado, ErrorRemoto } from '../api/cliente';
 import type { AccionEnergia, Equipo, Estado } from '../api/protocolo';
 import * as f from '../formato';
 import { colores } from '../paleta';
@@ -37,9 +37,11 @@ function Fila({ titulo, valor }: { titulo: string; valor: string }) {
   );
 }
 
-export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase, alCambiar }: {
+export default function Inicio({ conexion, datos, otros = [], alSalir, alCaducar, alVerPase, alCambiar, alVerPantalla }: {
   conexion: Conexion;
   datos: Equipo | null;
+  otros?: EquipoGuardado[];
+  alVerPantalla?: () => void;
   alSalir: () => void;
   alCaducar: (sesionCaducada: boolean) => void;
   alVerPase: () => void;
@@ -79,6 +81,21 @@ export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase,
     }
   }
   const [entrando, setEntrando] = useState(false);
+
+  // Despertar a otro equipo de casa desde este (Wake-on-LAN, fase 8).
+  function despertar(e: EquipoGuardado) {
+    Alert.alert(`¿Despertar ${e.equipo}?`,
+      `${conexion.equipo.equipo} manda el aviso por la red de casa. Solo funciona si los dos están en la misma red, con ${e.equipo} conectada por cable y el Wake-on-LAN activado en su BIOS.`,
+      [{ text: 'Cancelar', style: 'cancel' },
+       { text: 'Despertar', onPress: async () => {
+         try {
+           await conexion.despertar(e.mac!);
+           Alert.alert('Aviso enviado', `Si ${e.equipo} puede despertarse, tarda uno o dos minutos en salir «En línea».`);
+         } catch (err) {
+           Alert.alert('No se pudo', (err as ErrorRemoto).message);
+         }
+       } }]);
+  }
 
   function entrarEscritorio() {
     Alert.alert('¿Abrir la sesión?',
@@ -226,6 +243,21 @@ export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase,
         ) : (
           <Texto tipo="chico" centrado>Este celular no tiene permiso para apagar (se da desde la PC).</Texto>
         )}
+        {conexion.sesion.permisos.includes('pantalla') && alVerPantalla && escritorio?.sesion !== 'pantalla_inicio' ? (
+          <Boton texto="Ver y manejar la pantalla" tipo="borde" alto={52} alPulsar={alVerPantalla} />
+        ) : null}
+        {puedeEnergia && otros.some((o) => o.mac) ? (
+          <Tarjeta estilo={{ gap: 10 }}>
+            <Texto tipo="etiqueta">Otros equipos</Texto>
+            {otros.filter((o) => o.mac).map((o) => (
+              <View key={o.dispositivo} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flex: 1 }}><Texto lineas={1}>{o.equipo}</Texto></View>
+                <Boton texto="Despertar" tipo="borde" alto={44} alPulsar={() => despertar(o)} />
+              </View>
+            ))}
+            <Texto tipo="chico">Lo despierta {conexion.equipo.equipo} por la red de casa (Wake-on-LAN).</Texto>
+          </Tarjeta>
+        ) : null}
         <Boton texto="Salir" tipo="borde" alto={48} alPulsar={alSalir} />
       </ScrollView>
 

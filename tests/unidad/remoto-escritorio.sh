@@ -45,8 +45,8 @@ comprobar("sin pase: dice como se saca", "por cable" in texto and queda is None)
 
 comprobar("las casillas dan los permisos del protocolo",
           textos.permisos_de([0, 2]) == ["estado", "energia", "archivos"])
-comprobar("de fabrica, la terminal NO viene marcada",
-          [c[2] for c in textos.CASILLAS] == [True, True, True, False])
+comprobar("de fabrica, ni la terminal ni la pantalla vienen marcadas",
+          [c[2] for c in textos.CASILLAS] == [True, True, True, False, False])
 comprobar("el resumen solo nombra casillas enteras",
           textos.resumen_permisos(["estado"]) == "ningún permiso")
 comprobar("contraseña corta", textos.contrasena_valida("abc", "abc") is not None)
