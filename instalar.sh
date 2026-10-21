@@ -11,6 +11,7 @@
 #   ./instalar.sh --sddm-quitar   la quita y deja la de antes
 #   ./instalar.sh --remoto-sistema         Celiuz Remoto tras reiniciar (PIDE SUDO)
 #   ./instalar.sh --remoto-sistema-quitar  lo quita
+#   ./instalar.sh --remoto-todo   TODO lo de Celiuz Remoto de una vez (PIDE SUDO)
 #
 # POR QUE HACE FALTA UN INSTALADOR Y NO VALEN CUATRO `ln`
 # ------------------------------------------------------
@@ -37,6 +38,7 @@ SOLO_SDDM=0
 QUITAR_SDDM=0
 SOLO_REMOTO_SISTEMA=0
 QUITAR_REMOTO_SISTEMA=0
+SOLO_REMOTO_TODO=0
 for arg in "$@"; do
     case "$arg" in
         --revisar|-n)  SOLO_REVISAR=1 ;;
@@ -45,7 +47,8 @@ for arg in "$@"; do
         --sddm-quitar) QUITAR_SDDM=1 ;;
         --remoto-sistema)        SOLO_REMOTO_SISTEMA=1 ;;
         --remoto-sistema-quitar) QUITAR_REMOTO_SISTEMA=1 ;;
-        -h|--help)     sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+        --remoto-todo)           SOLO_REMOTO_TODO=1 ;;
+        -h|--help)     sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
         *) echo "instalar: no entiendo «$arg». Prueba --help" >&2; exit 2 ;;
     esac
 done
@@ -994,15 +997,15 @@ print("\n".join(anclaje.revisar()["falta"]))' "$REPO/remoto/servidor" 2>/dev/nul
         else
             aviso "Celiuz Remoto esta encendido pero no corre: journalctl --user -u celiuz-remoto"
         fi
-        [ -n "$faltan" ] && aviso "a Celiuz Remoto le falta: sudo pacman -S $faltan"
+        [ -n "$faltan" ] && aviso "a Celiuz Remoto le falta $faltan: ./instalar.sh --remoto-todo (pide sudo)"
     else
         echo "  apagado (es opcional: se enciende desde la app Celiuz Remoto)"
-        [ -n "$faltan" ] && gris "    para usarlo haria falta: sudo pacman -S $faltan"
+        [ -n "$faltan" ] && gris "    para usarlo hace falta $faltan: ./instalar.sh --remoto-todo (pide sudo)"
     fi
     local opcionales
     opcionales="$(python3 "$REPO/remoto/servidor/celiuz-remoto.py" revisar --json 2>/dev/null \
                   | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)["opcionales_faltan"]))' 2>/dev/null)"
-    [ -n "$opcionales" ] && gris "    opcional (miniaturas, ver la pantalla): sudo pacman -S $opcionales"
+    [ -n "$opcionales" ] && gris "    opcional (miniaturas, ver la pantalla): $opcionales — entra en ./instalar.sh --remoto-todo"
     remoto_sistema_estado
     hacer update-desktop-database "$DATOS/applications" 2>/dev/null
     hacer gtk-update-icon-cache -f -t "$DATOS/icons/hicolor" 2>/dev/null
@@ -1085,13 +1088,62 @@ remoto_sistema_estado() {
     fi
 }
 
+# --- 9c. Celiuz Remoto, todo de una vez (PIDE SUDO, aparte) -----------------
+#
+# Al clonar el repo en un equipo nuevo, ir de paquete en paquete según lo pide
+# cada pantalla es justo lo que se quiere evitar. Esto deja lo que hace falta
+# para usarlo y para compilar la app del celular en una sola pasada:
+#   1. los paquetes (la lista es de `celiuz-remoto.py paquetes`, no de aqui:
+#      una copia de la lista se separaria sola);
+#   2. tailscaled encendido y con el equipo, y la sesion de Tailscale iniciada
+#      si aun no lo esta (sale un enlace para abrir en el navegador);
+#   3. lo de tras reiniciar (remoto_sistema_instalar).
+# NO enciende el servicio: eso se decide en la ventana (remoto/DISEÑO.md).
+# El SDK de Android tampoco: no esta en los repos (Android Studio).
+
+remoto_todo() {
+    titulo "Celiuz Remoto: todo lo que necesita, de una vez"
+    if [ "$(id -u)" -eq 0 ]; then
+        aviso "pásalo como tu usuario, sin sudo delante (ya lo pide él)"
+        return
+    fi
+    local paquetes
+    paquetes="$(python3 "$REPO/remoto/servidor/celiuz-remoto.py" paquetes)" || {
+        aviso "no pude leer la lista de paquetes de celiuz-remoto.py"
+        return
+    }
+    echo "  paquetes: $paquetes"
+    # shellcheck disable=SC2086  # la lista va partida a proposito
+    raiz pacman -S --needed $paquetes || { aviso "pacman no pudo instalar los paquetes"; return; }
+
+    raiz systemctl enable --now tailscaled || aviso "no pude encender tailscaled"
+    if [ "$SOLO_REVISAR" -eq 0 ] && ! tailscale ip -4 >/dev/null 2>&1; then
+        echo "  Tailscale sin sesion: abre el enlace que sale y entra con TU cuenta"
+        echo "  (la misma que pondras en el celular)"
+        raiz tailscale up || aviso "Tailscale sigue sin sesion: sudo tailscale up"
+    fi
+    tailscale ip -4 >/dev/null 2>&1 && hecho "  Tailscale conectado: $(tailscale ip -4 | head -1)"
+
+    remoto_sistema_instalar
+
+    titulo "Lo que queda (no pide sudo)"
+    if [ -d "${ANDROID_HOME:-$HOME/Android/Sdk}/platforms" ]; then
+        echo "  1. compila la app del celular:  remoto/app/compilar.sh"
+    else
+        echo "  1. instala el SDK de Android (Android Studio) y compila: remoto/app/compilar.sh"
+    fi
+    echo "  2. abre «Celiuz Remoto», enciende el servicio y conecta el celular por cable"
+}
+
 # --- Adelante ----------------------------------------------------------------
 
 if [ "$SOLO_REVISAR" -eq 1 ]; then
     printf '\033[1mREVISION — no se va a tocar nada\033[0m\n'
 fi
 
-if [ "$QUITAR_REMOTO_SISTEMA" -eq 1 ]; then
+if [ "$SOLO_REMOTO_TODO" -eq 1 ]; then
+    remoto_todo
+elif [ "$QUITAR_REMOTO_SISTEMA" -eq 1 ]; then
     remoto_sistema_quitar
 elif [ "$SOLO_REMOTO_SISTEMA" -eq 1 ]; then
     remoto_sistema_instalar

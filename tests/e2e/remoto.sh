@@ -85,7 +85,7 @@ wait $PID_EMP; codigo=$?
 afirmar_igual "0" "$codigo" "   la CLI que esperaba termina bien"
 DISP="$(cat "$TMP/tel/dispositivo")"
 
-r="$("$TEL" emparejar "$USB" "$CODIGO" "$TMP/otro")"
+r="$("$TEL" emparejar "$USB" "$CODIGO" "$TMP/otro" 2>&1)"
 afirmar "el código no vale dos veces (el canal ya se cerró)" python3 -c 'import sys; assert "refused" in sys.argv[1] or "\"http\": 404" in sys.argv[1], sys.argv[1]' "$r"
 
 ALMACEN="$XDG_STATE_HOME/celiuz/remoto/dispositivos.json"

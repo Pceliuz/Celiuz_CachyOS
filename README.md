@@ -177,7 +177,15 @@ Se enlaza, no se copia, para que editar el repo sea editar la config:
 git clone https://github.com/Pceliuz/Celiuz_CachyOS.git ~/dotfiles
 cd ~/dotfiles
 ./instalar.sh
+./instalar.sh --remoto-todo   # solo si vas a usar Celiuz Remoto (pide sudo)
 ```
+
+> **Celiuz Remoto (manejar el equipo desde el celular)**: el `./instalar.sh` de
+> siempre lo deja puesto pero sin sus dependencias. Antes de abrir la app,
+> `./instalar.sh --remoto-todo` instala **todo de una vez** —los paquetes,
+> Tailscale encendido y con sesión, y lo de apagar/entrar tras un reinicio— en
+> vez de ir descubriendo lo que falta de uno en uno. Detalle en
+> [`remoto/README.md`](remoto/README.md#para-empezar).
 
 **Clónalo donde quieras.** `~/dotfiles`, `~/.dotfiles`, `~/repos/mis-configs`: da
 igual. Los `.conf` se referencian entre ellos por `$HOME/.config/hypr/...`, que

@@ -26,6 +26,7 @@ solo se toca desde el hilo principal.
 """
 
 import contextlib
+import json
 import os
 import subprocess
 import sys
@@ -207,13 +208,28 @@ class Ventana(Gtk.Window):
         self.paginas.add_named(self._pagina_vigilancia(), "vigilancia")
         self.paginas.add_named(self._pagina_registro(), "registro")
         self.paginas.add_named(self._pagina_ajustes(), "ajustes")
-        raiz.pack_start(self.paginas, True, True, 0)
+        # Arriba, el aviso de lo que le falta al equipo (textos.aviso_dependencias):
+        # escondido mientras no falte nada.
+        derecha = caja(espacio=0)
+        self.faltas = caja(espacio=6, clases=("tarjeta", "chica", "robo"))
+        self.faltas.set_no_show_all(True)
+        self.faltas_txt = etiqueta("", ("alerta-titulo",), envolver=True, ancho=70)
+        self.faltas_det = etiqueta("", ("tenue",), envolver=True, ancho=90, seleccionable=True)
+        self.faltas_btn = boton("Volver a mirar", ("discreto",), self.mirar_dependencias)
+        self.faltas_btn.set_halign(Gtk.Align.START)
+        for w in (self.faltas_txt, self.faltas_det, self.faltas_btn):
+            w.show()
+            self.faltas.pack_start(w, False, False, 0)
+        derecha.pack_start(self.faltas, False, False, 0)
+        derecha.pack_start(self.paginas, True, True, 0)
+        raiz.pack_start(derecha, True, True, 0)
 
         self.connect("destroy", self._al_cerrar)
         self.connect("key-press-event", self._tecla)
         self.ir("telefonos")
         self.refrescar()
         self.mirar_cable()
+        self.mirar_dependencias()
         GLib.timeout_add_seconds(CADA_ESTADO, self._tic_estado)
         GLib.timeout_add_seconds(CADA_CABLE, self._tic_cable)
 
@@ -1002,6 +1018,30 @@ class Ventana(Gtk.Window):
         pagina.pack_start(etiqueta("Los cambios de remoto.conf valen al reiniciar el servicio.",
                                    ("tenue", "chico")), False, False, 0)
         return pagina
+
+    # --- lo que le falta al equipo ---
+
+    def mirar_dependencias(self):
+        """`celiuz-remoto.py revisar --json` en un hilo (tailscale tarda)."""
+        def trabajo():
+            try:
+                r = subprocess.run([sys.executable, os.path.join(REMOTO, "servidor", "celiuz-remoto.py"),
+                                    "revisar", "--json"], capture_output=True, text=True, timeout=15)
+                revision = json.loads(r.stdout)
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                revision = None
+            GLib.idle_add(self._dependencias_leidas, revision)
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def _dependencias_leidas(self, revision):
+        aviso = textos.aviso_dependencias(revision)
+        if aviso:
+            self.faltas_txt.set_text(aviso[0])
+            self.faltas_det.set_text(aviso[1])
+            self.faltas.show()
+        else:
+            self.faltas.hide()
+        return False
 
     # --- el ritmo ---
 

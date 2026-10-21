@@ -196,3 +196,28 @@ def linea_registro(linea, nombres, ahora):
         return "", texto
     hora = cuando.strftime("%H:%M:%S")
     return (hora if cuando.date() == ahora.date() else cuando.strftime("%d/%m %H:%M")), texto
+
+
+def aviso_dependencias(revision):
+    """El aviso de arriba de la ventana cuando a este equipo le falta algo para
+    el remoto. `revision` es lo de `celiuz-remoto.py revisar --json`. Devuelve
+    (titulo, detalle) o None si no falta nada. Siempre con el comando que lo
+    deja todo de una vez: ir de paquete en paquete es lo que se quiere evitar.
+    Los opcionales (miniaturas, ver la pantalla) no son aviso: solo se pierde
+    esa parte."""
+    if not revision:
+        return None
+    partes = []
+    faltan = revision.get("faltan") or []
+    if faltan:
+        partes.append("Faltan paquetes: " + ", ".join(faltan) + ".")
+    ts = revision.get("tailscale") or {}
+    if ts and not ts.get("conectado") and "tailscale" not in faltan:
+        # El «por que» de red.py trae su propio comando; aqui solo vale uno.
+        partes.append("Tailscale no está conectado (apagado o sin sesión).")
+    if not partes:
+        return None
+    comando = revision.get("instalar_todo") or "./instalar.sh --remoto-todo"
+    return ("A este equipo le falta algo para Celiuz Remoto",
+            " ".join(partes) + "\nInstálalo todo de una vez desde la carpeta del repo "
+            f"(pide sudo):  {comando}")

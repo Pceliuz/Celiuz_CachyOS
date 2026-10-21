@@ -103,6 +103,19 @@ comprobar("el CSS no lleva ni un color que no sea de la paleta", hexes <= dados)
 rgbs = {tuple(map(int, m)) for m in re.findall(r"rgba\((\d+), (\d+), (\d+),", css)}
 dados_rgb = {tuple(int(round(x * 255)) for x in c) for c in list(C.values()) + [verde]}
 comprobar("   ni en sus transparencias", rgbs <= dados_rgb)
+
+# El aviso de lo que le falta al equipo: siempre con el comando de una vez.
+TODO = "./instalar.sh --remoto-todo"
+comprobar("sin revision (no se pudo mirar), sin aviso", textos.aviso_dependencias(None) is None)
+nada = {"faltan": [], "tailscale": {"conectado": True, "info": "100.64.0.1"}, "instalar_todo": TODO}
+comprobar("sin faltas y con Tailscale, sin aviso", textos.aviso_dependencias(nada) is None)
+a = textos.aviso_dependencias(dict(nada, faltan=["python-aiohttp", "android-tools"]))
+comprobar("con paquetes que faltan, los nombra", a is not None and "python-aiohttp, android-tools" in a[1])
+comprobar("   y da el comando de una vez", a is not None and TODO in a[1])
+a = textos.aviso_dependencias(dict(nada, tailscale={"conectado": False, "info": "tailscale no está conectado"}))
+comprobar("Tailscale instalado pero sin sesión también es aviso", a is not None and "Tailscale no está conectado" in a[1])
+a = textos.aviso_dependencias(dict(nada, faltan=["tailscale"], tailscale={"conectado": False, "info": "no está instalado"}))
+comprobar("   sin Tailscale instalado no lo dice dos veces", a is not None and "conectado" not in a[1])
 FINPY
 while IFS='|' read -r res desc; do
     case "$res" in
@@ -143,6 +156,22 @@ titulo "3. Sin Wayland no se dibuja en ningun sitio"
 DISPLAY=:0 "$ESC/celiuz-remoto-config.py" > "$TMP/sin-wayland" 2>&1; codigo=$?
 afirmar_igual "1" "$codigo" "sin WAYLAND_DISPLAY sale con 1 (aunque haya DISPLAY: no cae a XWayland)"
 afirmar_contiene "$TMP/sin-wayland" "hace falta una sesión Wayland" "   y dice por qué"
+
+titulo "4. Todo de una vez (instalar.sh --remoto-todo)"
+paquetes="$(python3 "$SERV/celiuz-remoto.py" paquetes 2>"$TMP/paquetes.err")"; codigo=$?
+afirmar_igual "0" "$codigo" "celiuz-remoto.py paquetes sale bien"
+afirmar "   sin nada por stderr" test ! -s "$TMP/paquetes.err"
+for p in tailscale python-aiohttp python-psutil python-cryptography android-tools wayvnc jdk17-openjdk nodejs; do
+    afirmar "   la lista lleva $p" grep -qw -- "$p" <<< "$paquetes"
+done
+afirmar_igual "$(wc -w <<< "$paquetes")" "$(tr ' ' '\n' <<< "$paquetes" | sort -u | wc -l)" "   sin repetir ninguno"
+# --revisar no toca nada (ni sudo ni pacman): solo dice lo que haria.
+"$REPO/instalar.sh" --revisar --remoto-todo > "$TMP/todo.out" 2>&1; codigo=$?
+afirmar_igual "0" "$codigo" "--revisar --remoto-todo sale bien"
+afirmar "   instala la lista entera de una vez" grep -qF -- "(haria, como root) pacman -S --needed $paquetes" "$TMP/todo.out"
+afirmar "   y enciende Tailscale" grep -qF -- "(haria, como root) systemctl enable --now tailscaled" "$TMP/todo.out"
+afirmar_contiene "$TMP/todo.out" "celiuz-remoto-entrar@.service" "   y deja lo de tras reiniciar"
+afirmar_contiene "$REPO/remoto/README.md" "instalar.sh --remoto-todo" "el README del remoto lo cuenta"
 
 afirmar_intacta_la_casa_real
 resumen

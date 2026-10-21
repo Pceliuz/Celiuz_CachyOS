@@ -3,6 +3,7 @@
 remoto/servidor/celiuz-remoto.py — el servicio de Celiuz Remoto.
 
     celiuz-remoto.py revisar            que le falta a este equipo para el remoto
+    celiuz-remoto.py paquetes           TODOS los paquetes de Arch que usa (los lee instalar.sh --remoto-todo)
     celiuz-remoto.py rutas              donde guarda cada cosa (fuera del repo)
     celiuz-remoto.py servir             el servicio (escucha solo por Tailscale)
     celiuz-remoto.py estado             que dice el servicio que esta corriendo
@@ -57,6 +58,29 @@ OPCIONALES = [
     ("ffmpeg", "programa", "las miniaturas de fotos y vídeos en el explorador", "ffmpeg"),
     ("wayvnc", "programa", "ver y manejar la pantalla desde el celular", "wayvnc"),
 ]
+# Lo que pide remoto/app/compilar.sh para hacer la app del celular en esta PC.
+# El SDK de Android no esta: no es un paquete de los repos (Android Studio).
+PARA_COMPILAR = ["jdk17-openjdk", "nodejs", "npm"]
+
+# El comando que lo deja todo de una vez (instalar.sh). Lo dicen la CLI y la
+# ventana cuando falta algo, para no ir de paquete en paquete.
+INSTALAR_TODO = "./instalar.sh --remoto-todo"
+
+
+def paquetes():
+    """Todo lo de Arch que usa el remoto, sin repetir y en orden."""
+    todos = [p for *_, p in NECESIDADES + OPCIONALES] + PARA_COMPILAR
+    return list(dict.fromkeys(todos))
+
+
+def tailscale():
+    """¿Esta conectado Tailscale? (`tailscale ip -4`: pregunta al demonio de
+    este equipo, no sale a la red). Devuelve (bool, por que)."""
+    from celiuz_remoto import red
+    try:
+        return True, red.ip_tailscale()
+    except red.SinRed as e:
+        return False, str(e)
 
 
 def _hay(nombre, clase):
@@ -94,8 +118,11 @@ def cmd_revisar(args):
     filas, faltan = revisar()
     opcionales = revisar_opcionales()
     tras = arranque()
+    ts_ok, ts_info = tailscale() if shutil.which("tailscale") else (False, "no está instalado")
     if args.json:
         print(json.dumps({"necesidades": filas, "faltan": faltan, "arranque": tras,
+                          "tailscale": {"conectado": ts_ok, "info": ts_info},
+                          "instalar_todo": INSTALAR_TODO,
                           "opcionales": opcionales,
                           "opcionales_faltan": [o["paquete"] for o in opcionales if not o["hay"]]},
                          ensure_ascii=False, indent=2))
@@ -103,8 +130,9 @@ def cmd_revisar(args):
         for f in filas:
             marca = "ok   " if f["hay"] else "FALTA"
             print(f"  {marca} {f['que']:<10} {f['para']}")
-        if faltan:
-            print(f"\n  Para instalarlo: sudo pacman -S {' '.join(faltan)}")
+        print(f"  {'ok   ' if ts_ok else 'NO   '} {'conectado':<10} Tailscale: {ts_info}")
+        if faltan or not ts_ok:
+            print(f"\n  Para dejarlo todo de una vez (pide sudo): {INSTALAR_TODO}")
         else:
             print("\n  No falta nada.")
         print("\n  Opcionales:")
@@ -120,6 +148,11 @@ def cmd_revisar(args):
         print("    despertarlo desde otro      " + {"si": "sí", "no": "no", "no_lo_se": "no lo sé"}[w["wol"]]
               + f" — {w['motivo']}")
     # Que falte algo no es un error de este programa: es la respuesta.
+    return 0
+
+
+def cmd_paquetes(_args):
+    print(" ".join(paquetes()))
     return 0
 
 
@@ -564,6 +597,9 @@ def main(argv=None):
     s = sub.add_parser("revisar", help="que le falta a este equipo")
     s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_revisar)
+
+    s = sub.add_parser("paquetes", help="todos los paquetes de Arch que usa")
+    s.set_defaults(func=cmd_paquetes)
 
     s = sub.add_parser("rutas", help="donde guarda cada cosa")
     s.add_argument("--json", action="store_true")
