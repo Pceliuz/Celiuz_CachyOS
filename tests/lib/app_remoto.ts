@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 import * as c from '../../remoto/app/src/api/cliente.ts';
 import { nuevaClave, publica } from '../../remoto/app/src/api/cripto.ts';
+import * as a from '../../remoto/app/src/archivos.ts';
 import * as f from '../../remoto/app/src/formato.ts';
 
 const [puertoRed, puertoUsb, codigo, contrasena, fase] = process.argv.slice(2);
@@ -141,6 +142,61 @@ async function controlar() {
   writeFileSync(`${TMP}/token`, con.sesion.token);
 }
 
+// Fase 6: el explorador, con el código de la app. La casa de mentira la monta
+// remoto-app.sh (Documentos/nota.txt, .ssh/id_ed25519).
+function cuentasDeArchivos() {
+  comprobar('tamaños como Dolphin', a.tamano(48 * 1024) === '48 KB' && a.tamano(1.2 * 1024 * 1024) === '1,2 MB'
+            && a.tamano(512) === '512 B' && a.tamano(8.4 * 1024 ** 3) === '8,4 GB',
+            [a.tamano(48 * 1024), a.tamano(1.2 * 1024 * 1024), a.tamano(8.4 * 1024 ** 3)]);
+  const m = a.migas('Documentos/CV');
+  comprobar('migas desde la carpeta personal', m.length === 3 && m[2].ruta === 'Documentos/CV' && m[0].ruta === '', m);
+  comprobar('padre y unir', a.padre('Documentos/CV') === 'Documentos' && a.padre('Documentos') === ''
+            && a.unir('', 'x') === 'x' && a.unir('a', 'x') === 'a/x');
+  comprobar('la copia local nunca se sale de su carpeta (..)',
+            JSON.stringify(a.rutaLocal('PC', '../../etc/./passwd')) === '["PC","etc","passwd"]', a.rutaLocal('PC', '../../etc/./passwd'));
+  comprobar('   y limpia lo que Android no admite en un nombre', a.rutaLocal('PC', 'a:b/c?.txt').join('/') === 'PC/a_b/c_.txt');
+  comprobar('clase por extensión, sin mayúsculas', a.clase('Informe.PDF') === 'pdf' && a.clase('x', 'carpeta') === 'carpeta'
+            && a.clase('sin-extension') === 'otro');
+  comprobar('el tipo para abrirlo', a.mime('foto.JPG') === 'image/jpeg' && a.mime('raro.xyz') === 'application/octet-stream');
+  comprobar('miniatura solo de imagen y vídeo (lo mismo que archivos.py)', a.tieneMiniatura('a.png') && a.tieneMiniatura('b.mkv')
+            && !a.tieneMiniatura('c.pdf'));
+  const ahora = new Date('2026-10-21T04:00:00Z'); // 23:00 del 20 en la PC (-05:00)
+  comprobar('agrupar: hoy, en la zona de la PC', a.grupo('2026-10-20T08:00:00-05:00', ahora) === 'Hoy',
+            a.grupo('2026-10-20T08:00:00-05:00', ahora));
+  comprobar('   ayer', a.grupo('2026-10-19T23:59:00-05:00', ahora) === 'Ayer');
+  comprobar('   esta semana y antes', a.grupo('2026-10-16T10:00:00-05:00', ahora) === 'Esta semana'
+            && a.grupo('2026-09-01T10:00:00-05:00', ahora) === 'Antes');
+}
+
+async function explorar() {
+  const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
+  const con = await c.entrar(h, equipo, clave, contrasena);
+  const casa = await con.archivos('');
+  comprobar('archivos(""): la carpeta personal', casa.ruta === '' && casa.entradas.some((e) => e.nombre === 'Documentos'), casa);
+  comprobar('   sin .ssh', !casa.entradas.some((e) => e.nombre === '.ssh'));
+  const docs = await con.archivos('Documentos');
+  const nota = docs.entradas.find((e) => e.nombre === 'nota.txt');
+  comprobar('archivos("Documentos"): con su tamaño', nota?.tamano === 11, nota);
+  const fuera = await error(con.archivos('../'));
+  comprobar('salir de casa: «fuera»', fuera?.codigo === 'fuera', fuera?.codigo);
+  const b = await con.buscar('', 'nota');
+  comprobar('buscar() encuentra por nombre', b.resultados.some((r) => r.ruta === 'Documentos/nota.txt'), b);
+  const r = await fetch(con.urlDescarga('Documentos/nota.txt'), { headers: con.cabeceras() });
+  comprobar('urlDescarga() + cabeceras(): lo que usa el gestor de descargas', r.status === 200 && (await r.text()) === 'hola mundo\n');
+  const sinToken = await fetch(con.urlDescarga('Documentos/nota.txt'));
+  comprobar('   y sin la cabecera no baja nada', sinToken.status === 401, sinToken.status);
+  const rec = await con.recientes();
+  comprobar('recientes(): la acaba de bajar, igual que en la PC', rec[0]?.ruta === 'Documentos/nota.txt' && rec[0].estado === 'igual', rec[0]);
+  comprobar('   con su nombre y su carpeta', rec[0]?.nombre === 'nota.txt' && rec[0].carpeta === 'Documentos');
+  const fav = await con.fijar('Documentos');
+  comprobar('fijar()', fav.length === 1 && fav[0].tipo === 'carpeta' && fav[0].existe, fav);
+  const otra = await con.archivos('');
+  comprobar('   y el listado lo marca', otra.entradas.find((e) => e.nombre === 'Documentos')?.favorito === true);
+  comprobar('soltar()', (await con.soltar('Documentos')).length === 0);
+  await con.olvidarReciente('Documentos/nota.txt');
+  comprobar('olvidarReciente()', (await con.recientes()).length === 0);
+}
+
 async function sinPase() {
   const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
   const con = await c.entrar(h, equipo, clave, contrasena);
@@ -153,7 +209,8 @@ async function sinPase() {
 }
 
 try {
-  if (fase === 'emparejar') { enlacesYFormatos(); await emparejarYEntrar(); }
+  if (fase === 'emparejar') { enlacesYFormatos(); cuentasDeArchivos(); await emparejarYEntrar(); }
+  else if (fase === 'archivos') await explorar();
   else if (fase === 'control') await controlar();
   else if (fase === 'sinpase') await sinPase();
   else await renovarPase();

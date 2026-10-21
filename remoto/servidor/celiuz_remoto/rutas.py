@@ -56,6 +56,12 @@ def apk():
                         "celiuz-remoto.apk")
 
 
+def miniaturas():
+    """~/.cache/celiuz/remoto/miniaturas: las del explorador del celular. Cache
+    de verdad: se puede borrar entera y se rehace."""
+    return os.path.join(_xdg("XDG_CACHE_HOME", ".cache"), "celiuz", "remoto", "miniaturas")
+
+
 def presencia():
     """Lo que apunta hypridle: «ausente» tras 5 min quieto, «presente» al volver.
     En $XDG_RUNTIME_DIR: no sobrevive al apagado, y no debe."""
@@ -97,4 +103,5 @@ def todas():
         "presencia": presencia(),
         "vigilancia": vigilancia(),
         "entrar_bloqueada": entrar_bloqueada(),
+        "miniaturas": miniaturas(),
     }

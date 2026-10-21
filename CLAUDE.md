@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (54 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (55 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -101,9 +101,10 @@ Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
 apps, archivos, terminal). **Va por fases (8, en `remoto/DISEÑO.md`), y cada
 una se cierra probada antes de empezar la siguiente**: lo pidió el usuario.
 Hechas la 1, la 2, la 3 y la 4 (2026-10-20; la 4 trae apagar con cuenta
-atrás, ver y cerrar apps, la vigilancia y el icono de la barra), y la 5
-escrita y con pruebas pero **sin probar en la PC de verdad** (tras reiniciar:
-linger, y lo de root en `remoto/sistema/`; la receta de la prueba está en
+atrás, ver y cerrar apps, la vigilancia y el icono de la barra), y la 5 y la 6
+escritas y con pruebas pero **sin probar de verdad** (la 5: tras reiniciar,
+linger y lo de root en `remoto/sistema/`; la 6: archivos, solo lectura y con
+una lista de lo que nunca se enseña, `NUNCA` en `archivos.py`; las recetas en
 `SIGUIENTE.md`): el servidor empareja por el canal USB,
 deja entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado
 en vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las

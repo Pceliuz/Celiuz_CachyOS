@@ -13,6 +13,10 @@ import {
   type AccionEnergia,
   CIERRE_SIN_SESION,
   type EstadoEnergia,
+  type Busqueda,
+  type Favorito,
+  type Listado,
+  type Reciente,
   type Ventana,
   PUERTO_RED,
   PUERTO_USB,
@@ -192,6 +196,59 @@ export class Conexion {
     const r = await pedir<{ mensaje: string }>(this.h, 'POST', `${this.base}/v0/escritorio/entrar`,
       { confirmado: true }, this.sesion.token);
     return r.mensaje;
+  }
+
+  // --- archivos (fase 6): todo pide el pase ---
+
+  async archivos(ruta: string, ocultos = false): Promise<Listado> {
+    return pedir<Listado>(this.h, 'GET',
+      `${this.base}/v0/archivos?ruta=${encodeURIComponent(ruta)}${ocultos ? '&ocultos=1' : ''}`,
+      undefined, this.sesion.token);
+  }
+
+  // Por nombre, en esa carpeta y sus subcarpetas (al menos dos letras).
+  async buscar(ruta: string, q: string): Promise<Busqueda> {
+    return pedir<Busqueda>(this.h, 'GET',
+      `${this.base}/v0/archivos/buscar?ruta=${encodeURIComponent(ruta)}&q=${encodeURIComponent(q)}`,
+      undefined, this.sesion.token, 15000);
+  }
+
+  async recientes(): Promise<Reciente[]> {
+    return (await pedir<{ recientes: Reciente[] }>(this.h, 'GET', `${this.base}/v0/recientes`,
+      undefined, this.sesion.token)).recientes;
+  }
+
+  async olvidarReciente(ruta: string): Promise<void> {
+    await pedir(this.h, 'DELETE', `${this.base}/v0/recientes?ruta=${encodeURIComponent(ruta)}`,
+      undefined, this.sesion.token);
+  }
+
+  async favoritos(): Promise<Favorito[]> {
+    return (await pedir<{ favoritos: Favorito[] }>(this.h, 'GET', `${this.base}/v0/favoritos`,
+      undefined, this.sesion.token)).favoritos;
+  }
+
+  async fijar(ruta: string): Promise<Favorito[]> {
+    return (await pedir<{ favoritos: Favorito[] }>(this.h, 'PUT', `${this.base}/v0/favoritos`,
+      { ruta }, this.sesion.token)).favoritos;
+  }
+
+  async soltar(ruta: string): Promise<Favorito[]> {
+    return (await pedir<{ favoritos: Favorito[] }>(this.h, 'DELETE',
+      `${this.base}/v0/favoritos?ruta=${encodeURIComponent(ruta)}`, undefined, this.sesion.token)).favoritos;
+  }
+
+  // Lo que bajan otros (el gestor de descargas, <Image>): la URL y la cabecera.
+  urlDescarga(ruta: string): string {
+    return `${this.base}/v0/archivos/descargar?ruta=${encodeURIComponent(ruta)}`;
+  }
+
+  urlMiniatura(ruta: string, lado = 256): string {
+    return `${this.base}/v0/archivos/miniatura?ruta=${encodeURIComponent(ruta)}&lado=${lado}`;
+  }
+
+  cabeceras(): Record<string, string> {
+    return { Authorization: `Bearer ${this.sesion.token}` };
   }
 
   async ventanas(): Promise<Ventana[]> {

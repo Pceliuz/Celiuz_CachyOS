@@ -1,10 +1,11 @@
 # Celiuz Remoto
 
-> **En construcción.** Fases 1 a 5 de 8 hechas (2026-10-20): el servidor, la
+> **En construcción.** Fases 1 a 6 de 8 hechas (2026-10-20): el servidor, la
 > ventana de la PC («Celiuz Remoto» en el lanzador), la app del celular (empareja,
-> entra, enseña el estado, apaga y cierra apps), la vigilancia, y entrar tras un
-> reinicio desde la pantalla de inicio. Faltan los archivos y la terminal. Las
-> fases, en [`DISEÑO.md`](DISEÑO.md#fases).
+> entra, enseña el estado, apaga y cierra apps), la vigilancia, entrar tras un
+> reinicio desde la pantalla de inicio, y los archivos (explorar, buscar, bajar,
+> recientes y favoritos). Falta la terminal. Las fases, en
+> [`DISEÑO.md`](DISEÑO.md#fases).
 
 ## Para empezar
 

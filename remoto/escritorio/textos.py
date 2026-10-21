@@ -46,6 +46,10 @@ ACCIONES = {
     "vigilancia_pase_quitado": "La vigilancia le quitó el pase (sin señal)",
     "vigilancia_apaga": "La vigilancia apaga la PC",
     "vigilancia_avisa": "La vigilancia avisó (había alguien delante)",
+    "entrar_escritorio": "Abrió la sesión desde la pantalla de inicio (arranca bloqueada)",
+    "entrar_escritorio_mal": "No pudo abrir la sesión desde la pantalla de inicio",
+    "descarga": "Bajó un archivo",
+    "favorito": "Fijó un favorito",
 }
 
 VIGILANCIA = {

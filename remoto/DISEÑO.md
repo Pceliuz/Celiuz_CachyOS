@@ -198,6 +198,16 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
   versión nueva», «ya no está»). **Favoritos**: archivos y carpetas fijados.
 - El historial vive **en la PC**: si cambias de celular lo conservas, y si te lo
   roban no se llevan la lista.
+- **Lo que no se enseña nunca** (fase 6), aunque se tenga el pase: las claves
+  (`.ssh`, `.gnupg`, llaveros), los perfiles de los navegadores (cookies y
+  contraseñas guardadas) y lo propio de Celiuz Remoto. Es el caso del celular
+  robado con la contraseña vista por encima del hombro: se puede sacar un
+  documento, no lo que abre las demás puertas. Para eso, la terminal (fase 7),
+  que pide la contraseña otra vez y su propio permiso.
+- **La copia vive en la carpeta de la app**, no en Descargas de Android: no pide
+  permisos de almacenamiento y la app sabe sola qué tiene bajado («Abrir
+  copia»). Para llevarla a otro sitio, «Compartir»; «Abrir» se la da a la app
+  que toque.
 
 ### Terminal con sudo
 - Una terminal de verdad (un PTY), con la shell del usuario.
@@ -229,7 +239,9 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
    verdad): linger, la parte de root (`sistema/`, `instalar.sh
    --remoto-sistema`), `/v0/escritorio` y la tarjeta «Entrar» de la app (ver
    «Tras reiniciar» arriba).
-6. **Archivos**: explorador, descargas, recientes, favoritos.
+6. **Archivos** ✅ (con pruebas; falta probarlo en el celular de verdad):
+   explorador, buscar, descargas con `Range`, miniaturas, recientes con su
+   estado contra la PC, favoritos.
 7. **Terminal**.
 8. **Extras**: subir archivos a la PC, escritorio remoto (`wayvnc`), encender a
    distancia (Wake-on-LAN, necesita otro aparato despierto en casa), modo
@@ -244,7 +256,8 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
 | `~/.local/share/celiuz/remoto/celiuz-remoto.apk` | el APK ya compilado, el que instala la ventana de la PC |
 | `~/.config/systemd/user/celiuz-remoto.service` | COPIA de `servidor/celiuz-remoto.service` (la pone `instalar.sh`; enlazada, `disable` la borraba) |
 | `~/.local/state/celiuz/remoto/dispositivos.json` (0600) | teléfonos: hash de su clave, hash de su contraseña, permisos, pase, último latido |
-| `~/.local/state/celiuz/remoto/historial.json` | recientes y favoritos |
+| `~/.local/state/celiuz/remoto/historial.json` (0600) | recientes y favoritos |
+| `~/.cache/celiuz/remoto/miniaturas/` | las miniaturas del explorador (se puede borrar: se rehacen) |
 | `~/.local/state/celiuz/remoto/registro.jsonl` | qué hizo cada teléfono y cuándo |
 | `~/.local/state/celiuz/remoto/linger-nuestro` | que el linger lo encendió la ventana (y por eso lo puede apagar) |
 | `$XDG_RUNTIME_DIR/celiuz-remoto/entrar-bloqueada` | la marca de «esta sesión la abrió el celular: bloquéala» |

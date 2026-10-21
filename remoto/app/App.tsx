@@ -12,7 +12,7 @@
 // Los colores salen de src/paleta.ts (colores.json, que genera gen-colores.py
 // de la paleta del escritorio): aqui no se escribe ningun hex a mano.
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -24,6 +24,8 @@ import Bienvenida from './src/pantallas/Bienvenida';
 import Cable from './src/pantallas/Cable';
 import Entrar from './src/pantallas/Entrar';
 import Apps from './src/pantallas/Apps';
+import Archivos from './src/pantallas/Archivos';
+import Recientes from './src/pantallas/Recientes';
 import Inicio from './src/pantallas/Inicio';
 import PaseVencido from './src/pantallas/PaseVencido';
 
@@ -35,6 +37,13 @@ export default function App() {
   const [verPase, setVerPase] = useState(false);
   const [pestana, setPestana] = useState<Pestana>('inicio');
   const [aviso, setAviso] = useState<string | undefined>();
+  const [verRecientes, setVerRecientes] = useState(false);
+  const [carpetaInicial, setCarpetaInicial] = useState('');
+  // Lo que la pantalla de dentro quiera hacer con «Atrás» antes que App (el
+  // explorador sube de carpeta). Un ref y no otro listener: el orden en que
+  // React vuelve a apuntar los listeners no es el de las pantallas.
+  const atrasDeDentro = useRef<(() => boolean) | null>(null);
+  const fijarAtras = useCallback((fn: (() => boolean) | null) => { atrasDeDentro.current = fn; }, []);
 
   const recargar = useCallback(() => almacen.equipos().then(setEquipos), []);
 
@@ -67,16 +76,20 @@ export default function App() {
   useEffect(() => {
     const s = BackHandler.addEventListener('hardwareBackPress', () => {
       if (verPase) { setVerPase(false); return true; }
+      if (verRecientes) { setVerRecientes(false); return true; }
+      if (atrasDeDentro.current?.()) return true;
       if (pestana !== 'inicio') { setPestana('inicio'); return true; }
       if (conexion) { salir(); return true; }
       return false;
     });
     return () => s.remove();
-  }, [verPase, pestana, conexion, salir]);
+  }, [verPase, verRecientes, pestana, conexion, salir]);
 
   const entrar = useCallback((c: Conexion) => {
     setAviso(undefined);
     setPestana('inicio');
+    setVerRecientes(false);
+    setCarpetaInicial('');
     setConexion(c);
     setDatos(null);
     c.datosEquipo().then(setDatos).catch(() => setDatos(null));
@@ -94,6 +107,14 @@ export default function App() {
   } else if (verPase) {
     pantalla = <PaseVencido equipo={conexion.equipo.equipo} paseHasta={conexion.sesion.pase_hasta}
                             alVolver={() => setVerPase(false)} />;
+  } else if (pestana === 'archivos' && verRecientes) {
+    pantalla = <Recientes conexion={conexion} alVolver={() => setVerRecientes(false)} alCaducar={caducar}
+                          alVerPase={() => setVerPase(true)}
+                          alAbrirCarpeta={(r) => { setCarpetaInicial(r); setVerRecientes(false); }} />;
+  } else if (pestana === 'archivos') {
+    pantalla = <Archivos conexion={conexion} inicial={carpetaInicial} alCambiar={setPestana} alCaducar={caducar}
+                         alVerPase={() => setVerPase(true)} alRecientes={() => setVerRecientes(true)}
+                         fijarAtras={fijarAtras} />;
   } else if (pestana === 'apps') {
     pantalla = <Apps conexion={conexion} alCambiar={setPestana} alVerPase={() => setVerPase(true)}
                      alCaducar={caducar} />;

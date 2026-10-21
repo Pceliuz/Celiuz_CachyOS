@@ -9,9 +9,40 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (PC): Celiuz Remoto, fase 6 — archivos
+
+**Sin commitear** (el usuario lo sube él). Escrita, con pruebas y el APK
+instalado en el HONOR; **falta probarla en el celular** (hace falta entrar con
+la contraseña de la app, que es del usuario). El usuario pidió seguir sin haber
+hecho aún la prueba de verdad de la fase 5 (sigue pendiente, abajo).
+
+- **Servidor**: `archivos.py` (listar, buscar, descargar, miniaturas con ffmpeg
+  y cache en `~/.cache/celiuz/remoto/miniaturas`) y `historial.py` (recientes
+  con su estado contra la PC, favoritos; 0600). Rutas `/v0/archivos`,
+  `/buscar`, `/descargar` (Range), `/miniatura`, `/v0/recientes`,
+  `/v0/favoritos`. Todo: permiso `archivos` + pase.
+- **La frontera**: `realpath` primero y después mirar que queda en casa; y una
+  lista `NUNCA` (.ssh, .gnupg, llaveros, perfiles de navegador, lo de Celiuz
+  Remoto) que no sale ni listando, ni con ocultos, ni buscando, ni por enlace.
+  Es decisión mía, no del usuario: se le contó al cerrar la fase.
+- **App**: pestaña Archivos (maqueta 5: buscar, migas, miniaturas, tarjeta
+  Descargar/Ver/Favorito; «Atrás» sube de carpeta) y Recientes (maqueta 6, por
+  días, con «Abrir», «Bajar otra vez», «Abrir copia»; mantener pulsado
+  olvida). Copias en la carpeta de la app (`descargas/<equipo>/<ruta>`), por
+  `.parcial`; «Abrir» con IntentLauncher y «Compartir» con expo-sharing (módulos
+  nuevos: expo-file-system, expo-sharing, expo-intent-launcher).
+- **Pruebas**: `e2e/remoto-archivos` (75; sin la frontera fallan 13, sin
+  `NUNCA` 16) y la ronda 4 de `e2e/remoto-app` (las llamadas y las cuentas de
+  `src/archivos.ts`).
+- **El HONOR no puede entrar todavía**: su registro `c0615dcf` es el que se
+  rompió en la fase 4. Hay que emparejarlo otra vez desde la ventana (con
+  Archivos marcado) y después probar: explorar, buscar, bajar un PDF y
+  abrirlo, ver una foto, fijar un favorito, Recientes tras cambiar el archivo
+  en la PC («Hay versión nueva»).
+
 ## 2026-10-20 (PC): Celiuz Remoto, fase 5 — tras un reinicio (SDDM)
 
-**Sin commitear** (el usuario lo sube él). Escrita y con pruebas; **falta la
+Subida en `84c598f`. Escrita y con pruebas; **falta la
 prueba de verdad**, que necesita su sudo y salir a la pantalla de inicio (eso
 cierra la sesión donde corre Claude, así que la hace él).
 

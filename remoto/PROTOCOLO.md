@@ -147,13 +147,39 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
 - `POST /v0/ventanas/<id>/cerrar` `{"confirmado": true}` — **pase**. Cierra
   pidiéndolo (como `SUPER+Q`), no matando. `404` si ya no está.
 
-### Archivos — permiso `archivos`, todo **pase** **(fase 6)**
-- `GET /v0/archivos?ruta=Documentos` → `{"ruta": "...", "entradas": [{"nombre", "tipo": "carpeta"|"archivo", "tamano", "modificado"}]}`
-  Las rutas son relativas a la carpeta personal; una que salga de ella (`..`,
-  enlaces que apunten fuera) da `403`.
-- `GET /v0/archivos/descargar?ruta=...` → el archivo (admite `Range`).
-- `GET /v0/archivos/miniatura?ruta=...&lado=256` → JPEG.
-- `GET /v0/recientes`, `GET/PUT/DELETE /v0/favoritos`.
+### Archivos — permiso `archivos`, todo **pase**
+Solo lectura. Las rutas son relativas a la carpeta personal (`""` es ella
+misma) y se resuelven con `realpath` ANTES de mirar la frontera: una que salga
+(`..`, una absoluta, un enlace que apunte fuera) da `403 fuera`. Y dentro de
+casa hay sitios que no se enseñan nunca, ni pidiendo los ocultos, ni buscando,
+ni por un enlace: `.ssh`, `.gnupg`, los llaveros, los perfiles de los
+navegadores y lo propio de Celiuz Remoto (la lista, `NUNCA` en
+`servidor/celiuz_remoto/archivos.py`).
+
+- `GET /v0/archivos?ruta=Documentos[&ocultos=1]` →
+  `{"ruta": "Documentos", "entradas": [{"nombre", "tipo": "carpeta"|"archivo", "tamano"?, "elementos"?, "modificado", "favorito"}], "truncado": false}`.
+  Carpetas primero. Sin `ocultos=1` no salen los que empiezan por punto. Los
+  enlaces rotos o que salen de casa no salen. Más de 2000: `truncado`.
+- `GET /v0/archivos/buscar?ruta=&q=informe` → `{"ruta", "q", "resultados": [... con "ruta"], "truncado"}`.
+  Por nombre, sin distinguir mayúsculas, en esa carpeta y las de dentro. Al
+  menos dos letras (`400`). Como mucho 200 resultados y 3 s.
+- `GET /v0/archivos/descargar?ruta=...` → el archivo, con `Range` (`206`) para
+  reanudar. La que empieza por el principio se apunta en Recientes y en el
+  registro; un `Range` que sigue a medias no cuenta como otra.
+- `GET /v0/archivos/miniatura?ruta=...&lado=256` → JPEG (lado entre 64 y 1024)
+  de una imagen o un vídeo, hecho con ffmpeg y guardado en
+  `~/.cache/celiuz/remoto/miniaturas`. De lo demás, `404`.
+- `GET /v0/recientes` → `{"recientes": [{"ruta", "nombre", "carpeta", "bajado", "tamano", "dispositivo", "estado": "igual"|"nueva_version"|"no_esta"}]}`.
+  El estado compara el tamaño y la fecha que tenía al bajarlo con lo que hay
+  ahora. `DELETE /v0/recientes?ruta=...` lo quita de la lista (sin `ruta`, todos).
+- `GET /v0/favoritos`, `PUT /v0/favoritos` `{"ruta"}`, `DELETE /v0/favoritos?ruta=...`
+  → `{"favoritos": [{"ruta", "nombre", "tipo", "existe", "desde"}]}`. Fijar
+  algo que no hay, `404`; uno fijado que se borró sigue con `existe: false` y se
+  puede quitar.
+
+| HTTP | `error` | Cuándo |
+|---|---|---|
+| 403 | `fuera` | la ruta sale de la carpeta personal o es de lo que nunca se enseña |
 
 ### Terminal — **pase** + permiso `terminal` + contraseña otra vez **(fase 7)**
 - `POST /v0/terminal` `{"contrasena": "..."}` → `{"terminal": "<id>"}`

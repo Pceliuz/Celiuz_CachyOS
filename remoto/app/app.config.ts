@@ -24,6 +24,9 @@ const config: ExpoConfig = {
     // Las claves del almacen seguro no van a la copia de Google: restauradas
     // en otro celular no valdrian (el Keystore no viaja) y no deben salir.
     ['expo-secure-store', { configureAndroidBackup: true }],
+    // Compartir lo bajado de la PC (fase 6: src/descargas.ts). Su plugin deja el
+    // FileProvider con que se le pasa el archivo a otra app.
+    'expo-sharing',
   ],
   android: {
     package: 'com.celiuz.remoto',

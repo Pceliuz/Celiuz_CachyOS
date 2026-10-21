@@ -96,6 +96,22 @@ TMP="$TMP" app "$RED" "$USB" - clave-app sinpase > "$TMP/app4.txt" 2>"$TMP/app4.
 leer "$TMP/app4.txt"
 afirmar "   sin nada por stderr" test ! -s "$TMP/app4.err"
 
+titulo "4. Archivos (fase 6), con el código de la app"
+mkdir -p "$HOME/Documentos" "$HOME/.ssh"
+printf 'hola mundo\n' > "$HOME/Documentos/nota.txt"
+printf 'PRIVADA' > "$HOME/.ssh/id_ed25519"
+DISP_APP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["equipo"]["dispositivo"])' "$TMP/equipo.json")"
+"$CLI" permisos "$DISP_APP" +archivos > /dev/null
+"$CLI" renovar --sin-adb > "$TMP/ren2.out" 2>/dev/null &
+PID_REN=$!
+esperar_a 10 hay_codigo "$TMP/ren2.out"
+TMP="$TMP" app "$RED" "$USB" "$(sed -n 's/^CODIGO //p' "$TMP/ren2.out")" clave-app renovar > /dev/null 2>&1
+wait "$PID_REN"
+TMP="$TMP" app "$RED" "$USB" - clave-app archivos > "$TMP/app5.txt" 2>"$TMP/app5.err"
+leer "$TMP/app5.txt"
+afirmar "   sin nada por stderr" test ! -s "$TMP/app5.err"
+afirmar "   y dijo algo" test "$(grep -c '^ok|' "$TMP/app5.txt")" -ge 10
+
 afirmar_no_contiene "$TMP/servidor.log" "Traceback" "el servidor no tuvo ni un traceback"
 afirmar_intacta_la_casa_real
 resumen

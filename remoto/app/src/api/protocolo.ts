@@ -16,6 +16,8 @@ export type CodigoError =
   | 'sin_permiso'
   | 'no_existe'
   | 'confirmar'
+  | 'estado' // no toca ahora (fase 5: entrar con la sesion abierta)
+  | 'fuera' // sale de la carpeta personal, o es de lo que nunca se enseña (fase 6)
   | 'pase_vencido';
 
 // Lo que se firma con la clave privada Ed25519 del telefono: siempre con
@@ -113,16 +115,45 @@ export interface Ventana {
   escritorio: string | number;
 }
 
+// Archivos (fase 6). Las rutas son relativas a la carpeta personal de la PC
+// ("" es la carpeta personal).
 export interface Entrada {
   nombre: string;
   tipo: 'carpeta' | 'archivo';
-  tamano: number;
-  modificado: string;
+  tamano?: number; // solo archivos, en bytes
+  elementos?: number | null; // solo carpetas
+  modificado: string; // ISO, con el reloj de la PC
+  favorito?: boolean; // en /v0/archivos
+  ruta?: string; // en /v0/archivos/buscar: la ruta entera
+}
+
+export interface Listado {
+  ruta: string;
+  entradas: Entrada[];
+  truncado: boolean; // la carpeta tiene mas de las que caben
+}
+
+export interface Busqueda {
+  ruta: string;
+  q: string;
+  resultados: (Entrada & { ruta: string })[];
+  truncado: boolean;
 }
 
 export interface Reciente {
   ruta: string;
+  nombre: string;
+  carpeta: string;
   bajado: string;
   tamano: number;
-  estado: 'igual' | 'nueva_version' | 'no_esta';
+  dispositivo: string; // el telefono que lo bajo
+  estado: 'igual' | 'nueva_version' | 'no_esta'; // contra lo que hay AHORA en la PC
+}
+
+export interface Favorito {
+  ruta: string;
+  nombre: string;
+  tipo: 'carpeta' | 'archivo';
+  existe: boolean;
+  desde: string;
 }

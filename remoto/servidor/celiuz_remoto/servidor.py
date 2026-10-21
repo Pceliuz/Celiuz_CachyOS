@@ -22,10 +22,11 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.parse
 
 from aiohttp import WSCloseCode, web
 
-from . import VERSION_PROTOCOLO, ajustes, dispositivos as dsp, escritorio, inicio, pase, red, registro, rutas
+from . import VERSION_PROTOCOLO, ajustes, archivos, dispositivos as dsp, escritorio, historial, inicio, pase, red, registro, rutas
 from .energia import ACCIONES, Energia
 from .vigilancia import CADA as VIGILANCIA_CADA, Vigilancia
 from .sesion import FIRMA_MALA, Rechazo, Sesiones, firma_buena, texto_firmado
@@ -115,6 +116,7 @@ class Servicio:
         self._runners = []
         self._tareas = set()
         self._pendiente = None     # (runner, plazo) del canal USB que se esta soltando
+        self._miniaturas = asyncio.Semaphore(2)   # ffmpeg de dos en dos, no de cien en cien
 
     # --- utilidades ---
 
@@ -278,6 +280,86 @@ class Servicio:
             raise _rechazo(409, "estado", f"No puedo entrar: {mensaje}.")
         registro.apuntar("entrar_escritorio", disp["id"])
         return web.json_response({"pedido": True, "mensaje": mensaje})
+
+    # --- archivos (fase 6): permiso `archivos` y pase en todo, solo lectura ---
+
+    def _de_archivos(self, peticion):
+        _, disp = self._telefono(peticion, "archivos")
+        self._pase(disp)
+        return disp
+
+    @staticmethod
+    async def _en_hilo(funcion, *args):
+        """Lo de disco va a un hilo, y sus dos fallos se convierten en respuesta."""
+        try:
+            return await asyncio.get_running_loop().run_in_executor(None, funcion, *args)
+        except archivos.Fuera as e:
+            raise _rechazo(403, "fuera", f"Eso no se enseña desde el celular: {e}.") from None
+        except archivos.NoExiste:
+            raise _rechazo(404, "no_existe", "No está en la PC.") from None
+
+    async def v0_archivos(self, peticion):
+        self._de_archivos(peticion)
+        ocultos = peticion.query.get("ocultos") == "1"
+        d = await self._en_hilo(archivos.listar, peticion.query.get("ruta", ""), ocultos)
+        fijados = await self._en_hilo(historial.rutas_favoritas)
+        for e in d["entradas"]:
+            e["favorito"] = (os.path.join(d["ruta"], e["nombre"]) if d["ruta"] else e["nombre"]) in fijados
+        return web.json_response(d)
+
+    async def v0_buscar(self, peticion):
+        self._de_archivos(peticion)
+        q = peticion.query.get("q", "")
+        if len(q.strip()) < 2:
+            raise _rechazo(400, "peticion", "Escribe al menos dos letras.")
+        return web.json_response(await self._en_hilo(
+            archivos.buscar, peticion.query.get("ruta", ""), q, peticion.query.get("ocultos") == "1"))
+
+    async def v0_descargar(self, peticion):
+        disp = self._de_archivos(peticion)
+        absoluta, relativa, st = await self._en_hilo(archivos.archivo, peticion.query.get("ruta", ""))
+        # Solo cuenta como «bajado» la peticion que empieza por el principio: un
+        # Range que reanuda a medias es la misma descarga, no otra.
+        try:
+            desde = peticion.http_range.start
+        except ValueError:
+            desde = None
+        if not desde:
+            await self._en_hilo(historial.apuntar_descarga, relativa, st, disp["id"])
+            registro.apuntar("descarga", disp["id"], ruta=relativa, tamano=st.st_size)
+        nombre = urllib.parse.quote(os.path.basename(relativa))
+        return web.FileResponse(absoluta, chunk_size=256 * 1024, headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{nombre}",
+            "Cache-Control": "no-store"})
+
+    async def v0_miniatura(self, peticion):
+        self._de_archivos(peticion)
+        try:
+            lado = int(peticion.query.get("lado", "256"))
+        except ValueError:
+            raise _rechazo(400, "peticion", "«lado» es un número.") from None
+        async with self._miniaturas:
+            destino = await self._en_hilo(archivos.miniatura, peticion.query.get("ruta", ""), lado)
+        return web.FileResponse(destino, headers={"Cache-Control": "private, max-age=86400"})
+
+    async def v0_recientes(self, peticion):
+        self._de_archivos(peticion)
+        if peticion.method == "DELETE":
+            ruta = peticion.query.get("ruta")
+            return web.json_response({"olvidados": await self._en_hilo(historial.olvidar, ruta)})
+        return web.json_response({"recientes": await self._en_hilo(historial.recientes)})
+
+    async def v0_favoritos(self, peticion):
+        disp = self._de_archivos(peticion)
+        if peticion.method == "PUT":
+            d = await _cuerpo(peticion)
+            if not isinstance(d.get("ruta"), str):
+                raise _rechazo(400, "peticion", "Falta «ruta».")
+            relativa = await self._en_hilo(historial.fijar, d["ruta"])
+            registro.apuntar("favorito", disp["id"], ruta=relativa)
+        elif peticion.method == "DELETE":
+            await self._en_hilo(historial.soltar, peticion.query.get("ruta", ""))
+        return web.json_response({"favoritos": await self._en_hilo(historial.favoritos)})
 
     async def v0_latido(self, peticion):
         """«Me estan apagando» (y de paso, una señal). Sin sesion: lo manda un
@@ -524,6 +606,15 @@ class Servicio:
             web.post("/v0/latido", self.v0_latido),
             web.get("/v0/escritorio", self.v0_escritorio),
             web.post("/v0/escritorio/entrar", self.v0_entrar_escritorio),
+            web.get("/v0/archivos", self.v0_archivos),
+            web.get("/v0/archivos/buscar", self.v0_buscar),
+            web.get("/v0/archivos/descargar", self.v0_descargar),
+            web.get("/v0/archivos/miniatura", self.v0_miniatura),
+            web.get("/v0/recientes", self.v0_recientes),
+            web.delete("/v0/recientes", self.v0_recientes),
+            web.get("/v0/favoritos", self.v0_favoritos),
+            web.put("/v0/favoritos", self.v0_favoritos),
+            web.delete("/v0/favoritos", self.v0_favoritos),
         ])
         return app
 
