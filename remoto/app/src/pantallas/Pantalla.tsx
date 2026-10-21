@@ -10,6 +10,12 @@
 // Lo tecleado va por un campo nativo invisible, como en la terminal (Gboard
 // dentro de un WebView repetía las palabras), y llega a la página por texto().
 // Mientras se mira, el celular puede girar a horizontal.
+//
+// MANDO o TÁCTIL (el usuario, 2026-10-21: apuntar con el dedo en una pantalla
+// encogida era «realmente horrible»). De fábrica, MANDO: joystick, botones de
+// clic y rueda, y escritorios 1-9 (Super+número), pintados por la página
+// (scripts/mando.js) para que el joystick no pase por el puente de React
+// Native en cada movimiento. «Táctil» vuelve a lo de antes: tocar la imagen.
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { type ComponentType, type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
@@ -49,6 +55,7 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
   const [pidiendo, setPidiendo] = useState(false);
   const [estado, setEstado] = useState<'conectando' | 'conectado' | 'cerrado'>('conectando');
   const [ajustada, setAjustada] = useState(true);
+  const [modo, setModo] = useState<'mando' | 'tactil'>('mando');
   const [teclado, setTeclado] = useState(0);
   const web = useRef<Web>(null);
   const campo = useRef<{ focus(): void; clear(): void }>(null);
@@ -90,7 +97,10 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
   function alMensaje(datos: string) {
     let m: { t: string };
     try { m = JSON.parse(datos); } catch { return; }
-    if (m.t === 'listo' && billete) inyectar(`window.conectar(${JSON.stringify(conexion.urlPantalla(billete))})`);
+    if (m.t === 'listo' && billete) {
+      inyectar(`window.conectar(${JSON.stringify(conexion.urlPantalla(billete))})`);
+      inyectar(`window.modo(${JSON.stringify(modo)})`);
+    }
     else if (m.t === 'conectado') setEstado('conectado');
     else if (m.t === 'desconectado' || m.t === 'fallo') setEstado('cerrado');
   }
@@ -105,6 +115,12 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
     if (nuevo) inyectar(`window.texto(${JSON.stringify(nuevo)})`);
     ultimo.current = t;
     if (t.length > 120) { ultimo.current = ''; campo.current?.clear(); }
+  }
+
+  function cambiarModo() {
+    const nuevo = modo === 'mando' ? 'tactil' : 'mando';
+    setModo(nuevo);
+    inyectar(`window.modo(${JSON.stringify(nuevo)})`);
   }
 
   function tecla(t: (typeof TECLAS)[number]) {
@@ -137,6 +153,10 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
         <View style={{ flex: 1 }}>
           <Texto tipo="chico">{estado === 'conectado' ? conexion.equipo.equipo : estado === 'conectando' ? 'Conectando…' : 'Desconectada'}</Texto>
         </View>
+        <Pressable accessibilityRole="button" onPress={cambiarModo}
+                   style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
+          <Texto tipo="chico" color={colores.neon}>{modo === 'mando' ? 'Modo táctil' : 'Modo mando'}</Texto>
+        </Pressable>
         <Pressable accessibilityRole="button" onPress={() => { setBillete(null); alVolver(); }}
                    style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
           <Texto tipo="chico" color={colores.alerta}>Cerrar</Texto>

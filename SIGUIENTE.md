@@ -10,6 +10,21 @@ terminal de Celiuz Remoto (la PC en SDDM, el usuario en el trabajo).
 
 ---
 
+## 2026-10-21 (noche, PC): el «modo mando» de la pantalla remota
+
+Apuntar con el dedo en la pantalla encogida era «realmente horrible» (el
+usuario). `remoto/app/scripts/mando.js`, pintado DENTRO de la página de noVNC
+(sin pasar por el puente de React Native en cada movimiento): joystick (zona
+muerta, velocidad cuadrática), la imagen como touchpad (arrastrar mueve, tocar
+clica donde está el cursor), Clic / Derecho / Mantener / Rueda, y escritorios
+1-9 (Super+número). Cursor propio, porque el de noVNC en un celular solo sigue
+al dedo. De fábrica «mando»; «Modo táctil» en la cabecera vuelve a lo de antes.
+Usa internos de noVNC 1.7 (`_sock`, `_display`, `_fbWidth`): si cambian, el
+mando no hace nada y el táctil sigue. Prueba: `unidad/remoto-mando` (las
+cuentas, con Node). Visto en un Chromium sin ventana (vertical y horizontal),
+**sin probar en el celular**: APK en `~/Descargas/celiuz-remoto-mando.apk` de
+la PC (firmado con la clave de la PC).
+
 ## 2026-10-21 (tarde-noche, PC): la guía de instalación del remoto, y SDDM sin uwsm
 
 El usuario estaba instalando Celiuz Remoto con un amigo, en su laptop y la del
