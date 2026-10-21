@@ -955,14 +955,34 @@ remoto() {
     # fuera, `systemctl --user disable` (el boton de apagar de la app) BORRA
     # el enlace, y despues ya no habia servicio que volver a encender. Medido
     # el 2026-10-20. La copia se refresca aqui cada vez que cambie en el repo.
-    local unidad="$unidades/celiuz-remoto.service"
-    if [ -L "$unidad" ] || ! cmp -s "$REPO/remoto/servidor/celiuz-remoto.service" "$unidad"; then
-        hacer rm -f "$unidad"
-        hacer install -m 0644 "$REPO/remoto/servidor/celiuz-remoto.service" "$unidad"
-        hacer systemctl --user daemon-reload 2>/dev/null
-        hecho "  unidad de systemd puesta al dia: $unidad"
-    else
-        gris "  unidad de systemd al dia"
+    local nombre unidad
+    for nombre in celiuz-remoto.service celiuz-remoto-anclaje.service; do
+        unidad="$unidades/$nombre"
+        if [ -L "$unidad" ] || ! cmp -s "$REPO/remoto/servidor/$nombre" "$unidad"; then
+            hacer rm -f "$unidad"
+            hacer install -m 0644 "$REPO/remoto/servidor/$nombre" "$unidad"
+            hacer systemctl --user daemon-reload 2>/dev/null
+            hecho "  unidad de systemd puesta al dia: $unidad"
+        else
+            gris "  unidad de systemd al dia: $nombre"
+        fi
+    done
+    # El del anclaje USB SI se enciende: no escucha por la red y solo le pide
+    # internet a un celular que ya se lo daba a esta PC (anclaje.py).
+    if ! systemctl --user is-enabled --quiet celiuz-remoto-anclaje.service 2>/dev/null; then
+        if hacer systemctl --user enable --now celiuz-remoto-anclaje.service 2>/dev/null \
+           && [ "$SOLO_REVISAR" -eq 0 ]; then
+            hecho "  encendido: que vuelva el internet del celular por USB al reiniciar"
+        fi
+    fi
+    local falta_anclaje
+    falta_anclaje="$(python3 -c 'import json,sys; sys.path.insert(0, sys.argv[1])
+from celiuz_remoto import anclaje
+print("\n".join(anclaje.revisar()["falta"]))' "$REPO/remoto/servidor" 2>/dev/null)"
+    if [ -n "$falta_anclaje" ]; then
+        while IFS= read -r linea; do
+            aviso "internet del celular por USB tras reiniciar: $linea"
+        done <<< "$falta_anclaje"
     fi
 
     local faltan
@@ -979,6 +999,10 @@ remoto() {
         echo "  apagado (es opcional: se enciende desde la app Celiuz Remoto)"
         [ -n "$faltan" ] && gris "    para usarlo haria falta: sudo pacman -S $faltan"
     fi
+    local opcionales
+    opcionales="$(python3 "$REPO/remoto/servidor/celiuz-remoto.py" revisar --json 2>/dev/null \
+                  | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)["opcionales_faltan"]))' 2>/dev/null)"
+    [ -n "$opcionales" ] && gris "    opcional (miniaturas, ver la pantalla): sudo pacman -S $opcionales"
     remoto_sistema_estado
     hacer update-desktop-database "$DATOS/applications" 2>/dev/null
     hacer gtk-update-icon-cache -f -t "$DATOS/icons/hicolor" 2>/dev/null

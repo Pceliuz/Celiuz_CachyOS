@@ -25,6 +25,7 @@ remoto/servidor/celiuz-remoto.py — el servicio de Celiuz Remoto.
     celiuz-remoto.py despertar [MAC]    sin MAC: la de este equipo y si puede despertarse; con MAC: despierta a ese
     celiuz-remoto.py invitar [--horas 2] [--permisos estado,ventanas,pantalla] [--cancelar]
                                         ayudar a un amigo: una invitación sin cable, de un solo uso
+    celiuz-remoto.py anclaje [--vigilar]  el internet del celular por USB: que vuelva al reiniciar
 
 Un <id> vale entero, por su principio o por el nombre del telefono. El diseño,
 en remoto/DISEÑO.md; lo que se dicen la app y el servidor, en PROTOCOLO.md.
@@ -502,6 +503,23 @@ def cmd_despertar(args):
     return 0 if por else 1
 
 
+def cmd_anclaje(args):
+    from celiuz_remoto import anclaje
+    if args.vigilar:
+        return anclaje.vigilar()
+    r = anclaje.revisar()
+    if not r["recordados"]:
+        print("  Ningún celular le ha dado internet por USB a esta PC: no hay nada que vigilar.")
+        return 0
+    for serie, c in r["recordados"].items():
+        print(f"  {c.get('nombre') or serie} ({serie}): se le vuelve a pedir el anclaje ({c.get('funcion')})")
+    print(f"  sin sesión abierta  {'sí' if r['permiso_sin_sesion'] else 'no: en la pantalla de inicio adb no puede abrir el USB'}")
+    print(f"  arranca con la PC   {'sí (linger)' if r['linger'] else 'no: solo al entrar'}")
+    for f in r["falta"]:
+        print(f"  Falta: {f}")
+    return 0
+
+
 def cmd_invitar(args):
     from celiuz_remoto import control
     try:
@@ -625,6 +643,10 @@ def main(argv=None):
     s.add_argument("--permisos")
     s.add_argument("--cancelar", action="store_true")
     s.set_defaults(func=cmd_invitar)
+
+    s = sub.add_parser("anclaje", help="que vuelva el internet del celular por USB al reiniciar")
+    s.add_argument("--vigilar", action="store_true", help="el demonio (lo arranca su unidad)")
+    s.set_defaults(func=cmd_anclaje)
 
     s = sub.add_parser("registro", help="lo ultimo que paso")
     s.add_argument("-n", type=int, default=30)

@@ -1,0 +1,23 @@
+# remoto/servidor/celiuz-remoto-anclaje.service — que vuelva el internet del
+# celular por USB al reiniciar (celiuz_remoto/anclaje.py).
+#
+# A diferencia de celiuz-remoto.service, este SI lo enciende ./instalar.sh: no
+# escucha por la red y solo toca a un celular que ya le dio internet a esta PC
+# y solo si la PC se quedo sin. Sin adb sale con 0 y no se relanza.
+#
+# Para que sirva en la pantalla de inicio hacen falta linger (que arranque con
+# la PC) y android-udev (permiso del USB sin sesion): `celiuz-remoto anclaje`
+# dice si falta algo. Se COPIA como la otra unidad, por lo mismo.
+[Unit]
+Description=Celiuz Remoto: que vuelva el internet del celular por USB al reiniciar
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/celiuz-remoto anclaje --vigilar
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

@@ -119,14 +119,16 @@ UNIDAD="$REPO/remoto/servidor/celiuz-remoto.service"
 afirmar_contiene "$UNIDAD" '^ExecStart=%h/\.local/bin/celiuz-remoto servir$' \
     "la unidad arranca por el enlace de ~/.local/bin (vale se clone donde se clone)"
 afirmar_contiene "$UNIDAD" '^Restart=on-failure$' "   y se reintenta si Tailscale aun no tiene IP"
-# «is-enabled» solo mira: lo que no puede aparecer es un enable o un start
-afirmar_no_contiene "$REPO/instalar.sh" 'systemctl --user (enable|start|restart) .*celiuz-remoto' \
+# «is-enabled» solo mira: lo que no puede aparecer es un enable o un start. El
+# del anclaje USB (celiuz-remoto-anclaje) si se enciende: no escucha por la red.
+afirmar_no_contiene "$REPO/instalar.sh" 'systemctl --user (enable|start|restart) .*celiuz-remoto(\.service|[^-]|$)' \
     "instalar.sh NO la enciende (se enciende a mano desde la app de la PC)"
 # Enlazada, `systemctl --user disable` (el boton de apagar) BORRA el enlace y ya
 # no se puede volver a encender: tiene que ir copiada (medido el 2026-10-20).
 afirmar_no_contiene "$REPO/instalar.sh" 'enlazar .*celiuz-remoto\.service' \
     "la unidad se COPIA, no se enlaza (el disable borraría el enlace)"
-afirmar_contiene "$REPO/instalar.sh" 'install -m 0644 .*celiuz-remoto\.service' "   con install -m 0644"
+afirmar_contiene "$REPO/instalar.sh" 'install -m 0644 .*remoto/servidor/\$nombre' "   con install -m 0644"
+afirmar_contiene "$REPO/instalar.sh" 'for nombre in celiuz-remoto\.service ' "   y entre las que se copian está ella"
 afirmar_contiene "$ESC/celiuz-remoto.desktop" '^Exec=celiuz-remoto-config$' \
     "el .desktop la lanza por el PATH, sin rutas absolutas"
 afirmar_contiene "$ESC/celiuz-remoto.desktop" '^StartupWMClass=celiuz-remoto$' \
