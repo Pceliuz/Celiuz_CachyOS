@@ -135,7 +135,7 @@ export default function App() {
                          fijarAtras={fijarAtras} />;
   } else if (pestana === 'terminal') {
     pantalla = <Terminal conexion={conexion} alCambiar={setPestana} alCaducar={caducar}
-                         alVerPase={() => setVerPase(true)} />;
+                         alVerPase={() => setVerPase(true)} fijarAtras={fijarAtras} />;
   } else if (pestana === 'apps') {
     pantalla = <Apps conexion={conexion} alCambiar={setPestana} alVerPase={() => setVerPase(true)}
                      alCaducar={caducar} />;

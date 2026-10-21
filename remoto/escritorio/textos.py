@@ -71,7 +71,8 @@ VIGILANCIA = {
     "sin_telefonos": "Armada, pero sin nadie a quien vigilar: hace falta un teléfono con pase "
                      "que haya entrado alguna vez por Tailscale.",
     "armada": "Armada: vigilando.",
-    "avisando": "Armada. Un teléfono calló más de 2 h y había alguien delante: se avisó y no se apagó.",
+    "avisando": "Armada. Un teléfono calló más de 1 h y había alguien delante: se avisó y no se apagó.",
+    "jugando": "Armada. Un teléfono calló más de 1 h en pleno modo gaming: se avisó y no se apagó.",
     "apagando": "Armada. Todos callaron y no había nadie: apagando.",
 }
 

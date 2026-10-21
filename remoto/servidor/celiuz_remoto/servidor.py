@@ -63,6 +63,13 @@ def _rechazo(http, error, mensaje, **extra):
     return Rechazo(http, error, mensaje, **extra)
 
 
+def _tamano_terminal(peticion):
+    try:
+        return int(peticion.query.get("filas", "24")), int(peticion.query.get("columnas", "80"))
+    except ValueError:
+        return 24, 80
+
+
 async def _cuerpo(peticion, *campos):
     try:
         datos = await peticion.json()
@@ -515,15 +522,13 @@ class Servicio:
         return disp, None, None
 
     async def v0_terminal(self, peticion):
+        """Abre una terminal NUEVA con el billete. Lo primero que le llega al
+        celular es su ficha en texto ({"terminal": {...}}): con su id la retoma."""
         token, disp = self._telefono(peticion, "terminal")
         self._pase(disp)
         if not self.terminales.gastar_billete(peticion.match_info["id"], disp):
             raise _rechazo(401, "firma", "Ese billete de terminal no vale (caducó o ya se usó).")
-        try:
-            filas = int(peticion.query.get("filas", "24"))
-            columnas = int(peticion.query.get("columnas", "80"))
-        except ValueError:
-            filas, columnas = 24, 80
+        filas, columnas = _tamano_terminal(peticion)
         ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1024 * 1024)
         await ws.prepare(peticion)
         try:
@@ -531,51 +536,106 @@ class Servicio:
         except OSError as e:
             await ws.close(code=WSCloseCode.INTERNAL_ERROR, message=f"no pude abrir la shell: {e}".encode()[:120])
             return ws
-        ident = peticion.match_info["id"]
-        self.terminales.abiertas[ident] = (pty, disp["id"])
-        registro.apuntar("terminal_abierta", disp["id"], shell=term.shell_del_usuario())
+        sesion = self.terminales.nueva(pty, disp["id"], self._al_salir_terminal)
+        registro.apuntar("terminal_abierta", disp["id"], shell=term.shell_del_usuario(), numero=sesion.numero)
         self.avisar_normal("Celiuz Remoto: terminal abierta",
                            f"«{disp['nombre']}» abrió una terminal en esta PC.")
-        motivo = "cerrada"
+        return await self._mirar_terminal(ws, sesion, token, filas, columnas, retomada=False)
 
-        async def salida():
-            async for datos in pty.leer():
-                if ws.closed:
-                    return
-                await ws.send_bytes(datos)
+    async def v0_retomar_terminal(self, peticion):
+        """Vuelve a una terminal que sigue abierta (minimizada, o se cortó la
+        red). Sin la contraseña: este telefono ya la dio al abrirla, y retomar
+        pide igual sesion, permiso y pase. Solo las de ESTE telefono."""
+        token, disp = self._telefono(peticion, "terminal")
+        self._pase(disp)
+        sesion = self.terminales.una(peticion.match_info["id"], disp["id"])
+        if sesion is None:
+            raise _rechazo(404, "no_existe", "Esa terminal ya no está abierta en la PC.")
+        filas, columnas = _tamano_terminal(peticion)
+        ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1024 * 1024)
+        await ws.prepare(peticion)
+        return await self._mirar_terminal(ws, sesion, token, filas, columnas, retomada=True)
+
+    async def v0_terminales(self, peticion):
+        """GET: las terminales abiertas de este telefono. DELETE /{id}: cerrar una."""
+        _, disp = self._telefono(peticion, "terminal")
+        self._pase(disp)
+        if peticion.method == "DELETE":
+            sesion = self.terminales.una(peticion.match_info["id"], disp["id"])
+            if sesion is None:
+                raise _rechazo(404, "no_existe", "Esa terminal ya no está abierta en la PC.")
+            if await self.terminales.cerrar(sesion, term.CIERRE_CERRADA, "cerrada"):
+                self._apuntar_cierre(sesion, "cerrada")
+        return web.json_response({"terminales": [x.ficha() for x in self.terminales.de(disp["id"])],
+                                  "max": term.MAX_ABIERTAS})
+
+    async def _mirar_terminal(self, ws, sesion, token, filas, columnas, retomada):
+        await ws.send_str(json.dumps({"terminal": sesion.ficha()}))
+        await sesion.mirar(ws, filas, columnas, retomada)
 
         async def vigilar():
             while True:
                 await asyncio.sleep(5)
                 _, codigo, por_que = self._sigue_valiendo(token)
                 if codigo:
-                    return codigo, por_que
+                    return por_que
 
-        t_salida = asyncio.ensure_future(salida())
         t_vigia = asyncio.ensure_future(vigilar())
-        t_entrada = asyncio.ensure_future(self._entrada_terminal(ws, pty))
+        t_entrada = asyncio.ensure_future(self._entrada_terminal(ws, sesion.pty))
         try:
-            hecho, _ = await asyncio.wait({t_salida, t_vigia, t_entrada}, return_when=asyncio.FIRST_COMPLETED)
-            if t_salida in hecho:
-                motivo = "salio"
-                if not ws.closed:
-                    await ws.close(code=term.CIERRE_SALIO, message=b"salio")
-            elif t_vigia in hecho:
-                codigo, motivo = t_vigia.result()
-                if not ws.closed:
-                    await ws.close(code=codigo, message=motivo.encode())
+            hecho, _ = await asyncio.wait({t_vigia, t_entrada}, return_when=asyncio.FIRST_COMPLETED)
+            if t_vigia in hecho:
+                por_que = t_vigia.result()
+                if por_que == "sin_sesion":
+                    # La sesion de la app caduco: la terminal no tiene la culpa.
+                    # Se suelta y se retoma al volver a entrar.
+                    if not ws.closed:
+                        await ws.close(code=term.CIERRE_SIN_SESION, message=b"sin_sesion")
+                elif await self.terminales.cerrar(sesion, term.CIERRE_SIN_PERMISO, por_que):
+                    self._apuntar_cierre(sesion, por_que)
         except (ConnectionResetError, asyncio.CancelledError):
             pass
         finally:
-            for t in (t_salida, t_vigia, t_entrada):
+            for t in (t_vigia, t_entrada):
                 t.cancel()
-            await pty.cerrar()
-            self.terminales.abiertas.pop(ident, None)
-            registro.apuntar("terminal_cerrada", disp["id"], por=motivo,
-                             segundos=round(time.time() - pty.desde))
+            sesion.soltar(ws)
             if not ws.closed:
                 await ws.close(code=WSCloseCode.GOING_AWAY)
         return ws
+
+    async def _al_salir_terminal(self, sesion):
+        if await self.terminales.cerrar(sesion, term.CIERRE_SALIO, "salio"):
+            self._apuntar_cierre(sesion, "salio")
+
+    @staticmethod
+    def _apuntar_cierre(sesion, por):
+        registro.apuntar("terminal_cerrada", sesion.dispositivo, por=por, numero=sesion.numero,
+                         segundos=round(time.time() - sesion.pty.desde))
+
+    async def _vigilar_terminales(self):
+        """Lo que el WebSocket no puede mirar porque con la terminal SUELTA no
+        hay WebSocket: que el telefono siga teniendo permiso y pase (o que no
+        lo hayan revocado), y que no lleve suelta mas de SUELTA_DURA."""
+        loop = asyncio.get_running_loop()
+        while True:
+            await asyncio.sleep(5)
+            if not self.terminales.cuantas():
+                continue
+            try:
+                telefonos = {d["id"]: d for d in await loop.run_in_executor(None, self.almacen.todos)}
+            except Exception as e:  # noqa: BLE001  un almacen ilegible no tumba el vigia
+                print(f"celiuz-remoto: el vigía de terminales no pudo leer los teléfonos: {e!r}", file=sys.stderr)
+                continue
+            for sesion in list(self.terminales.abiertas.values()):
+                d = telefonos.get(sesion.dispositivo)
+                por_que = ("revocado" if d is None else
+                           "sin_permiso" if "terminal" not in d.get("permisos", []) else
+                           "pase_vencido" if not pase.vigente(d) else None)
+                if por_que and await self.terminales.cerrar(sesion, term.CIERRE_SIN_PERMISO, por_que):
+                    self._apuntar_cierre(sesion, por_que)
+            for sesion in self.terminales.sueltas_de_mas():
+                if await self.terminales.cerrar(sesion, term.CIERRE_CERRADA, "olvidada"):
+                    self._apuntar_cierre(sesion, "olvidada")
 
     # --- escritorio remoto (fase 8): permiso `pantalla`, pase y contraseña otra vez ---
 
@@ -1039,6 +1099,9 @@ class Servicio:
             web.delete("/v0/favoritos", self.v0_favoritos),
             web.post("/v0/terminal", self.v0_abrir_terminal),
             web.get("/v0/terminal/{id}", self.v0_terminal),
+            web.get("/v0/terminales", self.v0_terminales),
+            web.delete("/v0/terminales/{id}", self.v0_terminales),
+            web.get("/v0/terminales/{id}", self.v0_retomar_terminal),
             web.post("/v0/pantalla", self.v0_abrir_pantalla),
             web.get("/v0/pantalla/{id}", self.v0_pantalla),
         ])
@@ -1083,6 +1146,7 @@ class Servicio:
             os.umask(viejo)
         self._runners.append(c)
         self._tareas.add(asyncio.ensure_future(self._vigilar()))
+        self._tareas.add(asyncio.ensure_future(self._vigilar_terminales()))
 
     async def parar(self):
         for tarea in list(self._tareas):

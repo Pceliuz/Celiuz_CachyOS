@@ -109,22 +109,29 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
 
 ### La vigilancia (el interruptor por silencio del celular)
 - El celular manda un **latido** cada pocos minutos. Cualquier latido, aunque
-  llegue con internet bajo, **reinicia la cuenta atrás de 2 horas**.
-- Si Android avisa de que lo están apagando (`ACTION_SHUTDOWN`), la app manda un
-  último «me están apagando» y la cuenta pasa a **1 hora**. Es de mejor
-  esfuerzo: si en ese momento no hay red, no llega, y vale la regla de 2 h. El
-  modo avión no avisa.
+  llegue con internet bajo, **reinicia la cuenta atrás de 1 hora**.
+- Era de 2 horas, con 1 si Android avisaba «me están apagando». El usuario lo
+  igualó a 1 h (2026-10-21): un celular que se apaga por una mala conexión es
+  el mismo caso que uno que avisa, y ese aviso no se llegó a hacer (ver «Fase
+  8»). El servidor sigue apuntando el «me están apagando» si llega, pero ya no
+  cambia la cuenta.
 - Al llegar a cero:
   - **si hay una persona delante** (teclado o ratón recientes, **o un vídeo
     reproduciéndose**: viendo anime no se toca el ratón en 20 minutos), **no se
-    apaga**: notifica «tu celular lleva 2 h sin dar señales, revísalo» y vuelve
+    apaga**: notifica «tu celular lleva 1 h sin dar señales, revísalo» y vuelve
     a contar;
+  - **si la PC está en el modo gaming, tampoco se apaga** (lo pidió el
+    usuario, 2026-10-21): jugando no mira el celular ni las notificaciones, y
+    apagarle la PC a media partida es peor que el riesgo. Solo avisa («tu
+    celular dejó de dar señales mientras jugabas»), y el aviso sale al salir
+    del modo, que tiene puesto el «no molestar». En el modo normal sigue la
+    regla de la persona delante;
   - si no hay nadie, **se apaga**. Una descarga o un render en marcha NO cuentan
     como persona: si te roban el celular, la PC no debe quedarse encendida
     porque estaba bajando algo.
-- Con varios teléfonos: al que pasa 2 h callado **se le quita el pase** (no se
+- Con varios teléfonos: al que pasa 1 h callado **se le quita el pase** (no se
   desempareja: se recupera por cable); si callan todos, se apaga la PC.
-- Si se va el internet de casa más de 2 h, la PC tampoco oye a nadie y se
+- Si se va el internet de casa más de 1 h, la PC tampoco oye a nadie y se
   apaga. Es lo correcto para lo que se quiere.
 - Para que Android no mate la app, mientras la vigilancia está armada la app
   lleva una **notificación fija** y hay que quitarle la optimización de batería.
@@ -233,6 +240,16 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
   Tab, Ctrl, Alt, flechas, Inicio/Fin y RePág/AvPág.
 - El permiso se da o se quita por teléfono en la ventana de la PC
   («Permisos», en la tarjeta de cada uno); quitarlo cierra la terminal abierta.
+- **Varias, y se minimizan** (el usuario, 2026-10-21: quería dejar corriendo
+  algo, abrir otra para hacer commits y mirar el estado o bajar un .docx sin
+  perder la sesión). La terminal vive en la PC, no en la pantalla: minimizar,
+  cambiar de pestaña, «Atrás» o perder la red solo la SUELTAN, y se retoma
+  desde la lista de la pestaña Terminal **sin la contraseña** (ya se dio al
+  abrirla; retomar pide igual sesión, permiso y pase, y solo vale para el
+  teléfono que la abrió), con lo último que salió repintado. Como mucho 5
+  entre todos. Suelta más de **1 h** se cierra sola: una shell con sudo
+  recordado no se queda abierta para siempre sin nadie. Abrir una NUEVA sigue
+  pidiendo la contraseña.
 
 ## Fases
 
@@ -303,7 +320,7 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
   `ACTION_SHUTDOWN` que leyera la clave del almacén seguro de Expo y mandara
   una petición firmada mientras el celular se apaga. Es de mejor esfuerzo por
   diseño (sin red no llega), Android no garantiza que ese aviso llegue a una
-  app cerrada, y la vigilancia ya funciona sin él (2 h de silencio). El
+  app cerrada, y la vigilancia ya funciona sin él (1 h de silencio). El
   servidor lo sigue aceptando (`/v0/latido`) por si un día se hace.
 
 ## Lo que NO entra en git (la regla de oro)

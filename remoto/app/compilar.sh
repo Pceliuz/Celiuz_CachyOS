@@ -85,7 +85,17 @@ node scripts/gen-pantalla.mjs
 echo "Generando el proyecto de Android (expo prebuild)..."
 CI=1 EXPO_NO_GIT_STATUS=1 npx expo prebuild --platform android --clean --no-install >/dev/null
 echo "Compilando (Gradle; la primera vez tarda varios minutos)..."
-( cd android && ./gradlew --quiet assembleRelease -PreactNativeArchitectures="$ARQUITECTURAS" )
+# Ni el demonio de Gradle ni el de Kotlin se quedan vivos al acabar. De
+# fabrica se quedan HORAS esperando la siguiente compilacion: medido el
+# 2026-10-21, 3,3 GB el de Gradle y 1,5 GB el de Kotlin, con la compilacion
+# ya terminada (y aqui se compila de vez en cuando, no cada minuto). Kotlin
+# compila dentro de Gradle, y Gradle se para al final aunque falle.
+( cd android
+  r=0
+  ./gradlew --quiet assembleRelease -PreactNativeArchitectures="$ARQUITECTURAS" \
+      -Pkotlin.compiler.execution.strategy=in-process || r=$?
+  ./gradlew --quiet --stop >/dev/null 2>&1 || true
+  exit "$r" )
 SIN_FIRMA="$APP/android/app/build/outputs/apk/release/app-release.apk"
 [ -f "$SIN_FIRMA" ] || { rojo "Gradle no dejo el APK donde se esperaba: $SIN_FIRMA"; exit 1; }
 

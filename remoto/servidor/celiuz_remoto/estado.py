@@ -72,18 +72,38 @@ class _Mem(ctypes.Structure):
 
 class Nvml:
     """Lo minimo de NVML. Si la libreria no esta o no arranca, `ok` es False y
-    la GPU sale sin numeros: no es un error del servicio."""
+    la GPU sale sin numeros: no es un error del servicio.
 
-    def __init__(self):
+    Que no arranque al principio NO es para siempre: con linger el servicio
+    nace antes que /dev/nvidiactl (medido el 2026-10-21: servicio a las
+    07:02:31, los nodos de la tarjeta a las 07:02:34), y la GPU salia «—» todo
+    el dia. Se reintenta cada REINTENTO segundos mientras haya libreria."""
+
+    REINTENTO = 30
+
+    def __init__(self, lib=None, reloj=time.monotonic):
         self.ok = False
-        self.lib = None
+        self.reloj = reloj
+        self.lib = lib
+        if self.lib is None:
+            try:
+                self.lib = ctypes.CDLL("libnvidia-ml.so.1")
+            except OSError:
+                self.lib = None
+        self._iniciar()
+
+    def _iniciar(self):
+        self._intento = self.reloj()
+        if self.lib is None:
+            return
         try:
-            self.lib = ctypes.CDLL("libnvidia-ml.so.1")
             self.ok = self.lib.nvmlInit_v2() == 0
-        except (OSError, AttributeError):
+        except AttributeError:
             self.ok = False
 
     def medir(self, pci):
+        if not self.ok and self.lib is not None and self.reloj() - self._intento >= self.REINTENTO:
+            self._iniciar()
         if not self.ok:
             return {}
         disp = ctypes.c_void_p()

@@ -60,7 +60,9 @@ sys.path.insert(0, sys.argv[1])
 TMP = sys.argv[2]
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from celiuz_remoto import ajustes, dispositivos as dsp, estado, pase, red, registro, sesion
+from celiuz_remoto import ajustes, conversion, dispositivos as dsp, estado, pase, red, registro, sesion
+from celiuz_remoto import terminal as term
+from types import SimpleNamespace
 
 def comprobar(desc, cond):
     print(("ok|" if cond else "fallo|") + desc)
@@ -150,6 +152,47 @@ m2 = estado.Muestreador(hw=dict(hw, gpus=[]), nvml=None, pci_raiz=pci, casa=TMP)
 comprobar("sin bateria, bateria es null", m2.tomar()["bateria"] is None)
 comprobar("en un hibrido no se arranca NVML nunca",
           estado.Muestreador(hw=hw, pci_raiz=pci, casa=TMP).nvml is None)
+
+# --- NVML que no arranca al principio (el servicio nacio antes que la tarjeta)
+class LibNvmlTardia:
+    def __init__(self): self.inits = 0
+    def nvmlInit_v2(self):
+        self.inits += 1
+        return 0 if self.inits >= 2 else 9   # 9 = NVML_ERROR_DRIVER_NOT_LOADED
+    def nvmlDeviceGetHandleByPciBusId_v2(self, pci, ref): return 0
+    def nvmlDeviceGetUtilizationRates(self, d, ref): ref._obj.gpu = 37; return 0
+    def nvmlDeviceGetTemperature(self, d, s, ref): ref._obj.value = 51; return 0
+    def nvmlDeviceGetMemoryInfo(self, d, ref): ref._obj.total = 6 * estado.GIB; ref._obj.used = estado.GIB; return 0
+reloj = [1000.0]
+lib = LibNvmlTardia()
+n = estado.Nvml(lib=lib, reloj=lambda: reloj[0])
+comprobar("NVML: si no arranca, la GPU sale sin numeros", n.medir("0000:01:00.0") == {})
+reloj[0] += 5
+n.medir("0000:01:00.0")
+comprobar("NVML: no se reintenta en cada segundo", lib.inits == 1)
+reloj[0] += estado.Nvml.REINTENTO
+comprobar("NVML: se reintenta y, cuando la tarjeta ya esta, mide",
+          n.medir("0000:01:00.0") == {"uso": 37, "temp": 51, "vram": [1.0, 6.0]})
+
+# --- terminales sueltas: se cierran solas pasada SUELTA_DURA sin nadie mirando
+ts = term.Terminales()
+ts.abiertas = {"mirada": SimpleNamespace(ws=object(), suelta_desde=None),
+               "reciente": SimpleNamespace(ws=None, suelta_desde=1000.0),
+               "vieja": SimpleNamespace(ws=None, suelta_desde=1000.0 - term.SUELTA_DURA - 1)}
+comprobar("terminal suelta: la que lleva mas de SUELTA_DURA sin nadie se cierra, las demas no",
+          [x for x, v in ts.abiertas.items() if v in ts.sueltas_de_mas(ahora=1000.0)] == ["vieja"])
+comprobar("terminal suelta: la hora de gracia es 1 h", term.SUELTA_DURA == 3600)
+
+# --- ffmpeg: hilos segun la RAM disponible (laptops de 8 GB)
+G = 1024 ** 3
+comprobar("ffmpeg: con RAM de sobra, 6 hilos", conversion.hilos(20 * G, 12) == 6)
+comprobar("ffmpeg: con 4 GB libres, 4", conversion.hilos(4 * G, 12) == 4)
+comprobar("ffmpeg: con 2 GB libres, 2", conversion.hilos(2 * G, 12) == 2)
+comprobar("ffmpeg: nunca mas hilos que nucleos", conversion.hilos(20 * G, 4) == 4)
+o = conversion.orden_ffmpeg("a.mp4", "b.mp4", 1080, 30, 60, n_hilos=4)
+comprobar("ffmpeg: los hilos van al decodificar (antes de -i) y al codificar",
+          o.count("-threads") == 2 and o[o.index("-threads") + 1] == "4"
+          and o.index("-threads") < o.index("-i") < len(o) - 1 - o[::-1].index("-threads"))
 FINPY
 while IFS='|' read -r res desc; do
     case "$res" in

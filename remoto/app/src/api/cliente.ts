@@ -16,6 +16,7 @@ import {
   type Busqueda,
   type Conversion,
   type Favorito,
+  type FichaTerminal,
   type FichaVideo,
   type Listado,
   type Reciente,
@@ -63,9 +64,14 @@ export interface TerminalAbierta {
   tamano(filas: number, columnas: number): void;
   cerrar(): void;
 }
-// Como se cierra una terminal (terminal.py): 4000 la shell salió, 4403 se le
-// quitó el pase o el permiso con ella abierta.
+// Como se cierra una terminal (terminal.py): 4000 la shell salió, 4001 la
+// retomó otra pantalla, 4002 la cerraron (o llevaba 1 h sola), 4401 caducó la
+// sesión de la app (la terminal SIGUE en la PC) y 4403 se le quitó el pase o
+// el permiso. Cualquier otro cierre es la red: la terminal sigue en la PC.
 export const TERMINAL_SALIO = 4000;
+export const TERMINAL_OTRO = 4001;
+export const TERMINAL_CERRADA = 4002;
+export const TERMINAL_SIN_SESION = 4401;
 export const TERMINAL_SIN_PERMISO = 4403;
 
 export interface Herramientas {
@@ -288,12 +294,28 @@ export class Conexion {
       { contrasena }, this.sesion.token)).terminal;
   }
 
-  // Lo que sale de la shell llega en bytes a `alDatos`; se escribe en texto
-  // (UTF-8, el servidor lo pasa tal cual al PTY).
-  terminal(billete: string, filas: number, columnas: number, alDatos: (b: Uint8Array) => void,
-           alCerrar: (codigo: number, motivo: string) => void): TerminalAbierta {
-    const url = `${this.base.replace(/^http/, 'ws')}/v0/terminal/${encodeURIComponent(billete)}`
-      + `?filas=${filas}&columnas=${columnas}`;
+  // Las terminales de ESTE celular que siguen abiertas en la PC (minimizadas o
+  // que se cortaron), y cuántas caben como mucho entre todos.
+  async terminales(): Promise<{ terminales: FichaTerminal[]; max: number }> {
+    return pedir(this.h, 'GET', `${this.base}/v0/terminales`, undefined, this.sesion.token);
+  }
+
+  // Cerrarla de verdad (la shell y lo que corra en ella).
+  async cerrarTerminal(id: string): Promise<FichaTerminal[]> {
+    return (await pedir<{ terminales: FichaTerminal[] }>(this.h, 'DELETE',
+      `${this.base}/v0/terminales/${encodeURIComponent(id)}`, undefined, this.sesion.token)).terminales;
+  }
+
+  // Abre una terminal nueva (con el billete) o retoma una abierta (con su id,
+  // sin contraseña). Lo primero que llega es su ficha, en texto, a `alFicha`;
+  // después, en bytes, lo que sale de la shell (al retomarla, primero lo que
+  // salió mientras nadie miraba). Se escribe en texto (UTF-8).
+  terminal(destino: { billete: string } | { retomar: string }, filas: number, columnas: number,
+           alDatos: (b: Uint8Array) => void, alCerrar: (codigo: number, motivo: string) => void,
+           alFicha: (f: FichaTerminal) => void = () => {}): TerminalAbierta {
+    const ruta = 'billete' in destino ? `terminal/${encodeURIComponent(destino.billete)}`
+      : `terminales/${encodeURIComponent(destino.retomar)}`;
+    const url = `${this.base.replace(/^http/, 'ws')}/v0/${ruta}?filas=${filas}&columnas=${columnas}`;
     const s = this.h.abrirSocket(url, { Authorization: `Bearer ${this.sesion.token}` });
     s.binaryType = 'arraybuffer';
     const pendiente: string[] = [];
@@ -307,7 +329,12 @@ export class Conexion {
     s.onmessage = (ev) => {
       const d = ev.data;
       if (d instanceof ArrayBuffer) alDatos(new Uint8Array(d));
-      else if (typeof d === 'string') alDatos(new TextEncoder().encode(d));
+      else if (typeof d === 'string') {
+        let ficha: FichaTerminal | undefined;
+        try { ficha = (JSON.parse(d) as { terminal?: FichaTerminal }).terminal; } catch { /* no es JSON */ }
+        if (ficha) alFicha(ficha);
+        else alDatos(new TextEncoder().encode(d));
+      }
     };
     s.onclose = (ev) => {
       if (!cerrada) alCerrar(ev.code, ev.reason ?? '');

@@ -31,6 +31,16 @@ Una a la vez (ffmpeg a 4K se come la CPU entera), con `nice`, y en
 dos veces. Si el celular deja de preguntar por una conversión (cerró la app,
 perdió la red), a los ABANDONO segundos se para: no tiene sentido tener la
 CPU al 100 % para nadie. Lo convertido se borra a los CADUCA segundos.
+
+LA RAM (el usuario, 2026-10-21: sus amigos tienen laptops de 8 GB). ffmpeg
+con los hilos que quiera se come 1,4 GB al convertir un 4K en la PC (12
+hilos); la memoria crece con los hilos, y lo que pesa es decodificar el 4K.
+Medido con un 4K 60 de moewalls a 1440p: 12 hilos 1,4 GB en 8 s; 6+6 750 MB
+en 9 s; 4+4 640 MB en 12 s; 2+4 605 MB. Así que los hilos se deciden EN
+CALIENTE con la RAM disponible de ese momento (`hilos()`), y van en los dos
+lados (decodificar y codificar). Al acabar, ffmpeg muere y su memoria vuelve
+sola; lo que se queda es la CACHÉ de disco del vídeo leído y del escrito, y
+eso se suelta a mano (`_soltar_cache`).
 """
 
 import asyncio
@@ -119,7 +129,31 @@ def info(absoluta):
     }
 
 
-def orden_ffmpeg(origen, destino, lado, fps, fps_original):
+def hilos(disponible=None, nucleos=None):
+    """Cuántos hilos para ffmpeg según la RAM disponible AHORA (ver la
+    cabecera): 6 con holgura, 4 si va justa, 2 si va muy justa."""
+    if disponible is None:
+        import psutil
+        disponible = psutil.virtual_memory().available
+    nucleos = nucleos or os.cpu_count() or 2
+    gib = 1024 ** 3
+    n = 6 if disponible >= 6 * gib else 4 if disponible >= 3 * gib else 2
+    return max(1, min(n, nucleos))
+
+
+def _soltar_cache(*rutas_):
+    """Que el kernel olvide las páginas de estos ficheros (POSIX_FADV_DONTNEED):
+    son cientos de MB de un vídeo que ya no se va a leer desde aquí."""
+    for r in rutas_:
+        with contextlib.suppress(OSError, AttributeError):
+            fd = os.open(r, os.O_RDONLY)
+            try:
+                os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+            finally:
+                os.close(fd)
+
+
+def orden_ffmpeg(origen, destino, lado, fps, fps_original, n_hilos=None):
     """La orden entera. El lado CORTO baja a `lado` (nunca sube) y se respeta
     la proporción; ffmpeg ya gira lo que venga girado, así que lo que sale va
     derecho y sin rotación (el celular lo comprobó contra eso)."""
@@ -128,10 +162,12 @@ def orden_ffmpeg(origen, destino, lado, fps, fps_original):
     if fps and (not fps_original or fps < fps_original - 0.5):
         filtros.append(f"fps={fps:g}")
     techo = TECHO_MBPS[lado]
-    return ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", origen,
+    h = str(n_hilos or hilos())
+    return ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+            "-threads", h, "-i", origen,
             "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn",
             "-vf", ",".join(filtros),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-profile:v", "high",
+            "-threads", h, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-profile:v", "high",
             "-pix_fmt", "yuv420p", "-maxrate", f"{techo}M", "-bufsize", f"{techo * 2}M",
             "-c:a", "aac", "-b:a", "192k", "-ac", "2",
             "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", destino]
@@ -266,6 +302,7 @@ class Conversiones:
                 stderr = await errores
             except OSError as e:
                 codigo, stderr = -1, str(e).encode()
+            _soltar_cache(origen, tmp)
             if t.estado == "cancelado":
                 _borrar(tmp)
                 return

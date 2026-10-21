@@ -21,16 +21,29 @@
 //
 // El teclado del celular no tiene Esc, Tab, Ctrl ni flechas: van en la fila de
 // abajo. Ctrl y Alt se quedan puestos hasta la siguiente tecla.
+//
+// VARIAS, Y SE MINIMIZAN (el usuario, 2026-10-21): la terminal vive en la PC
+// (terminal.py, `Sesion`), no en esta pantalla. «Minimizar», «Atrás», cambiar
+// de pestaña o perder la red solo la SUELTAN: sigue corriendo y se retoma
+// desde la lista, sin contraseña, con lo que salió mientras tanto. Solo
+// «Cerrar» la mata. Si se corta la red, se reintenta sola unas veces. Cada vez
+// que se engancha se monta un xterm NUEVO (la `clave` del WebView): la PC le
+// repinta lo guardado, así que un xterm viejo lo enseñaría dos veces.
 import { type ComponentType, type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { WebView as WebViewOriginal } from 'react-native-webview';
 
-import { ErrorRemoto, TERMINAL_SALIO, TERMINAL_SIN_PERMISO, type Conexion, type TerminalAbierta } from '../api/cliente';
+import {
+  ErrorRemoto, TERMINAL_CERRADA, TERMINAL_OTRO, TERMINAL_SALIO, TERMINAL_SIN_PERMISO, TERMINAL_SIN_SESION,
+  type Conexion, type TerminalAbierta,
+} from '../api/cliente';
 import { aBase64 } from '../api/cripto';
+import type { FichaTerminal } from '../api/protocolo';
+import { duracion } from '../formato';
 import { colores } from '../paleta';
 import pagina from '../terminal/pagina.generada';
 import Pestanas, { type Pestana } from '../componentes/Pestanas';
-import { Aviso, Boton, Campo, Pantalla, Texto, fondoRojo } from '../componentes/ui';
+import { Aviso, Boton, Campo, Pantalla, Tarjeta, Texto, fondoRojo } from '../componentes/ui';
 
 // react-native-webview 14 trae tipos de clase que React 19 no acepta (el
 // componente sale como `never`): se le da el tipo de lo que se usa aqui.
@@ -43,6 +56,27 @@ const WebView = WebViewOriginal as unknown as ComponentType<{
 }>;
 
 const CENTINELA = '··';
+const REINTENTOS = 3;        // si se corta la red con la terminal abierta
+const REINTENTO_MS = 2000;
+
+// Por qué se cerró, dicho para una persona. null: fue la red (se reintenta).
+export function porQueSeCerro(codigo: number): string | null {
+  if (codigo === TERMINAL_SALIO) return 'La shell terminó.';
+  if (codigo === TERMINAL_CERRADA) return 'Se cerró la terminal (la cerraste, o llevaba 1 h sin nadie mirándola).';
+  if (codigo === TERMINAL_SIN_PERMISO) return 'Se cerró: a este celular se le quitó el pase o el permiso de terminal.';
+  if (codigo === TERMINAL_OTRO) return 'La abriste en otra pantalla. Sigue abierta en la PC.';
+  return null;
+}
+
+// «Terminal 1 · claude», y «abierta hace 12 min».
+export function nombreTerminal(f: FichaTerminal): string {
+  return f.titulo ? `Terminal ${f.numero} · ${f.titulo}` : `Terminal ${f.numero}`;
+}
+export function abiertaHace(f: FichaTerminal, ahora: number): string {
+  return `abierta hace ${duracion(Math.max(0, ahora - f.desde * 1000))}`;
+}
+
+type Destino = { billete: string } | { retomar: string };
 
 // Ctrl+letra es la letra menos 64 (Ctrl+C = 0x03); Alt+x es Esc y x.
 export function conModificadores(t: string, ctrl: boolean, alt: boolean): string {
@@ -65,23 +99,59 @@ const TECLAS: { etiqueta: string; envia?: string; mod?: 'ctrl' | 'alt' }[] = [
   { etiqueta: 'RePág', envia: '\x1b[5~' }, { etiqueta: 'AvPág', envia: '\x1b[6~' },
 ];
 
-export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar }: {
+export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar, fijarAtras }: {
   conexion: Conexion;
   alCambiar: (p: Pestana) => void;
   alVerPase: () => void;
   alCaducar: (sesionCaducada: boolean) => void;
+  fijarAtras: (fn: (() => boolean) | null) => void;
 }) {
   const [contrasena, setContrasena] = useState('');
-  const [billete, setBillete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pidiendo, setPidiendo] = useState(false);
+  const [lista, setLista] = useState<FichaTerminal[] | null>(null);
+  const [max, setMax] = useState(5);
+  // La terminal en pantalla: a qué se engancha, su ficha y la clave del xterm.
+  const [destino, setDestino] = useState<Destino | null>(null);
+  const [ficha, setFicha] = useState<FichaTerminal | null>(null);
+  const [clave, setClave] = useState(0);
   const [cerrada, setCerrada] = useState<string | null>(null);
+  const [reconectando, setReconectando] = useState(false);
+  const [reintentable, setReintentable] = useState(false);
   const [mods, setMods] = useState({ ctrl: false, alt: false });
   const web = useRef<Web>(null);
   const campo = useRef<{ focus(): void; clear(): void }>(null);
   const abierta = useRef<TerminalAbierta | null>(null);
+  const intentos = useRef(0);
+  const idActual = useRef<string | null>(null);
 
+  // Al irse de la pantalla (otra pestaña, salir) solo se suelta: sigue en la PC.
   useEffect(() => () => abierta.current?.cerrar(), []);
+
+  const fallo = useCallback((e: unknown) => {
+    const err = e as ErrorRemoto;
+    if (err.codigo === 'sin_sesion') { alCaducar(true); return true; }
+    if (err.codigo === 'pase_vencido') { alVerPase(); return true; }
+    return false;
+  }, [alCaducar, alVerPase]);
+
+  const refrescar = useCallback(async () => {
+    try {
+      const r = await conexion.terminales();
+      setLista(r.terminales);
+      setMax(r.max);
+    } catch (e) {
+      if (!fallo(e)) setLista((l) => l ?? []);
+    }
+  }, [conexion, fallo]);
+
+  // La lista se mira al entrar y cada 5 s mientras se ve (lo que corre cambia).
+  useEffect(() => {
+    if (destino) return undefined;
+    refrescar();
+    const t = setInterval(refrescar, 5000);
+    return () => clearInterval(t);
+  }, [destino, refrescar]);
 
   // Con edge-to-edge (Android 15, Expo 58) la ventana NO se encoge al salir el
   // teclado: tapaba la fila de teclas y la línea en la que se escribe. Se le
@@ -93,18 +163,28 @@ export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar }: 
     return () => { a.remove(); b.remove(); };
   }, []);
 
-  async function pedir() {
+  function enganchar(d: Destino) {
+    abierta.current?.cerrar();
+    abierta.current = null;
+    idActual.current = 'retomar' in d ? d.retomar : null;
+    setCerrada(null);
+    setReintentable(false);
+    setDestino(d);
+    setClave((k) => k + 1);
+  }
+
+  async function abrirOtra() {
     setPidiendo(true);
     try {
       const b = await conexion.billeteTerminal(contrasena);
       setContrasena('');
       setError(null);
-      setCerrada(null);
-      setBillete(b);
+      setFicha(null);
+      intentos.current = 0;
+      enganchar({ billete: b });
     } catch (e) {
+      if (fallo(e)) return;
       const err = e as ErrorRemoto;
-      if (err.codigo === 'sin_sesion') return alCaducar(true);
-      if (err.codigo === 'pase_vencido') return alVerPase();
       setError(err.codigo === 'contrasena' && err.intentosRestantes !== undefined
         ? `Contraseña incorrecta. Te quedan ${err.intentosRestantes} intentos.` : err.message);
     } finally {
@@ -112,22 +192,78 @@ export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar }: 
     }
   }
 
+  function retomar(f: FichaTerminal) {
+    setFicha(f);
+    intentos.current = 0;
+    enganchar({ retomar: f.id });
+  }
+
+  // Minimizar: se suelta y se vuelve a la lista. La PC la deja corriendo.
+  const minimizar = useCallback(() => {
+    Keyboard.dismiss();
+    abierta.current?.cerrar();
+    abierta.current = null;
+    setDestino(null);
+    setCerrada(null);
+    setReconectando(false);
+  }, []);
+
+  async function cerrar(id: string | null) {
+    minimizar();
+    if (!id) return;
+    try {
+      setLista(await conexion.cerrarTerminal(id));
+    } catch (e) {
+      if (!fallo(e)) refrescar();
+    }
+  }
+
+  // Atrás, con una terminal en pantalla, la minimiza (no la cierra).
+  const atras = useRef<() => boolean>(() => false);
+  atras.current = () => {
+    if (destino) { minimizar(); return true; }
+    return false;
+  };
+  useEffect(() => {
+    fijarAtras(() => atras.current());
+    return () => fijarAtras(null);
+  }, [fijarAtras]);
+
   const inyectar = useCallback((js: string) => web.current?.injectJavaScript(`${js};true;`), []);
 
+  const alCerrar = useCallback((codigo: number) => {
+    abierta.current = null;
+    if (codigo === TERMINAL_SIN_SESION) { alCaducar(true); return; }
+    const texto = porQueSeCerro(codigo);
+    if (texto) {
+      setCerrada(texto);
+      inyectar(`window.avisar(${JSON.stringify(texto)})`);
+      return;
+    }
+    // La red. Si ya se sabe su id, se retoma sola unas veces.
+    const id = idActual.current;
+    if (id && intentos.current < REINTENTOS) {
+      intentos.current += 1;
+      setReconectando(true);
+      setTimeout(() => enganchar({ retomar: id }), REINTENTO_MS);
+      return;
+    }
+    setReconectando(false);
+    setReintentable(true);
+    setCerrada('Se cortó la conexión con la PC. La terminal sigue abierta allí.');
+  }, [alCaducar, inyectar]);
+
   const alMensaje = useCallback((datos: string) => {
-    let m: { t: string; s?: string; f?: number; c?: number; ctrl?: boolean; alt?: boolean };
+    let m: { t: string; s?: string; f?: number; c?: number };
     try { m = JSON.parse(datos); } catch { return; }
-    if (m.t === 'listo' && billete && !abierta.current) {
-      abierta.current = conexion.terminal(billete, m.f ?? 24, m.c ?? 80,
-        (b) => inyectar(`window.recibir(${JSON.stringify(aBase64(b))})`),
-        (codigo) => {
-          abierta.current = null;
-          const texto = codigo === TERMINAL_SALIO ? 'La shell terminó.'
-            : codigo === TERMINAL_SIN_PERMISO ? 'Se cerró: a este celular se le quitó el pase o el permiso de terminal.'
-            : 'Se cortó la conexión con la PC.';
-          setCerrada(texto);
-          inyectar(`window.avisar(${JSON.stringify(texto)})`);
-        });
+    if (m.t === 'listo' && destino && !abierta.current) {
+      abierta.current = conexion.terminal(destino, m.f ?? 24, m.c ?? 80,
+        (b) => {
+          if (intentos.current) { intentos.current = 0; setReconectando(false); }
+          inyectar(`window.recibir(${JSON.stringify(aBase64(b))})`);
+        },
+        alCerrar,
+        (f) => { idActual.current = f.id; setFicha(f); });
     } else if (m.t === 'd' && m.s) {
       abierta.current?.escribir(m.s);
     } else if (m.t === 'tamano' && m.f && m.c) {
@@ -135,7 +271,7 @@ export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar }: 
     } else if (m.t === 'toque') {
       campo.current?.focus();
     }
-  }, [billete, conexion, inyectar]);
+  }, [destino, conexion, inyectar, alCerrar]);
 
   // Lo que manda el teclado. El campo NO es controlado: guarda su texto, y lo
   // tecleado es la diferencia con lo ÚLTIMO que se vio (devolverlo al
@@ -173,25 +309,50 @@ export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar }: 
     }
   }
 
-  function otra() {
-    abierta.current?.cerrar();
-    abierta.current = null;
-    setBillete(null);
-    setCerrada(null);
-  }
-
-  if (!billete) {
+  if (!destino) {
+    const ahora = Date.now();
+    const caben = (lista?.length ?? 0) < max;
     return (
       <Pantalla relleno={false}>
-        <View style={{ flex: 1, padding: 20, gap: 16, justifyContent: 'center' }}>
-          <Texto tipo="grande">Terminal de {conexion.equipo.equipo}</Texto>
-          <Texto color={colores.tenue}>
-            Una shell de verdad en la PC, con sudo. Por ser lo más delicado, pide la contraseña de la app otra vez. La de sudo la escribes dentro de la terminal y no se guarda en ningún sitio.
-          </Texto>
-          <Campo etiqueta="Contraseña de la app" valor={contrasena} alCambiar={setContrasena} alEnviar={pedir}
-                 error={!!error} ayuda={error ?? 'La PC apunta que se abrió una terminal, cuándo y desde qué celular.'} />
-          <Boton texto="Abrir la terminal" alPulsar={pedir} cargando={pidiendo} desactivado={!contrasena} />
-        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, gap: 16, flexGrow: 1, justifyContent: lista?.length ? 'flex-start' : 'center' }}
+                    keyboardShouldPersistTaps="handled">
+          <Texto tipo="grande">Terminales de {conexion.equipo.equipo}</Texto>
+          {lista?.length ? (
+            <>
+              <Texto color={colores.tenue}>
+                Siguen abiertas en la PC aunque no las mires. Entra en una para seguir donde lo dejaste.
+              </Texto>
+              {lista.map((f) => (
+                <Tarjeta key={f.id} estilo={{ gap: 10 }}>
+                  <View>
+                    <Texto>{nombreTerminal(f)}</Texto>
+                    <Texto tipo="chico" color={colores.tenue}>
+                      {abiertaHace(f, ahora)}{f.mirando ? ' · abierta en otra pantalla' : ''}
+                    </Texto>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}><Boton texto="Entrar" alto={44} alPulsar={() => retomar(f)} /></View>
+                    <View style={{ flex: 1 }}><Boton texto="Cerrar" tipo="borde" alto={44} alPulsar={() => cerrar(f.id)} /></View>
+                  </View>
+                </Tarjeta>
+              ))}
+            </>
+          ) : (
+            <Texto color={colores.tenue}>
+              Una shell de verdad en la PC, con sudo. Por ser lo más delicado, pide la contraseña de la app otra vez. La de sudo la escribes dentro de la terminal y no se guarda en ningún sitio.
+            </Texto>
+          )}
+          {caben ? (
+            <>
+              <Campo etiqueta="Contraseña de la app" valor={contrasena} alCambiar={setContrasena} alEnviar={abrirOtra}
+                     error={!!error} ayuda={error ?? 'La PC apunta que se abrió una terminal, cuándo y desde qué celular.'} />
+              <Boton texto={lista?.length ? 'Abrir otra terminal' : 'Abrir la terminal'} alPulsar={abrirOtra}
+                     cargando={pidiendo} desactivado={!contrasena} />
+            </>
+          ) : (
+            <Aviso texto={`Ya hay ${max} terminales abiertas en la PC: cierra alguna para abrir otra.`} />
+          )}
+        </ScrollView>
         <Pestanas actual="terminal" permisos={conexion.sesion.permisos} alCambiar={alCambiar} />
       </Pantalla>
     );
@@ -199,25 +360,36 @@ export default function Terminal({ conexion, alCambiar, alVerPase, alCaducar }: 
 
   return (
     <Pantalla relleno={false}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 8 }}>
         <View style={{ flex: 1 }}>
-          <Texto tipo="chico">{conexion.equipo.equipo}</Texto>
+          <Texto tipo="chico" lineas={1}>{ficha ? nombreTerminal(ficha) : conexion.equipo.equipo}</Texto>
         </View>
         <Pressable accessibilityRole="button" onPress={() => Keyboard.dismiss()} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
-          <Texto tipo="chico" color={colores.neon}>Ocultar teclado</Texto>
+          <Texto tipo="chico" color={colores.neon}>Teclado</Texto>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={otra} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
+        <Pressable accessibilityRole="button" onPress={minimizar} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
+          <Texto tipo="chico" color={colores.neon}>Minimizar</Texto>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => cerrar(idActual.current)} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
           <Texto tipo="chico" color={colores.alerta}>Cerrar</Texto>
         </Pressable>
       </View>
+      {reconectando ? (
+        <View style={{ paddingHorizontal: 14, paddingBottom: 8 }}>
+          <Aviso texto="Se cortó la conexión. Reconectando… (la terminal sigue en la PC)" />
+        </View>
+      ) : null}
       {cerrada ? (
         <View style={{ paddingHorizontal: 14, gap: 8, paddingBottom: 8 }}>
           <Aviso texto={cerrada} color={colores.alerta} fondo={fondoRojo} />
-          <Boton texto="Abrir otra" tipo="borde" alto={44} alPulsar={otra} />
+          {reintentable && idActual.current ? (
+            <Boton texto="Reintentar" alto={44} alPulsar={() => { intentos.current = 0; enganchar({ retomar: idActual.current! }); }} />
+          ) : null}
+          <Boton texto="Volver a la lista" tipo="borde" alto={44} alPulsar={minimizar} />
         </View>
       ) : null}
       <View style={{ flex: 1, backgroundColor: colores.abismo }}>
-        <WebView ref={web} originWhitelist={['*']} source={{ html: pagina }} javaScriptEnabled
+        <WebView key={clave} ref={web} originWhitelist={['*']} source={{ html: pagina }} javaScriptEnabled
                  onMessage={(ev) => alMensaje(ev.nativeEvent.data)} style={{ backgroundColor: colores.abismo }}
                  keyboardDisplayRequiresUserAction={false} hideKeyboardAccessoryView
                  setSupportMultipleWindows={false} allowFileAccess={false} />

@@ -10,19 +10,24 @@ Lo que se decidio con el usuario (remoto/DISEÑO.md, «La vigilancia»):
 - Que un telefono vive se mira en Tailscale (`Online` / `LastSeen` de
   `tailscale status --json`), no con latidos de la app: no gasta bateria ni
   depende de que Android deje viva la app.
-- Cualquier señal reinicia su cuenta de 2 h. Si el telefono avisó «me estan
-  apagando» (POST /v0/latido) despues de su ultima señal, la cuenta es de 1 h.
+- Cualquier señal reinicia su cuenta de 1 h. Era de 2 h, con 1 h si el
+  telefono avisaba «me estan apagando»; el usuario lo igualó (2026-10-21): un
+  celular que se apaga por una mala conexion es el mismo caso que uno que
+  avisa, y ese aviso de Android no se llegó a hacer (DISEÑO.md, «Fase 8»).
 - Al que calla mas de su margen se le QUITA EL PASE (no se desempareja: se
   recupera por cable).
-- Si callan TODOS los vigilados: si hay una PERSONA delante (escritorio.presencia:
+- Si callan TODOS los vigilados y la PC esta en el MODO GAMING, no se apaga:
+  se avisa y ya (lo pidió el usuario: jugando no mira el celular, y apagarle
+  la PC a media partida es peor que el riesgo). Se le quita el pase igual.
+- Si no, si hay una PERSONA delante (escritorio.presencia:
   teclado, raton o un video) o no se sabe, NO se apaga y se avisa en la PC; si
   no hay nadie, se apaga (con la cuenta atras de energia.py, que alguien que
   llegue justo puede cancelar). Una descarga no es una persona.
-- Si se va el internet de casa mas de 2 h, la PC tampoco oye a nadie y se
+- Si se va el internet de casa mas de 1 h, la PC tampoco oye a nadie y se
   apaga. Es lo que se quiere.
 
 `decidir` es una funcion pura (sin red, sin reloj, sin disco) para que las
-pruebas recorran las 2 h sin esperarlas.
+pruebas recorran la hora sin esperarla.
 """
 
 import datetime as dt
@@ -33,8 +38,8 @@ import time
 
 from . import escritorio, pase, registro, rutas
 
-MARGEN = 2 * 3600
-MARGEN_APAGANDO = 3600
+MARGEN = 3600
+TEXTO_MARGEN = "%d h" % (MARGEN // 3600)   # el MARGEN, dicho para una persona
 CADA = 60     # segundos entre vueltas
 SONDEO_TRAS = 600     # sin señal 10 min: se le pregunta directamente
 SONDEO_CADA = 300     # y como mucho cada 5 min (un paquete: nada de bateria)
@@ -114,17 +119,16 @@ def decidir(telefonos, aparatos, ahora):
             # Nunca se le ha oido desde que se vigila: se empieza a contar ya,
             # no desde 1970.
             senal = ahora
-        apagando = t.get("apagando_en")
-        margen = MARGEN_APAGANDO if apagando and apagando >= senal - 60 else MARGEN
         senales[t["id"]] = senal
-        if ahora - senal > margen:
+        if ahora - senal > MARGEN:
             callados.append(t["id"])
     return senales, callados, bool(telefonos) and len(callados) == len(telefonos)
 
 
 class Vigilancia:
     def __init__(self, almacen, apagar, avisar, aparatos=preguntar_tailscale,
-                 presencia=escritorio.presencia, reloj=time.time, sondear=sondear_tailscale):
+                 presencia=escritorio.presencia, reloj=time.time, sondear=sondear_tailscale,
+                 jugando=escritorio.modo_gaming):
         """`apagar()` empieza la cuenta atras de apagado. La vuelta corre en un
         hilo (llama a tailscale), y la cuenta es una tarea de asyncio: quien la
         da se encarga de pasarla al bucle (call_soon_threadsafe)."""
@@ -135,6 +139,7 @@ class Vigilancia:
         self.presencia = presencia
         self.reloj = reloj
         self.sondear = sondear
+        self.jugando = jugando
         self._sondeado = {}       # ip -> cuando se le pregunto por ultima vez
         self.estado = "desarmada"
         self.ultima_vuelta = None
@@ -184,19 +189,27 @@ class Vigilancia:
             self.almacen.cambiar(i, pase_hasta=None)
             registro.apuntar("vigilancia_pase_quitado", i, callado_s=round(ahora - senales[i]))
         if todos:
-            quien, motivo = self.presencia()
             lista = ", ".join(nombres[i] for i in callados)
+            if self.jugando():
+                registro.apuntar("vigilancia_avisa", quien="jugando", motivo="modo gaming")
+                self.avisar("Celiuz Remoto: tu celular no da señales",
+                            f"{lista} lleva más de {TEXTO_MARGEN} sin dar señales mientras "
+                            "jugabas. No apago la PC porque estás en el modo gaming. Le "
+                            "quité el pase: dale una revisada cuando puedas.")
+                self.estado = "jugando"
+                return self.estado
+            quien, motivo = self.presencia()
             if quien == "nadie":
                 registro.apuntar("vigilancia_apaga", motivo=motivo)
                 self.avisar("Celiuz Remoto: vigilancia",
-                            f"{lista} lleva más de 2 h sin dar señales y no hay nadie delante: "
+                            f"{lista} lleva más de {TEXTO_MARGEN} sin dar señales y no hay nadie delante: "
                             "se apaga la PC (puedes cancelarlo).")
                 self.apagar()
                 self.estado = "apagando"
             else:
                 registro.apuntar("vigilancia_avisa", quien=quien, motivo=motivo)
                 self.avisar("Celiuz Remoto: tu celular no da señales",
-                            f"{lista} lleva más de 2 h sin dar señales. No apago la PC porque "
+                            f"{lista} lleva más de {TEXTO_MARGEN} sin dar señales. No apago la PC porque "
                             f"{'hay alguien delante' if quien == 'presente' else 'no sé si hay alguien delante'} "
                             "(" + motivo + "). Le quité el pase: revisa el celular.")
                 self.estado = "avisando"
@@ -238,4 +251,4 @@ class Vigilancia:
         quien, motivo = self.presencia()
         return {"armada": self.armada(), "estado": self.estado, "telefonos": filas,
                 "presencia": quien, "presencia_motivo": motivo,
-                "margen_s": MARGEN, "margen_apagando_s": MARGEN_APAGANDO}
+                "margen_s": MARGEN}

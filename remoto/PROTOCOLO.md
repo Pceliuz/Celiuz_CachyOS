@@ -104,7 +104,7 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
   {"cpu": {"uso": 23, "temp": 52}, "gpu": [{"nombre": "RTX 3050", "uso": 31, "temp": 48, "vram": [1.2, 6]}],
    "ram": [8.4, 31.2], "disco": [508, 544], "red": {"bajada": 2400000, "subida": 140000},
    "bateria": null, "encendida_desde": "...", "pase_hasta": "..." | null,
-   "vigilancia": "desarmada"|"sin_telefonos"|"armada"|"avisando"|"apagando", "energia": null | {...},
+   "vigilancia": "desarmada"|"sin_telefonos"|"armada"|"avisando"|"jugando"|"apagando", "energia": null | {...},
    "escritorio": {"sesion": "abierta"|"pantalla_inicio"|"no_lo_se", "puede_entrar": false, "motivo": "..."}}
   ```
   Solo van los campos que el equipo tiene: sin sensor no hay `temp`, sin GPU
@@ -224,16 +224,34 @@ navegadores y lo propio de Celiuz Remoto (la lista, `NUNCA` en
 - `POST /v0/terminal` `{"contrasena": "..."}` → `{"terminal": "<billete>", "caduca": 30}`.
   La contraseña de la app OTRA VEZ, aunque haya sesión; una mal cuenta como
   fallo, igual que al entrar (`401 contrasena` con `intentos_restantes`; al 5.º,
-  `403 bloqueado`). Como mucho 3 terminales abiertas (`409 estado`).
+  `403 bloqueado`). Como mucho 5 terminales abiertas entre todos (`409 estado`).
 - `WS /v0/terminal/<billete>?filas=24&columnas=80` (con la cabecera
   `Authorization`). El billete vale una vez, 30 s, y solo para ese teléfono
   (`401 firma` si no). La shell es la del usuario (`$SHELL`, como de entrada:
   `-l`), en su carpeta personal, con `TERM=xterm-256color`.
-  - Del servidor: **binario**, lo que sale de la shell.
+  - Del servidor: primero, en **texto**, su ficha `{"terminal": {"id", "numero",
+    "desde", "titulo", "mirando"}}`; después, en **binario**, lo que sale de la
+    shell.
   - Del celular: **binario** o `{"texto": "..."}`, lo tecleado; y
     `{"tamano": [filas, columnas]}`.
-  - Se cierra con **4000** si la shell termina, y con **4403** si con ella
-    abierta el teléfono pierde el pase, el permiso o la sesión (se mira cada 5 s).
+  - **Cerrar el WebSocket NO cierra la terminal** (desde 2026-10-21): queda
+    SUELTA en la PC, corriendo, y se retoma (abajo). Se cierra de verdad con
+    `DELETE`, al salir la shell, tras **1 h** suelta, o si el teléfono pierde
+    el pase o el permiso, o lo revocan (eso se mira también suelta).
+  - Códigos de cierre: **4000** la shell terminó; **4001** la retomó otra
+    pantalla; **4002** la cerraron (o llevaba 1 h suelta); **4401** caducó la
+    sesión de la app (la terminal SIGUE en la PC); **4403** pase, permiso o
+    revocado. Cualquier otro es la red: la terminal sigue en la PC.
+- `GET /v0/terminales` → `{"terminales": [ficha...], "max": 5}`: las de ESTE
+  teléfono que siguen abiertas. `DELETE /v0/terminales/<id>` la cierra (la
+  shell y lo que corra; `404 no_existe` si ya no está) y devuelve la lista.
+- `WS /v0/terminales/<id>?filas=24&columnas=80` la **retoma**, sin
+  contraseña: pide sesión, permiso `terminal` y pase, y solo vale para su
+  teléfono (`404 no_existe` para otro). Llega la ficha, luego lo último que
+  salió (hasta 512 KB, también lo de mientras estaba suelta) y después lo
+  nuevo. Si otra pantalla la miraba, a esa se le cierra con 4001. La PC mueve
+  el tamaño una columna y lo devuelve para que un programa a pantalla
+  completa (vim, htop) se repinte entero.
 - La PC avisa al abrirla y apunta en el registro abrir y cerrar (cuánto duró y
   por qué). **Lo tecleado no se apunta en ningún sitio**: por ahí pasa la
   contraseña de sudo.

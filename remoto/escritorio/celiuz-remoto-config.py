@@ -880,9 +880,9 @@ class Ventana(Gtk.Window):
         fila.pack_end(self.interruptor, False, False, 0)
         pagina.pack_start(fila, False, False, 0)
         pagina.pack_start(etiqueta(
-            "Si tu celular deja de dar señales en Tailscale durante 2 h (1 h si avisó de que lo "
-            "apagaban), se le quita el pase. Si callan todos los que tienen pase y no hay nadie "
-            "delante de la PC, la PC se apaga, con su cuenta atrás. Pensado para cuando te roban "
+            "Si tu celular deja de dar señales en Tailscale durante 1 h, se le quita el pase. "
+            "Si callan todos los que tienen pase y no hay nadie delante de la PC, la PC se "
+            "apaga, con su cuenta atrás; en el modo gaming solo avisa. Pensado para cuando te roban "
             "el celular: así nadie se queda con la PC encendida a su alcance.",
             ("tenue",), envolver=True, ancho=90), False, False, 0)
         self.vig_estado = etiqueta("", ("h2",), envolver=True, ancho=80)

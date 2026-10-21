@@ -5,9 +5,58 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-10-21** (mañana), en la **PC**.
+Última sesión: **2026-10-21** (mañana), en la **PC**, manejada desde la
+terminal de Celiuz Remoto (la PC en SDDM, el usuario en el trabajo).
 
 ---
+
+## 2026-10-21 (PC, desde el celular): GPU «—», vigilancia a 1 h y modo gaming
+
+**SIN COMMITEAR** y **sin reiniciar el servicio**: la sesión de Claude corría
+DENTRO de `celiuz-remoto.service` (la terminal de la app), y reiniciarlo la
+mataba. Hace falta `systemctl --user restart celiuz-remoto` (o reiniciar la PC)
+para que valga lo de abajo.
+
+- **La GPU salía «—» tras reiniciar**: con linger el servicio nace a las
+  07:02:31 y `/dev/nvidiactl` a las 07:02:34; `nvmlInit` fallaba y no se
+  reintentaba nunca. Ahora `Nvml` reintenta cada 30 s (`estado.py`, prueba en
+  `unidad/remoto`).
+- **Vigilancia: 1 h siempre** (antes 2 h, o 1 h con el «me están apagando»,
+  que Android nunca llegó a mandar). Lo pidió el usuario: una mala conexión
+  que apaga el celular es el mismo caso.
+- **Vigilancia en el modo gaming: avisa y NO apaga** (estado `jugando`), le
+  quita el pase igual. `escritorio.modo_gaming()` pregunta a
+  `modo-gaming.py estado` (no copia la ruta; la prueba usa el script de
+  verdad). Ojo: el modo gaming pone mako en «no molestar», así que el aviso
+  sale al SALIR del modo. Preguntado al usuario si lo quiere visible jugando.
+- **RAM, medido**: el servidor son ~80 MB; el 1,5 GB que da systemd es caché
+  de disco (~1 GB, se reclama) más la propia sesión de Claude y sus MCP. En el
+  arranque anterior los picos fueron: kitty-2776 9,8 GB (compilar el APK /
+  gradle), el asistente 3,1 GB, Brave 3 GB, celiuz-remoto 412 MB. Convertir un
+  4K con ffmpeg: 1,4 GB con 12 hilos; `-threads 6` en los dos lados 750 MB
+  (9 s contra 8), 4+4 hilos 640 MB (12 s). **Hecho** (el usuario dijo que
+  sí): `conversion.hilos()` según la RAM disponible en ese momento (6/4/2), en
+  los dos lados, y al acabar se suelta la caché de disco del vídeo
+  (`posix_fadvise DONTNEED`).
+- **compilar.sh dejaba 4,7 GB ocupados** al terminar: el demonio de Gradle
+  (3,3 GB) y el de Kotlin (1,5 GB) se quedan horas esperando. Ahora Kotlin
+  compila dentro de Gradle y `gradlew --stop` al final, aunque falle. Medido:
+  0 procesos Java tras compilar, la RAM igual que antes (144 s).
+- **Terminales que se minimizan** (lo pidió el usuario: dejar algo corriendo,
+  abrir otra para los commits, mirar el estado o bajar un .docx sin perder la
+  sesión). La terminal es una `Sesion` de la PC (`terminal.py`): cerrar el
+  WebSocket la SUELTA, no la mata; se retoma sin contraseña
+  (`WS /v0/terminales/<id>`) con lo último que salió (512 KB) repintado;
+  `GET/DELETE /v0/terminales`; hasta 5; suelta más de 1 h se cierra; el vigía
+  de la PC la cierra también suelta si se pierde pase o permiso. App: la
+  pestaña Terminal es una lista (Entrar / Cerrar / Abrir otra); dentro,
+  «Minimizar» (y Atrás) la suelta; si se corta la red, reintenta 3 veces.
+  Pruebas: secciones 6-8 de `e2e/remoto-terminal` (47) y la 6 de
+  `e2e/remoto-app` (el cliente real con Node). **Sin probar en el HONOR**: el
+  APK está en `~/Descargas/celiuz-remoto-2026-10-21.apk`, para bajarlo con la
+  pestaña Archivos e instalarlo desde el gestor de archivos del celular,
+  DESPUÉS de reiniciar el servicio (la app nueva contra el servidor viejo no
+  ve la lista).
 
 ## 2026-10-21 (PC, mañana): Celiuz Remoto — vídeos que el celular no reproduce
 

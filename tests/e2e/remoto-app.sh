@@ -12,6 +12,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/../lib/comun.sh"
 
 preparar_entorno
+# La terminal (seccion 6) abre $SHELL: bash, no la shell de verdad con su config.
+export SHELL=/bin/bash
 CLI="$REPO/remoto/servidor/celiuz-remoto.py"
 APP="$REPO/remoto/app"
 binario_falso notify-send 0 'case "$*" in *--wait*) sleep 30 ;; esac'
@@ -130,6 +132,13 @@ TMP="$TMP" app "$RED" "$USB" - - invitacion > "$TMP/app6.txt" 2>"$TMP/app6.err"
 leer "$TMP/app6.txt"
 afirmar "   sin nada por stderr" test ! -s "$TMP/app6.err"
 afirmar "   y dijo algo" test "$(grep -c '^ok|' "$TMP/app6.txt")" -ge 5
+
+titulo "6. Terminales que se minimizan y se retoman, con el código de la app"
+"$CLI" permisos "$DISP_APP" +terminal > /dev/null
+TMP="$TMP" app "$RED" "$USB" - clave-app terminal > "$TMP/app7.txt" 2>"$TMP/app7.err"
+leer "$TMP/app7.txt"
+afirmar "   sin nada por stderr" test ! -s "$TMP/app7.err"
+afirmar "   y dijo algo" test "$(grep -c '^ok|' "$TMP/app7.txt")" -ge 10
 
 afirmar_no_contiene "$TMP/servidor.log" "Traceback" "el servidor no tuvo ni un traceback"
 afirmar_intacta_la_casa_real

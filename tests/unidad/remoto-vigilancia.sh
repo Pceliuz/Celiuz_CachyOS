@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tests/unidad/remoto-vigilancia.sh — la vigilancia de Celiuz Remoto y la
-# presencia, sin esperar 2 horas: reloj, Tailscale y presencia de mentira.
+# presencia, sin esperar la hora: reloj, Tailscale y presencia de mentira.
 #
 # POR QUE: es lo unico del remoto que APAGA LA PC SOLO. Los dos fallos posibles
 # son malos a su manera: apagar con alguien delante (o sin saberlo), y no
@@ -35,16 +35,15 @@ fuera = lambda visto: {"100.1.1.1": {"online": False, "visto": visto, "nombre": 
 
 s, c, todos = vg.decidir([tel(ultima_senal=T0 - 5 * H)], en_linea, T0)
 comprobar("en línea en Tailscale: su señal es ahora, aunque llevara 5 h callado", s["a"] == T0 and not c)
-s, c, todos = vg.decidir([tel(ultima_senal=T0 - 30)], fuera(T0 - 2 * H + 60), T0)
-comprobar("1 h 59 min sin señal: todavía no", not c)
-s, c, todos = vg.decidir([tel(ultima_senal=T0 - 30)], fuera(T0 - 2 * H - 60), T0)
+comprobar("el margen es 1 h (el usuario lo bajó de 2 el 2026-10-21)", vg.MARGEN == H and vg.TEXTO_MARGEN == "1 h")
+s, c, todos = vg.decidir([tel(ultima_senal=T0 - 30)], fuera(T0 - H + 60), T0)
+comprobar("59 min sin señal: todavía no", not c)
+s, c, todos = vg.decidir([tel(ultima_senal=T0 - 30)], fuera(T0 - H - 60), T0)
 comprobar("   pero la última señal guardada (hace 30 s) manda sobre un LastSeen viejo", not c and s["a"] == T0 - 30)
-s, c, todos = vg.decidir([tel(ultima_senal=T0 - 2 * H - 60)], fuera(T0 - 3 * H), T0)
-comprobar("2 h 01 min sin señal: callado, y si es el único, callan todos", c == ["a"] and todos)
-s, c, todos = vg.decidir([tel(ultima_senal=T0 - 61 * 60, apagando_en=T0 - 61 * 60)], fuera(None), T0)
-comprobar("avisó «me están apagando» tras su última señal: el margen es 1 h", c == ["a"])
-s, c, todos = vg.decidir([tel(ultima_senal=T0 - 61 * 60, apagando_en=T0 - 5 * H)], fuera(None), T0)
-comprobar("   un «me apagan» VIEJO (antes de su última señal) no acorta nada", not c)
+s, c, todos = vg.decidir([tel(ultima_senal=T0 - H - 60)], fuera(T0 - 3 * H), T0)
+comprobar("1 h 01 min sin señal: callado, y si es el único, callan todos", c == ["a"] and todos)
+s, c, todos = vg.decidir([tel(ultima_senal=T0 - 59 * 60, apagando_en=T0 - 59 * 60)], fuera(None), T0)
+comprobar("un «me están apagando» ya no acorta nada: es la misma hora", not c)
 s, c, todos = vg.decidir([tel(ultima_senal=None)], {}, T0)
 comprobar("nunca oído desde que se vigila: se cuenta desde ahora, no desde 1970", s["a"] == T0 and not c)
 s, c, todos = vg.decidir([tel(ultima_senal=T0 - 3 * H)], None, T0)
@@ -78,27 +77,41 @@ alm.cambiar(d["id"], pase_hasta=pase.renovado(), ip_tailscale="100.1.1.1")
 apagados, avisos = [], []
 estado_red = {"aparatos": en_linea}
 quien = {"v": ("nadie", "nadie delante")}
+jugando = {"v": False}
 v = vg.Vigilancia(alm, lambda: apagados.append(1), lambda t, c: avisos.append(c),
-                  aparatos=lambda: estado_red["aparatos"], presencia=lambda: quien["v"], reloj=reloj)
+                  aparatos=lambda: estado_red["aparatos"], presencia=lambda: quien["v"], reloj=reloj,
+                  jugando=lambda: jugando["v"])
 comprobar("viene desarmada", v.vuelta() == "desarmada" and not apagados)
 v.armar(True)
 comprobar("armada y el celular en línea: vigila", v.estado == "armada")
 estado_red["aparatos"] = fuera(None)
-reloj.t += 2 * H - 60
-comprobar("a las 1 h 59 min de silencio no hace nada", v.vuelta() == "armada" and not apagados)
+reloj.t += H - 60
+comprobar("a los 59 min de silencio no hace nada", v.vuelta() == "armada" and not apagados)
 quien["v"] = ("presente", "un vídeo")
 reloj.t += 120
-comprobar("a las 2 h 01 min CON alguien delante: no apaga, avisa", v.vuelta() == "avisando" and not apagados)
+comprobar("a la 1 h 01 min CON alguien delante: no apaga, avisa", v.vuelta() == "avisando" and not apagados)
 comprobar("   y le quita el pase (se recupera por cable)", not pase.vigente(alm.uno(d["id"])))
 comprobar("   el aviso dice por qué no apaga", avisos and "hay alguien delante" in avisos[-1], avisos)
 comprobar("   sin pase ya no se le vigila", v.vuelta() == "sin_telefonos")
 
-alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - 2 * H - 60)
+alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - H - 60)
 quien["v"] = ("no_lo_se", "hypridle no está corriendo")
 comprobar("si no se sabe si hay alguien: tampoco apaga («no lo sé» no es «nadie»)",
           v.vuelta() == "avisando" and not apagados)
-alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - 2 * H - 60)
+alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - H - 60)
 quien["v"] = ("nadie", "sin teclado ni ratón")
+jugando["v"] = True
+comprobar("en el MODO GAMING, aunque hypridle diga «nadie» (se juega con mando): no apaga, avisa",
+          v.vuelta() == "jugando" and not apagados, (v.estado, apagados))
+comprobar("   el aviso dice que es por el modo gaming", "modo gaming" in avisos[-1], avisos[-1])
+comprobar("   y le quita el pase igual", not pase.vigente(alm.uno(d["id"])))
+alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - H - 60)
+jugando["v"] = None
+comprobar("si no se sabe si hay modo gaming, manda la presencia (sin nadie: apaga)",
+          v.vuelta() == "apagando" and apagados == [1], (v.estado, apagados))
+jugando["v"] = False
+apagados.clear()
+alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - H - 60)
 comprobar("sin nadie delante: APAGA (con su cuenta atrás)", v.vuelta() == "apagando" and apagados == [1])
 v.armar(False)
 comprobar("desarmada, deja de vigilar", v.estado == "desarmada")
@@ -108,7 +121,8 @@ sondeos = []
 contesta = {"v": True}
 v2 = vg.Vigilancia(alm, lambda: apagados.append(2), lambda t, c: None,
                    aparatos=lambda: fuera(reloj.t - 3 * H), presencia=lambda: ("nadie", "x"),
-                   reloj=reloj, sondear=lambda ip: (sondeos.append(ip), contesta["v"])[1])
+                   reloj=reloj, sondear=lambda ip: (sondeos.append(ip), contesta["v"])[1],
+                   jugando=lambda: False)
 v2.armar(True)
 comprobar("coordinador dice «offline 3 h» pero el celular contesta al ping: NO calla, no apaga",
           v2.estado == "armada" and apagados == [1] and sondeos == ["100.1.1.1"], (v2.estado, apagados, sondeos))
@@ -149,6 +163,15 @@ comprobar("y al volver, presente", escritorio.presencia()[0] == "presente")
 os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "otra_1600000000_1"
 escritorio.marcar_presencia("ausente")
 comprobar("un «ausente» de OTRA sesión no cuenta", escritorio.presencia()[0] == "presente")
+
+# --- el modo gaming, preguntado al modo-gaming.py DE VERDAD (no se copia su ruta)
+del os.environ["HYPRLAND_INSTANCE_SIGNATURE"]   # el servicio no la trae: la busca
+comprobar("sin modo gaming puesto: no", escritorio.modo_gaming() is False, escritorio.modo_gaming())
+json.dump({"activo": True, "desde": 1}, open(os.path.join(run, "modo-gaming.%s.json" % firma), "w"))
+comprobar("con el modo gaming de ESTA sesión puesto: sí", escritorio.modo_gaming() is True)
+os.remove(os.path.join(run, "modo-gaming.%s.json" % firma))
+json.dump({"activo": True, "desde": 1}, open(os.path.join(run, "modo-gaming.otra_1600000000_1.json"), "w"))
+comprobar("el modo gaming de OTRA sesión no cuenta", escritorio.modo_gaming() is False)
 FINPY
 while IFS='|' read -r res desc; do
     case "$res" in

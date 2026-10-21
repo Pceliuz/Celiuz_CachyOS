@@ -12,6 +12,10 @@ Tres cosas:
   - ventanas()    lo que hay abierto; cerrar() lo cierra PIDIENDOLO (como
                   SUPER+Q), nunca matando: si hay algo sin guardar, pregunta
   - presencia()   ¿hay una persona delante? (ver abajo)
+  - modo_gaming() ¿esta puesto el modo gaming? Se lo pregunta a
+                  `modo-gaming.py estado`, que es quien sabe donde guarda su
+                  estado: aqui no se copia la ruta. Tres salidas: True, False
+                  y None («no lo se»).
 
 LA PRESENCIA la mide hypridle, que es quien ya sabe si se toca el teclado o el
 raton (ext-idle-notify) y respeta los inhibidores: un video reproduciendose NO
@@ -29,7 +33,7 @@ import socket
 import subprocess
 import time
 
-from . import rutas
+from . import REPO, rutas
 
 import hypr  # noqa: E402  (hypr/scripts/lib)
 
@@ -183,3 +187,21 @@ def presencia():
     if datos.get("estado") == "ausente":
         return "nadie", "sin teclado ni ratón desde hace más de %d min, y sin vídeo" % (PRESENCIA_S // 60)
     return "presente", "teclado, ratón o un vídeo en los últimos %d min" % (PRESENCIA_S // 60)
+
+
+MODO_GAMING = os.path.join(REPO, "hypr", "scripts", "modo-gaming.py")
+
+
+def modo_gaming():
+    """True si la sesion viva esta en el modo gaming, False si no, None si no
+    se pudo preguntar. Sin sesion no hay modo gaming (False)."""
+    firma = instancia()
+    if not firma:
+        return False
+    entorno = dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE=firma)
+    try:
+        r = subprocess.run([MODO_GAMING, "estado"], capture_output=True, text=True,
+                           timeout=10, check=False, env=entorno)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return {0: True, 1: False}.get(r.returncode)

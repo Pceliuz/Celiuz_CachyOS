@@ -23,6 +23,19 @@ La shell es la del usuario (/etc/passwd), como shell de entrada (`-l`), en su
 carpeta personal, con TERM=xterm-256color (lo que pinta xterm.js en la app).
 Al cerrar se le manda SIGHUP a todo su grupo, como cuando cierras una terminal
 de verdad.
+
+LA TERMINAL NO MUERE CON EL WEBSOCKET (el usuario, 2026-10-21: quería
+minimizarla, abrir otra para hacer commits y mirar el estado de la PC sin
+perder lo que corría). Antes, cerrar la pantalla de Terminal, cambiar de
+pestaña o perder la red un momento cerraba el WebSocket y con él la shell.
+Ahora cada terminal es una `Sesion` de la PC, con número, que sigue viva
+SUELTA (sin nadie mirando) hasta SUELTA_DURA, y el mismo teléfono la RETOMA
+(`/v0/terminales/<id>`) sin la contraseña: ya la dio al abrirla, y retomar
+pide igual sesión, permiso y pase. Lo que sale mientras está suelta se guarda
+(lo último, MEMORIA bytes) y se repinta al retomarla. Se cierra de verdad al
+pedirlo (DELETE), al salir la shell, al pasar SUELTA_DURA sin nadie, o en
+cuanto el teléfono pierde el pase, el permiso o lo revocan (eso se mira
+también con ella suelta: el vigía es de la PC, no del WebSocket).
 """
 
 import asyncio
@@ -37,8 +50,14 @@ import termios
 import time
 
 BILLETE_DURA = 30          # segundos para abrir el WebSocket tras dar la contraseña
-MAX_ABIERTAS = 3           # entre todos los telefonos
+MAX_ABIERTAS = 5           # entre todos los telefonos
+SUELTA_DURA = 3600         # una terminal sin nadie mirando, hasta que se cierra sola
+MEMORIA = 512 * 1024       # lo ultimo que salio, para repintarlo al retomarla
+TROZO = 64 * 1024          # al repintar se manda en trozos de este tamaño
 CIERRE_SALIO = 4000        # la shell termino (exit)
+CIERRE_OTRO = 4001         # la retomo otra pantalla (solo se mira desde un sitio)
+CIERRE_CERRADA = 4002      # la cerraron (DELETE, o se cerro sola por llevar suelta SUELTA_DURA)
+CIERRE_SIN_SESION = 4401   # caduco la sesion de la app: la terminal sigue viva, suelta
 CIERRE_SIN_PERMISO = 4403  # revocado, pase vencido o permiso quitado mientras estaba abierta
 
 
@@ -190,10 +209,86 @@ class Pty:
             self.proceso.wait(timeout=2)
 
 
+class Sesion:
+    """Una terminal de la PC: su shell, lo ultimo que salio y quien la mira
+    (un WebSocket o nadie). La `bomba` lee la shell siempre, se mire o no."""
+
+    def __init__(self, pty, dispositivo, numero, al_salir):
+        self.id = secrets.token_urlsafe(12)
+        self.pty = pty
+        self.dispositivo = dispositivo
+        self.numero = numero
+        self.memoria = bytearray()
+        self.ws = None
+        self.suelta_desde = time.monotonic()
+        self._envio = asyncio.Lock()     # el repintado y lo nuevo, en orden
+        self._al_salir = al_salir
+        self.bomba = asyncio.ensure_future(self._bombear())
+
+    async def _bombear(self):
+        async for datos in self.pty.leer():
+            self.memoria += datos
+            if len(self.memoria) > MEMORIA:
+                del self.memoria[:len(self.memoria) - MEMORIA]
+            ws = self.ws
+            if ws is not None:
+                # Esperar al envio frena la lectura si el celular no da abasto
+                # (y la shell se frena sola al llenarse el PTY). Suelta, no
+                # espera a nadie: se guarda lo ultimo y ya.
+                async with self._envio:
+                    with contextlib.suppress(ConnectionResetError, RuntimeError):
+                        if not ws.closed:
+                            await ws.send_bytes(datos)
+        await self._al_salir(self)
+
+    async def mirar(self, ws, filas, columnas, retomada):
+        """Engancha `ws`: le repinta lo guardado y desde ahi le manda lo nuevo.
+        Si otra pantalla la estaba mirando, a esa se le cierra (CIERRE_OTRO)."""
+        anterior = self.ws
+        async with self._envio:
+            # La foto y el enganche sin un await entre medias: lo que la bomba
+            # lea despues espera al candado y sale DETRAS del repintado.
+            foto = bytes(self.memoria)
+            self.ws = ws
+            self.suelta_desde = None
+            for i in range(0, len(foto), TROZO):
+                await ws.send_bytes(foto[i:i + TROZO])
+        if anterior is not None and anterior is not ws and not anterior.closed:
+            with contextlib.suppress(ConnectionResetError, RuntimeError):
+                await anterior.close(code=CIERRE_OTRO, message=b"otro")
+        if retomada:
+            # Un programa a pantalla completa (vim, htop, claude) solo se
+            # repinta entero si cambia el tamaño: el kernel no manda SIGWINCH
+            # si es el mismo. Se mueve una columna y se devuelve.
+            self.pty.tamano(filas, max(10, columnas - 1))
+            await asyncio.sleep(0.05)
+        self.pty.tamano(filas, columnas)
+
+    def soltar(self, ws):
+        """El WebSocket `ws` se fue (minimizar, red, cerrar la app). Si era el
+        que miraba, la terminal queda suelta; si ya la miraba otro, nada."""
+        if self.ws is ws:
+            self.ws = None
+            self.suelta_desde = time.monotonic()
+
+    def titulo(self):
+        """Lo que corre delante en la terminal (fish, claude, vim...)."""
+        try:
+            grupo = os.tcgetpgrp(self.pty.maestro)
+            with open(f"/proc/{grupo}/comm", encoding="utf-8") as fh:
+                return fh.read().strip()
+        except (OSError, ValueError):
+            return ""
+
+    def ficha(self):
+        return {"id": self.id, "numero": self.numero, "desde": round(self.pty.desde),
+                "titulo": self.titulo(), "mirando": self.ws is not None}
+
+
 class Terminales:
     def __init__(self):
         self.billetes = {}
-        self.abiertas = {}     # id del billete -> (Pty, dispositivo)
+        self.abiertas = {}     # id de la sesion -> Sesion
 
     def dar_billete(self, disp):
         ahora = time.monotonic()
@@ -212,7 +307,42 @@ class Terminales:
     def cuantas(self):
         return len(self.abiertas)
 
+    def nueva(self, pty, dispositivo, al_salir):
+        """La Sesion de una shell recien abierta, con el numero libre mas bajo
+        de ese telefono (cerrar la 1 y abrir otra da otra vez la 1)."""
+        usados = {x.numero for x in self.abiertas.values() if x.dispositivo == dispositivo}
+        numero = next(n for n in range(1, MAX_ABIERTAS + 2) if n not in usados)
+        sesion = Sesion(pty, dispositivo, numero, al_salir)
+        self.abiertas[sesion.id] = sesion
+        return sesion
+
+    def de(self, dispositivo):
+        return sorted((x for x in self.abiertas.values() if x.dispositivo == dispositivo),
+                      key=lambda x: x.numero)
+
+    def una(self, ident, dispositivo):
+        x = self.abiertas.get(ident)
+        return x if x is not None and x.dispositivo == dispositivo else None
+
+    def sueltas_de_mas(self, ahora=None):
+        ahora = time.monotonic() if ahora is None else ahora
+        return [x for x in self.abiertas.values()
+                if x.ws is None and x.suelta_desde is not None and ahora - x.suelta_desde > SUELTA_DURA]
+
+    async def cerrar(self, sesion, codigo=CIERRE_CERRADA, motivo="cerrada"):
+        """Cierra de verdad: la shell (SIGHUP a su grupo) y quien la mire."""
+        if self.abiertas.pop(sesion.id, None) is None:
+            return False
+        ws = sesion.ws
+        sesion.ws = None
+        if ws is not None and not ws.closed:
+            with contextlib.suppress(ConnectionResetError, RuntimeError):
+                await ws.close(code=codigo, message=motivo.encode()[:120])
+        await sesion.pty.cerrar()
+        if sesion.bomba is not asyncio.current_task():   # al salir la shell, es ella quien llama
+            sesion.bomba.cancel()
+        return True
+
     async def cerrar_todas(self):
-        for pty, _ in list(self.abiertas.values()):
-            await pty.cerrar()
-        self.abiertas.clear()
+        for sesion in list(self.abiertas.values()):
+            await self.cerrar(sesion, motivo="servicio_parado")

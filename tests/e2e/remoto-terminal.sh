@@ -12,7 +12,11 @@
 #   4. que quitarle el pase con la terminal abierta la CIERRA y mata la shell y
 #      lo que dejo corriendo;
 #   5. que la PC lo cuenta (aviso y registro) y que lo tecleado no queda en el
-#      registro (ahi pasa la contraseña de sudo).
+#      registro (ahi pasa la contraseña de sudo);
+#   6. que la terminal NO muere al irse el celular (minimizar, red): sigue
+#      SUELTA, se retoma sin contraseña con lo que salió mientras tanto, se
+#      puede tener varias con número y cerrar una; y que suelta tambien se
+#      cierra si el telefono pierde el pase. Solo la retoma SU telefono.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/../lib/comun.sh"
@@ -75,16 +79,20 @@ async def billete(token, contrasena):
         async with s.post(f"{B}/v0/terminal", json={"contrasena": contrasena},
                           headers={"Authorization": "Bearer " + token}) as r:
             return {"http": r.status, "cuerpo": await r.json()}
-async def hablar(token, ident, guion):
-    salida, cierre = b"", None
+async def http(metodo, token, ruta):
+    async with aiohttp.ClientSession() as s:
+        async with s.request(metodo, f"{B}{ruta}", headers={"Authorization": "Bearer " + token}) as r:
+            return {"http": r.status, "cuerpo": await r.json()}
+async def hablar(token, ident, guion, ruta="terminal"):
+    salida, cierre, ficha = b"", None, None
     async with aiohttp.ClientSession() as s:
         try:
-            ws = await s.ws_connect(f"{B}/v0/terminal/{ident}?filas=24&columnas=80",
+            ws = await s.ws_connect(f"{B}/v0/{ruta}/{ident}?filas=24&columnas=80",
                                     headers={"Authorization": "Bearer " + token})
         except aiohttp.WSServerHandshakeError as e:
-            return {"http": e.status, "salida": "", "cierre": None}
+            return {"http": e.status, "salida": "", "cierre": None, "ficha": None}
         async def leer(hasta=None, plazo=10):
-            nonlocal salida, cierre
+            nonlocal salida, cierre, ficha
             fin = asyncio.get_running_loop().time() + plazo
             while asyncio.get_running_loop().time() < fin:
                 if hasta and hasta.encode() in salida:
@@ -95,6 +103,8 @@ async def hablar(token, ident, guion):
                     continue
                 if m.type == aiohttp.WSMsgType.BINARY:
                     salida += m.data
+                elif m.type == aiohttp.WSMsgType.TEXT and ficha is None:
+                    ficha = json.loads(m.data).get("terminal")
                 elif m.type in (aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING):
                     cierre = ws.close_code
                     return False
@@ -114,12 +124,15 @@ async def hablar(token, ident, guion):
             await leer(None, 0.5)
         if cierre is None:
             await ws.close()
-        return {"http": 101, "salida": salida.decode("utf-8", "replace"), "cierre": cierre}
+        return {"http": 101, "salida": salida.decode("utf-8", "replace"), "cierre": cierre, "ficha": ficha}
 orden = sys.argv[2]
 if orden == "billete":
     print(json.dumps(asyncio.run(billete(sys.argv[3], sys.argv[4]))))
+elif orden in ("GET", "DELETE"):
+    print(json.dumps(asyncio.run(http(orden, sys.argv[3], sys.argv[4]))))
 else:
-    print(json.dumps(asyncio.run(hablar(sys.argv[3], sys.argv[4], json.loads(sys.argv[5])))))
+    print(json.dumps(asyncio.run(hablar(sys.argv[3], sys.argv[4], json.loads(sys.argv[5]),
+                                        *(sys.argv[6:7] or [])))))
 FINPY
 T() { python3 "$TMP/term.py" "$B" "$@"; }
 billete() { campo "$(T billete "$TOKEN" clave-term)" 'd["cuerpo"]["terminal"]'; }
@@ -186,8 +199,59 @@ igual "  y cerrada, las mismas veces" "3" "$(grep -c '"accion": "terminal_cerrad
 afirmar "  con el porqué (salió, pase_vencido)" grep -q '"por": "pase_vencido"' "$XDG_STATE_HOME/celiuz/remoto/registro.jsonl"
 afirmar "lo tecleado no está en el registro" sh -c "! grep -q 'hola-\|stty\|sleep 1000' '$XDG_STATE_HOME/celiuz/remoto/registro.jsonl'"
 afirmar "  ni en el diario del servidor" sh -c "! grep -q 'hola-\|stty\|sleep 1000' '$TMP/servidor.log'"
-afirmar "el servidor no se quejo" sh -c "! grep -q Traceback '$TMP/servidor.log'"
 igual "no queda ninguna terminal abierta" "0" "$(campo "$("$CLI" estado --json)" 'd["terminales"]')"
+
+titulo "6. Minimizar: la terminal sigue en la PC y se retoma"
+# La seccion 4 le quito el pase: se le devuelve por cable, como en la 1.
+echo "clave-term" | "$CLI" renovar --sin-adb > "$TMP/ren.out" 2>/dev/null &
+esperar_a 10 hay_codigo "$TMP/ren.out"
+"$TEL" renovar "$USB" "$(sed -n 's/^CODIGO //p' "$TMP/ren.out")" "$TMP/tel" clave-term > /dev/null
+wait $!
+r="$(T hablar "$TOKEN" "$(billete)" '[["escribe","echo antes-$((1+1)); (sleep 2; echo suelta-$((3+4))) &\n"],["hasta","antes-2"]]')"
+igual "se abre la 1 (su ficha llega primero, en texto)" "1" "$(campo "$r" 'd["ficha"]["numero"]')"
+ID1="$(campo "$r" 'd["ficha"]["id"]')"
+igual "  y el celular se va sin exit: no se cierra" "None" "$(campo "$r" 'd["cierre"]')"
+sleep 3
+l="$(T GET "$TOKEN" /v0/terminales)"
+igual "la lista la tiene, suelta (nadie mirando)" "1 False" \
+    "$(campo "$l" 'str(len(d["cuerpo"]["terminales"])) + " " + str(d["cuerpo"]["terminales"][0]["mirando"])')"
+igual "  y dice qué corre en ella" "bash" "$(campo "$l" 'd["cuerpo"]["terminales"][0]["titulo"]')"
+r="$(T hablar "$TOKEN" "$ID1" '[["hasta","suelta-7"],["escribe","echo de-vuelta-$((5+5))\n"],["hasta","de-vuelta-10"]]' terminales)"
+s="$(campo "$r" 'd["salida"]')"
+afirmar "al retomarla, sin contraseña, repinta lo de antes" grep -q "antes-2" <<<"$s"
+afirmar "  y lo que salió mientras estaba suelta" grep -q "suelta-7" <<<"$s"
+afirmar "  y se sigue tecleando" grep -q "de-vuelta-10" <<<"$s"
+igual "otro celular sin permiso de terminal no la retoma (403)" "403" \
+    "$(campo "$(T hablar "$SINPERMISO" "$ID1" '[]' terminales)" 'd["http"]')"
+emparejar "$TMP/otro" estado,terminal
+OTRO="$(token "$TMP/otro")"
+igual "  ni uno CON permiso de terminal" "404" "$(campo "$(T hablar "$OTRO" "$ID1" '[]' terminales)" 'd["http"]')"
+igual "  ni la ve en su lista" "0" "$(campo "$(T GET "$OTRO" /v0/terminales)" 'len(d["cuerpo"]["terminales"])')"
+
+titulo "7. Varias, con su número, y cerrar una"
+r="$(T hablar "$TOKEN" "$(billete)" '[["escribe","sleep 1000 & echo PID2=$!\n"],["hasta","PID2="]]')"
+igual "la segunda es la 2" "2" "$(campo "$r" 'd["ficha"]["numero"]')"
+ID2="$(campo "$r" 'd["ficha"]["id"]')"
+PID_SLEEP="$(campo "$r" 'd["salida"]' | sed -n 's/.*PID2=\([0-9]*\).*/\1/p' | head -1)"
+igual "cerrar la 2 desde la lista" "200" "$(campo "$(T DELETE "$TOKEN" "/v0/terminales/$ID2")" 'd["http"]')"
+esperar_a 5 muerto
+afirmar "  mata su shell y lo que dejó corriendo" muerto
+igual "  ya no se retoma" "404" "$(campo "$(T hablar "$TOKEN" "$ID2" '[]' terminales)" 'd["http"]')"
+igual "  y la 1 sigue ahí" "1" "$(campo "$(T GET "$TOKEN" /v0/terminales)" 'd["cuerpo"]["terminales"][0]["numero"]')"
+r="$(T hablar "$TOKEN" "$(billete)" '[["hasta","$"]]')"
+igual "la siguiente vuelve a ser la 2 (el número libre más bajo)" "2" "$(campo "$r" 'd["ficha"]["numero"]')"
+
+titulo "8. Suelta y sin pase: se cierra igual"
+r="$(T hablar "$TOKEN" "$ID1" '[["escribe","sleep 1000 & echo PID3=$!\n"],["hasta","PID3="]]' terminales)"
+PID_SLEEP="$(campo "$r" 'd["salida"]' | sed -n 's/.*PID3=\([0-9]*\).*/\1/p' | head -1)"
+"$CLI" quitar-pase "$DISP" >/dev/null
+ninguna() { [ "$(campo "$("$CLI" estado --json)" 'd["terminales"]')" = "0" ]; }
+esperar_a 12 ninguna
+afirmar "con nadie mirando, el vigía de la PC las cierra todas" ninguna
+esperar_a 5 muerto
+afirmar "  y mata lo que corría" muerto
+afirmar "  y lo apunta" grep -q '"por": "pase_vencido", "numero": 2' "$REG"
+afirmar "el servidor no se quejo" sh -c "! grep -q Traceback '$TMP/servidor.log'"
 
 afirmar_intacta_la_casa_real
 resumen

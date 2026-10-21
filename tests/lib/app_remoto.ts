@@ -265,6 +265,53 @@ async function invitacion() {
   comprobar('la misma invitación otra vez: «firma» (un solo uso)', otra?.codigo === 'firma', otra?.codigo);
 }
 
+// Las terminales que se minimizan (2026-10-21): abrir, soltar, verla en la
+// lista, retomarla con lo de antes, cerrar una desde la lista y `exit`.
+async function terminales() {
+  const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
+  const con = await c.entrar(h, equipo, clave, contrasena);
+  const esperar = async (cond: () => boolean, ms = 8000) => {
+    const fin = Date.now() + ms;
+    while (!cond() && Date.now() < fin) await new Promise((r) => setTimeout(r, 50));
+    return cond();
+  };
+  const abrir = (destino: { billete: string } | { retomar: string }) => {
+    const t = { salida: '', cierre: null as number | null, ficha: null as any, abierta: null as c.TerminalAbierta | null };
+    const dec = new TextDecoder();
+    t.abierta = con.terminal(destino, 24, 80, (b) => { t.salida += dec.decode(b, { stream: true }); },
+                             (codigo) => { t.cierre = codigo; }, (f) => { t.ficha = f; });
+    return t;
+  };
+
+  const t1 = abrir({ billete: await con.billeteTerminal(contrasena) });
+  comprobar('terminal nueva: lo primero que llega es su ficha (con id y número)',
+            await esperar(() => t1.ficha !== null) && t1.ficha.numero === 1 && !!t1.ficha.id, t1.ficha);
+  t1.abierta!.escribir('echo app-$((20+1))\r');
+  comprobar('   y la shell contesta', await esperar(() => t1.salida.includes('app-21')), t1.salida.slice(-200));
+  t1.abierta!.cerrar();
+  await new Promise((r) => setTimeout(r, 500));
+  let lista = (await con.terminales()).terminales;
+  comprobar('minimizada: sigue en la lista de la PC, sin nadie mirando',
+            lista.length === 1 && lista[0].id === t1.ficha.id && !lista[0].mirando, lista);
+  comprobar('   y la ficha dice qué corre y desde cuándo', lista[0].titulo === 'bash' && lista[0].desde > 1.7e9, lista[0]);
+
+  const t2 = abrir({ retomar: t1.ficha.id });
+  comprobar('retomarla, sin contraseña, repinta lo de antes',
+            await esperar(() => t2.salida.includes('app-21')), t2.salida.slice(-200));
+  const t3 = abrir({ billete: await con.billeteTerminal(contrasena) });
+  await esperar(() => t3.ficha !== null);
+  comprobar('una segunda es la 2', t3.ficha?.numero === 2, t3.ficha);
+  lista = await con.cerrarTerminal(t3.ficha.id);
+  comprobar('cerrarla desde la lista: la PC la quita', lista.length === 1 && lista[0].numero === 1, lista);
+  comprobar('   y a quien la miraba le llega «cerrada» (4002)',
+            await esperar(() => t3.cierre === c.TERMINAL_CERRADA), t3.cierre);
+  const no = await error(con.cerrarTerminal(t3.ficha.id));
+  comprobar('   cerrarla otra vez: «no_existe»', no?.codigo === 'no_existe', no?.codigo);
+  t2.abierta!.escribir('exit\r');
+  comprobar('exit en la retomada: «la shell terminó» (4000)', await esperar(() => t2.cierre === c.TERMINAL_SALIO), t2.cierre);
+  comprobar('   y ya no queda ninguna', (await con.terminales()).terminales.length === 0);
+}
+
 async function sinPase() {
   const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
   const con = await c.entrar(h, equipo, clave, contrasena);
@@ -282,6 +329,7 @@ try {
   else if (fase === 'invitacion') await invitacion();
   else if (fase === 'control') await controlar();
   else if (fase === 'sinpase') await sinPase();
+  else if (fase === 'terminal') await terminales();
   else await renovarPase();
 } catch (e) {
   comprobar(`sin excepciones: ${(e as Error).message}`, false);

@@ -81,7 +81,7 @@ export interface Estado {
   bateria: { nivel: number; cargando: boolean } | null;
   encendida_desde: string;
   pase_hasta: string | null;
-  vigilancia: 'desarmada' | 'sin_telefonos' | 'armada' | 'avisando' | 'apagando';
+  vigilancia: 'desarmada' | 'sin_telefonos' | 'armada' | 'avisando' | 'jugando' | 'apagando';
   energia: EstadoEnergia | null; // una cuenta atras en marcha
   escritorio?: Escritorio; // desde la fase 5 (un servidor viejo no lo manda)
 }
@@ -184,4 +184,15 @@ export interface Favorito {
   tipo: 'carpeta' | 'archivo';
   existe: boolean;
   desde: string;
+}
+
+// Una terminal abierta en la PC (terminal.py, `Sesion.ficha`). `desde` en
+// segundos de época; `titulo`, lo que corre delante (fish, claude, vim...);
+// `mirando`, si hay una pantalla enganchada ahora mismo.
+export interface FichaTerminal {
+  id: string;
+  numero: number;
+  desde: number;
+  titulo: string;
+  mirando: boolean;
 }
