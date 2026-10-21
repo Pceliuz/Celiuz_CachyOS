@@ -49,6 +49,29 @@ afirmar_igual "-" "$(grep '^faltan_en_css ' "$TMP/colores.txt" | cut -d' ' -f2)"
 afirmar_igual "-" "$(grep '^usados_sin_definir ' "$TMP/colores.txt" | cut -d' ' -f2)" \
     "style.css no usa ningun color que no exista"
 
+titulo "1b. Y a la app del celular (Celiuz Remoto), con el alfa en su sitio"
+afirmar "genera la paleta de la app" test -s "$COPIA/remoto/app/src/colores.json"
+afirmar "   con todos los colores de colores.conf, y opacos como #RRGGBB" python3 - "$COPIA" <<'FINPY'
+import json, re, sys, pathlib
+raiz = pathlib.Path(sys.argv[1])
+conf = (raiz / "hypr/conf/colores.conf").read_text(encoding="utf-8")
+definidas = dict(re.findall(r'^\$(\w+)\s*=\s*rgba\(([0-9a-fA-F]{8})\)', conf, re.M))
+app = json.loads((raiz / "remoto/app/src/colores.json").read_text())["colores"]
+assert set(app) == set(definidas), set(definidas) ^ set(app)
+for n, h in definidas.items():
+    if h[6:].lower() == "ff":
+        assert app[n] == "#" + h[:6].lower(), (n, app[n])
+FINPY
+# El alfa es la trampa: React Native lee #RRGGBBAA con el alfa DETRAS. $halo
+# (6a00f4aa) tiene que salir como rgba con 0.667, no como un hex de ocho.
+afirmar_igual "rgba(106, 0, 244, 0.667)" \
+    "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["colores"]["halo"])' "$COPIA/remoto/app/src/colores.json")" \
+    "   un translucido sale en rgba(), sin hex de ocho digitos que leer al reves"
+# Y que nadie escriba un color a mano en la app (fuera node_modules y lo generado)
+a_mano="$(grep -rnE "#[0-9a-fA-F]{6}\b" "$REPO/remoto/app" --include='*.ts' --include='*.tsx' \
+          --exclude-dir=node_modules 2>/dev/null)"
+afirmar_igual "" "$a_mano" "   la app no lleva ningun hex escrito a mano"
+
 titulo "2. Es idempotente (generar dos veces da lo mismo)"
 sha1="$(sha256sum "$COPIA/waybar/colores.css" | cut -d' ' -f1)"
 "$COPIA/hypr/scripts/gen-colores.py" >/dev/null 2>&1

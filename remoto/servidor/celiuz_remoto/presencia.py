@@ -1,7 +1,7 @@
 """
 remoto/servidor/celiuz_remoto/presencia.py — ¿hay una PERSONA delante de la PC?
 
-Fase 2. Pendiente: aqui solo esta lo que tiene que hacer (ver remoto/DISEÑO.md
+Fase 4. Pendiente: aqui solo esta lo que tiene que hacer (ver remoto/DISEÑO.md
 y remoto/PROTOCOLO.md).
 
 - Si: teclado o raton recientes (ext-idle-notify, lo mismo que mide hypridle),

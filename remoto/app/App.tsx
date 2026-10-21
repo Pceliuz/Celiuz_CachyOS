@@ -2,11 +2,12 @@
 // existe. Las pantallas van en src/pantallas/ (una por maqueta) y todo lo que
 // hable con la PC, en src/api/.
 //
-// Los colores son PROVISIONALES: copiados a mano de hypr/conf/colores.conf. Una
-// copia de la paleta se separa sola (ver CLAUDE.md, «Un color copiado no falla
-// nunca»); antes de la fase 1 los tiene que generar gen-colores.py.
+// Los colores salen de src/paleta.ts (colores.json, que genera gen-colores.py
+// de la paleta del escritorio): aqui no se escribe ningun hex a mano.
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
+
+import { colores } from './src/paleta';
 
 export default function App() {
   return (
@@ -21,11 +22,11 @@ export default function App() {
 const estilos = StyleSheet.create({
   fondo: {
     flex: 1,
-    backgroundColor: '#0d0418',
+    backgroundColor: colores.abismo,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  titulo: { color: '#e4c7ff', fontSize: 26, fontWeight: '700' },
-  texto: { color: '#8a7aa8', fontSize: 14 },
+  titulo: { color: colores.luz, fontSize: 26, fontWeight: '700' },
+  texto: { color: colores.tenue, fontSize: 14 },
 });

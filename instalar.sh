@@ -321,7 +321,7 @@ recargar_sesion() {
     [ "$SOLO_REVISAR" -eq 1 ] && return 0
     [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || return 0
     command -v hyprctl >/dev/null 2>&1 || return 0
-    titulo "9. La sesion abierta"
+    titulo "10. La sesion abierta"
     local errores
     if errores="$("$REPO/hypr/scripts/recargar.sh" -q 2>&1)"; then
         hecho "  config recargada, sin errores"
@@ -929,6 +929,54 @@ sddm_estado() {
     fi
 }
 
+# --- 9. Celiuz Remoto --------------------------------------------------------
+#
+# Se deja TODO puesto (la CLI, la app de la PC, su icono y la unidad de
+# systemd) pero NO se enciende: abrir un «apagar» hacia fuera es decision de
+# cada uno, y se toma desde la app de la PC (remoto/DISEÑO.md). Por eso lo que
+# le falte al equipo no es un aviso mientras este apagado: es opcional.
+
+remoto() {
+    titulo "9. Celiuz Remoto (manejar el equipo desde el celular)"
+    local unidades="$HOME/.config/systemd/user"
+    hacer mkdir -p "$HOME/.local/bin" "$DATOS/applications" \
+                   "$DATOS/icons/hicolor/scalable/apps" "$unidades"
+    enlazar "$REPO/remoto/servidor/celiuz-remoto.py"          "$HOME/.local/bin/celiuz-remoto"
+    enlazar "$REPO/remoto/escritorio/celiuz-remoto-config.py" "$HOME/.local/bin/celiuz-remoto-config"
+    enlazar "$REPO/remoto/escritorio/celiuz-remoto.desktop"   "$DATOS/applications/celiuz-remoto.desktop"
+    enlazar "$REPO/remoto/escritorio/celiuz-remoto.svg"       "$DATOS/icons/hicolor/scalable/apps/celiuz-remoto.svg"
+    # La unidad se COPIA, no se enlaza: con una unidad enlazada a un fichero de
+    # fuera, `systemctl --user disable` (el boton de apagar de la app) BORRA
+    # el enlace, y despues ya no habia servicio que volver a encender. Medido
+    # el 2026-10-20. La copia se refresca aqui cada vez que cambie en el repo.
+    local unidad="$unidades/celiuz-remoto.service"
+    if [ -L "$unidad" ] || ! cmp -s "$REPO/remoto/servidor/celiuz-remoto.service" "$unidad"; then
+        hacer rm -f "$unidad"
+        hacer install -m 0644 "$REPO/remoto/servidor/celiuz-remoto.service" "$unidad"
+        hacer systemctl --user daemon-reload 2>/dev/null
+        hecho "  unidad de systemd puesta al dia: $unidad"
+    else
+        gris "  unidad de systemd al dia"
+    fi
+
+    local faltan
+    faltan="$(python3 "$REPO/remoto/servidor/celiuz-remoto.py" revisar --json 2>/dev/null \
+              | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)["faltan"]))' 2>/dev/null)"
+    if systemctl --user is-enabled --quiet celiuz-remoto.service 2>/dev/null; then
+        if systemctl --user is-active --quiet celiuz-remoto.service; then
+            verde "  encendido (se apaga desde la app Celiuz Remoto)"
+        else
+            aviso "Celiuz Remoto esta encendido pero no corre: journalctl --user -u celiuz-remoto"
+        fi
+        [ -n "$faltan" ] && aviso "a Celiuz Remoto le falta: sudo pacman -S $faltan"
+    else
+        echo "  apagado (es opcional: se enciende desde la app Celiuz Remoto)"
+        [ -n "$faltan" ] && gris "    para usarlo haria falta: sudo pacman -S $faltan"
+    fi
+    hacer update-desktop-database "$DATOS/applications" 2>/dev/null
+    hacer gtk-update-icon-cache -f -t "$DATOS/icons/hicolor" 2>/dev/null
+}
+
 # --- Adelante ----------------------------------------------------------------
 
 if [ "$SOLO_REVISAR" -eq 1 ]; then
@@ -951,6 +999,7 @@ else
     fondo
     pantalla
     sddm_estado
+    remoto
     recargar_sesion
 fi
 

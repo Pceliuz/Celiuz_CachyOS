@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Celiuz Remoto
+Comment=Empareja tu celular para manejar este equipo desde fuera
+Comment[en]=Pair your phone to control this computer remotely
+Exec=celiuz-remoto-config
+Icon=celiuz-remoto
+Terminal=false
+Categories=Settings;Network;Utility;
+Keywords=remoto;celular;telefono;android;tailscale;celiuz;
+StartupNotify=false
+StartupWMClass=celiuz-remoto

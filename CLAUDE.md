@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (43 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (49 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -98,9 +98,16 @@ enumera SDL**, no si el device existe.
 ## Y en construcción también: CELIUZ REMOTO (`remoto/`)
 
 Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
-apps, archivos, terminal). **Solo está la estructura** (2026-10-20). El diseño
-cerrado con el usuario está en `remoto/DISEÑO.md` y el contrato con la app en
-`remoto/PROTOCOLO.md`: léelos antes de escribir nada ahí. Dos cosas que no se
+apps, archivos, terminal). **Va por fases (8, en `remoto/DISEÑO.md`), y cada
+una se cierra probada antes de empezar la siguiente**: lo pidió el usuario.
+Hechas la 1 y la 2 (2026-10-20): el servidor empareja por el canal USB, deja
+entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado en
+vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las maquetas)
+guía el cable, empareja, renueva, revoca y enciende el servicio. Lo prueba
+`tests/e2e/remoto.sh` atacándolo con un celular de mentira
+(`tests/lib/telefono_falso.py`) y un `adb` de mentira que hace de celular. El diseño cerrado con el usuario está en
+`remoto/DISEÑO.md` y el contrato con la app en `remoto/PROTOCOLO.md`: léelos
+antes de escribir nada ahí. Dos cosas que no se
 negocian: **viene apagado** (se activa a mano desde la PC) y **escucha solo por
 Tailscale**. La app se compila en la PC (nunca en la nube de Expo) y su
 `node_modules` no se versiona.
@@ -239,7 +246,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | Generado | Lo escribe | Desde |
 |---|---|---|
 | `waybar/dock.jsonc`, `waybar/dock-icons.css` | `hypr/scripts/gen-dock.py` | `waybar/dock-apps.json` |
-| `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml`, `hypr/conf/colores-pango.conf` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
+| `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml`, `hypr/conf/colores-pango.conf`, `remoto/app/src/colores.json` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/lua/local.lua` y `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
 | `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py`, y `waybar/sensores.jsonc` + `lib/sensores.py` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
@@ -1235,6 +1242,33 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   su línea de órdenes contiene ese texto (pasó el 2026-09-26 con un
   `kill $(pgrep -f 'ventana.py juego')`: se mató la herramienta). El PID de
   una ventana se saca de `hyprctl clients -j`.
+
+- **aiohttp 3.14 llama a los middlewares POR NOMBRE** (`handler=...`): uno
+  escrito `async def m(peticion, manejador)` convierte CADA petición en un 500
+  (`unexpected keyword argument 'handler'`). Van con `(request, handler)`.
+- **`app.config.ts` de Expo no puede importar otro `.ts`**: lo ejecuta Node y
+  se planta con «Cannot find module», con `npm run typecheck` en verde. Por eso
+  la paleta de la app es un JSON (`remoto/app/src/colores.json`), que leen la
+  config y la app. Comprobar con `npx expo config --type public`, no con el
+  typecheck.
+- **`systemctl --user disable` BORRA una unidad que sea un enlace** a un
+  fichero de fuera de las carpetas de systemd (la trata como «linked»). Con
+  `celiuz-remoto.service` enlazada, apagar el servicio desde la ventana se
+  llevaba la unidad, y ya no había nada que volver a encender. Por eso
+  `instalar.sh` la COPIA (y la refresca si cambia en el repo).
+- **En Wayland la clase de una ventana GTK3 sale de `GLib.set_prgname()`**,
+  antes de crear nada; `set_wmclass` no hace nada (y avisa de obsoleto). Es la
+  que casa con `StartupWMClass` y con las reglas de `lua/windowrules.lua`.
+- **Un `Gtk.Label` con ajuste de línea pide el ancho de su frase ENTERA** en
+  GTK3: una barra lateral de 230 px salía de 420. Se le pone
+  `set_max_width_chars`.
+- **adb con dos celulares enchufados se planta** («more than one device»):
+  todo lleva `-s <serie>`. Y el nombre de un celular no está en una sola
+  propiedad: un HONOR contesta «[ ]» a `settings get global device_name` y
+  tiene el suyo en `ro.config.marketing_name` (`remoto/servidor/celiuz_remoto/adb.py`).
+- **`afirmar_contiene` usa `grep -E`**: un base64 (con `+`) o cualquier texto
+  con metacaracteres no casa consigo mismo. Para buscar algo literal,
+  `afirmar "..." grep -qF -- "$texto" fichero`.
 
 ## Las pruebas
 

@@ -44,6 +44,16 @@ hl.window_rule({
     float = true, center = true, size = "900 560",
 })
 
+-- La app de la PC de Celiuz Remoto (remoto/escritorio): ventana de ajustes,
+-- se abre, se empareja y se cierra. Sin `size` a proposito: la maqueta mide
+-- 1200x760 y eso no cabe en la laptop (1366x768), asi que el tamaño lo elige la
+-- propia app segun la pantalla donde se abre.
+hl.window_rule({
+    name  = "celiuz-remoto",
+    match = { class = "^(celiuz-remoto)$" },
+    float = true, center = true,
+})
+
 -- La clase "dock-term" existe pero NO tiene regla, y es a proposito: es la que
 -- lleva una app de consola puesta en el dock (un `.desktop` con Terminal=true,
 -- que dock-manager.py abre por terminal.sh). Eso no es una consulta rapida sino

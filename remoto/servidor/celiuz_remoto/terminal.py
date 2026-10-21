@@ -1,7 +1,7 @@
 """
 remoto/servidor/celiuz_remoto/terminal.py — la terminal remota (PTY).
 
-Fase 4. Pendiente: aqui solo esta lo que tiene que hacer (ver remoto/DISEÑO.md
+Fase 7. Pendiente: aqui solo esta lo que tiene que hacer (ver remoto/DISEÑO.md
 y remoto/PROTOCOLO.md).
 
 - La shell del usuario en un PTY, por WebSocket.

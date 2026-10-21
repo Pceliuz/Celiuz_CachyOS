@@ -2,13 +2,22 @@
 """
 remoto/servidor/celiuz-remoto.py — el servicio de Celiuz Remoto.
 
-    celiuz-remoto.py revisar          que le falta a este equipo para el remoto
-    celiuz-remoto.py rutas            donde guarda cada cosa (fuera del repo)
-    celiuz-remoto.py servir           el servicio                   (fase 1, pendiente)
-    celiuz-remoto.py dispositivos     telefonos emparejados         (fase 1, pendiente)
-    celiuz-remoto.py revocar <id>     quitar un telefono            (fase 1, pendiente)
+    celiuz-remoto.py revisar            que le falta a este equipo para el remoto
+    celiuz-remoto.py rutas              donde guarda cada cosa (fuera del repo)
+    celiuz-remoto.py servir             el servicio (escucha solo por Tailscale)
+    celiuz-remoto.py estado             que dice el servicio que esta corriendo
+    celiuz-remoto.py dispositivos       los telefonos emparejados
+    celiuz-remoto.py celulares          los que hay conectados por cable (adb)
+    celiuz-remoto.py emparejar          empareja el celular del cable (--celular SERIE)
+    celiuz-remoto.py renovar            abre el canal USB para renovar un pase
+    celiuz-remoto.py revocar <id>       quita un telefono (no vuelve a entrar)
+    celiuz-remoto.py desbloquear <id>   tras 5 contraseñas mal
+    celiuz-remoto.py quitar-pase <id>   le quita el pase (sigue emparejado)
+    celiuz-remoto.py permisos <id> +terminal -archivos
+    celiuz-remoto.py registro [-n N]    lo ultimo que paso
 
-En construccion. El diseño, en remoto/DISEÑO.md.
+Un <id> vale entero, por su principio o por el nombre del telefono. El diseño,
+en remoto/DISEÑO.md; lo que se dicen la app y el servidor, en PROTOCOLO.md.
 """
 
 import argparse
@@ -28,6 +37,7 @@ NECESIDADES = [
     ("tailscale", "programa", "la red entre el celular y la PC", "tailscale"),
     ("aiohttp", "modulo", "el servidor (HTTP y WebSocket)", "python-aiohttp"),
     ("psutil", "modulo", "CPU, RAM, disco y red", "python-psutil"),
+    ("cryptography", "modulo", "comprobar la firma de cada celular", "python-cryptography"),
     ("adb", "programa", "instalar la app y emparejar por cable", "android-tools"),
 ]
 
@@ -75,16 +85,257 @@ def cmd_rutas(args):
     return 0
 
 
-def cmd_pendiente(args):
-    print(f"«{args.orden}» todavia no existe: es de la fase 1 (ver remoto/DISEÑO.md).",
-          file=sys.stderr)
-    return 2
+def _almacen():
+    from celiuz_remoto import dispositivos
+    return dispositivos.Almacen()
+
+
+def _buscar(almacen, texto):
+    disp = almacen.buscar(texto)
+    if disp is None:
+        print(f"No encuentro un único teléfono «{texto}» (mira «dispositivos»).",
+              file=sys.stderr)
+    return disp
+
+
+def _hora(iso):
+    from celiuz_remoto import pase
+    m = pase.leer(iso)
+    return m.strftime("%d/%m %H:%M") if m else "—"
+
+
+def cmd_servir(args):
+    import asyncio
+    from celiuz_remoto import estado, red, servidor
+    try:
+        ip = red.ip_tailscale()
+    except red.SinRed as e:
+        # Sale con error para que systemd lo reintente: al arrancar la PC,
+        # tailscaled puede tardar en tener IP.
+        print(f"celiuz-remoto: no arranco: {e}", file=sys.stderr)
+        return 1
+    try:
+        return asyncio.run(servidor.servir(ip, estado.Muestreador()))
+    except OSError as e:
+        print(f"celiuz-remoto: no puedo escuchar en {ip}: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_estado(args):
+    from celiuz_remoto import control
+    try:
+        codigo, d = control.pedir("GET", "/control/estado")
+    except control.SinServicio as e:
+        print(e, file=sys.stderr)
+        return 1
+    if codigo != 200:
+        print(f"  El servicio contestó {codigo}: {d.get('mensaje')}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(d, ensure_ascii=False, indent=2))
+    else:
+        print(f"  escuchando en  {d['red']}")
+        print(f"  sesiones       {d['sesiones']}")
+        print(f"  canal USB      {d['ventana'] or 'cerrado'}")
+    return 0
+
+
+def cmd_dispositivos(args):
+    from celiuz_remoto import pase
+    todos = _almacen().todos()
+    if args.json:
+        # Sin hashes: lo que importa saber, no lo que se puede robar.
+        limpio = [{k: v for k, v in d.items() if k not in ("contrasena", "publica")}
+                  | {"pase_vigente": pase.vigente(d)} for d in todos]
+        print(json.dumps(limpio, ensure_ascii=False, indent=2))
+        return 0
+    if not todos:
+        print("  Ningún teléfono emparejado (celiuz-remoto.py emparejar).")
+        return 0
+    for d in todos:
+        estado_pase = f"pase hasta {_hora(d['pase_hasta'])}" if pase.vigente(d) else "sin pase"
+        marca = "  BLOQUEADO" if d.get("bloqueado") else ""
+        print(f"  {d['id']}  {d['nombre']:<20} {estado_pase:<24} "
+              f"{','.join(d['permisos'])}{marca}")
+        print(f"  {'':16}  emparejado {_hora(d['creado'])}, "
+              f"última sesión {_hora(d.get('ultima_sesion'))}")
+    return 0
+
+
+def _leer_contrasena():
+    import getpass
+    if not sys.stdin.isatty():
+        # Para la app de la PC y las pruebas: una linea por stdin, nunca por
+        # argumento (se veria en /proc/<pid>/cmdline, como la del wifi).
+        return sys.stdin.readline().rstrip("\n")
+    while True:
+        uno = getpass.getpass("  Contraseña de la app para este teléfono: ")
+        dos = getpass.getpass("  Otra vez: ")
+        if uno == dos:
+            return uno
+        print("  No coinciden. Otra vez.", file=sys.stderr)
+
+
+def _sin_adb(cuerpo):
+    """Abre la ventana y espera, sin tocar el cable: imprime el codigo para que
+    lo use otro (las pruebas, con su celular de mentira)."""
+    from celiuz_remoto import control
+    try:
+        codigo, d = control.pedir("POST", "/control/ventana", cuerpo)
+    except control.SinServicio as e:
+        print(e, file=sys.stderr)
+        return 1
+    if codigo != 200:
+        print(f"  No se pudo abrir el canal USB: {d.get('mensaje')}", file=sys.stderr)
+        return 1
+    print(f"CODIGO {d['codigo']}", flush=True)
+    print(f"PUERTO {d['puerto']}", flush=True)
+    print(f"  Canal USB abierto {d['caduca']} s. Esperando al teléfono...", file=sys.stderr)
+    _, fin = control.pedir("GET", f"/control/ventana?espera={d['caduca']}",
+                           timeout=d["caduca"] + 15)
+    if fin.get("estado") == "hecho":
+        print(f"  Hecho: {fin.get('dispositivo')}", file=sys.stderr)
+        return 0
+    print(f"  No llegó nada ({fin.get('estado')}).", file=sys.stderr)
+    return 1
+
+
+def _ventana(args, cuerpo):
+    if args.sin_adb:
+        return _sin_adb(cuerpo)
+    from celiuz_remoto import adb, cable
+    try:
+        cel = cable.elegir(adb.celulares(), args.celular)
+        if cel["estado"] != "listo":
+            raise cable.ErrorCable("ese celular no ha autorizado la depuración USB")
+        if not cel.get("app"):
+            raise cable.ErrorCable(f"«{cel['nombre']}» no tiene la app de Celiuz Remoto")
+        print(f"  Con «{cel['nombre']}» ({cel['serie']}).", file=sys.stderr)
+        aviso = lambda texto: print("  " + texto, file=sys.stderr)  # noqa: E731
+        if cuerpo["modo"] == "emparejar":
+            fin = cable.emparejar(cel["serie"], cuerpo["contrasena"], cuerpo["permisos"],
+                                  cuerpo.get("nombre") or cel["nombre"], aviso)
+        else:
+            fin = cable.renovar(cel["serie"], aviso)
+    except (adb.ErrorAdb, cable.ErrorCable) as e:
+        print(f"  No se pudo: {e}", file=sys.stderr)
+        return 1
+    print(f"  Hecho: {fin.get('dispositivo')}", file=sys.stderr)
+    return 0
+
+
+def cmd_celulares(args):
+    from celiuz_remoto import adb
+    try:
+        lista = adb.celulares()
+    except adb.ErrorAdb as e:
+        print(f"  {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(lista, ensure_ascii=False, indent=2))
+        return 0
+    if not lista:
+        print("  Ningún celular por cable (y con la «Depuración USB» activada).")
+    for c in lista:
+        if c["estado"] != "listo":
+            print(f"  {c['serie']:<18} {c['nombre']:<18} {c['estado']}")
+            continue
+        print(f"  {c['serie']:<18} {c['nombre']:<18} Android {c['android'] or '?'} · "
+              f"Tailscale {'sí' if c['tailscale'] else 'NO'} · "
+              f"app {c['app'] or 'no instalada'}")
+    return 0
+
+
+def cmd_emparejar(args):
+    permisos = [p for p in (args.permisos or "").split(",") if p]
+    if not args.sin_adb:
+        # El celular antes que la contraseña: no hacerla escribir para nada.
+        from celiuz_remoto import adb, cable
+        try:
+            args.celular = cable.elegir(adb.celulares(), args.celular)["serie"]
+        except (adb.ErrorAdb, cable.ErrorCable) as e:
+            print(f"  No se pudo: {e}", file=sys.stderr)
+            return 1
+    contrasena = _leer_contrasena()
+    return _ventana(args, {"modo": "emparejar", "contrasena": contrasena,
+                           "permisos": permisos, "nombre": args.nombre})
+
+
+def cmd_renovar(args):
+    return _ventana(args, {"modo": "renovar"})
+
+
+def cmd_revocar(args):
+    from celiuz_remoto import registro
+    almacen = _almacen()
+    disp = _buscar(almacen, args.id)
+    if disp is None:
+        return 1
+    almacen.revocar(disp["id"])
+    registro.apuntar("revocado", disp["id"], nombre=disp["nombre"])
+    print(f"  Revocado «{disp['nombre']}». Si te lo robaron, quítalo también de "
+          "https://login.tailscale.com/admin/machines")
+    return 0
+
+
+def cmd_desbloquear(args):
+    from celiuz_remoto import registro
+    almacen = _almacen()
+    disp = _buscar(almacen, args.id)
+    if disp is None:
+        return 1
+    almacen.cambiar(disp["id"], bloqueado=False, fallos=0)
+    registro.apuntar("desbloqueado", disp["id"])
+    print(f"  «{disp['nombre']}» puede volver a entrar.")
+    return 0
+
+
+def cmd_quitar_pase(args):
+    from celiuz_remoto import registro
+    almacen = _almacen()
+    disp = _buscar(almacen, args.id)
+    if disp is None:
+        return 1
+    almacen.cambiar(disp["id"], pase_hasta=None)
+    registro.apuntar("pase_quitado", disp["id"])
+    print(f"  «{disp['nombre']}» ya no tiene pase. Se renueva por cable.")
+    return 0
+
+
+def cmd_permisos(args):
+    from celiuz_remoto import dispositivos, registro
+    almacen = _almacen()
+    disp = _buscar(almacen, args.id)
+    if disp is None:
+        return 1
+    permisos = set(disp["permisos"])
+    for c in args.cambios:
+        signo, nombre = c[:1], c[1:]
+        if signo not in "+-" or nombre not in dispositivos.PERMISOS:
+            print(f"  «{c}» no vale: +permiso o -permiso, con permiso uno de "
+                  f"{', '.join(dispositivos.PERMISOS)}", file=sys.stderr)
+            return 2
+        (permisos.add if signo == "+" else permisos.discard)(nombre)
+    nuevos = [p for p in dispositivos.PERMISOS if p in permisos]
+    almacen.cambiar(disp["id"], permisos=nuevos)
+    registro.apuntar("permisos", disp["id"], permisos=nuevos)
+    print(f"  «{disp['nombre']}»: {', '.join(nuevos) or 'ninguno'}")
+    return 0
+
+
+def cmd_registro(args):
+    from celiuz_remoto import registro
+    for linea in registro.ultimas(args.n):
+        resto = {k: v for k, v in linea.items() if k not in ("cuando", "accion", "dispositivo")}
+        print(f"  {linea['cuando']}  {linea['accion']:<18} {linea.get('dispositivo', ''):<16} "
+              + " ".join(f"{k}={v}" for k, v in resto.items()))
+    return 0
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="celiuz-remoto.py",
-        description="El servicio de Celiuz Remoto (en construccion).")
+        description="El servicio de Celiuz Remoto.")
     sub = p.add_subparsers(dest="orden", required=True)
 
     s = sub.add_parser("revisar", help="que le falta a este equipo")
@@ -95,12 +346,54 @@ def main(argv=None):
     s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_rutas)
 
-    for orden in ("servir", "dispositivos"):
-        sub.add_parser(orden, help="(fase 1, pendiente)").set_defaults(func=cmd_pendiente)
-    s = sub.add_parser("revocar", help="(fase 1, pendiente)")
-    s.add_argument("id")
-    s.set_defaults(func=cmd_pendiente)
+    s = sub.add_parser("servir", help="el servicio")
+    s.set_defaults(func=cmd_servir)
 
+    s = sub.add_parser("estado", help="lo que dice el servicio")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_estado)
+
+    s = sub.add_parser("dispositivos", help="los telefonos emparejados")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_dispositivos)
+
+    s = sub.add_parser("emparejar", help="abre el canal USB para un telefono nuevo")
+    s.add_argument("--nombre")
+    s.add_argument("--permisos", help="separados por comas (de fabrica: estado,energia)")
+    s.add_argument("--celular", help="la serie de adb, si hay mas de uno enchufado")
+    s.add_argument("--sin-adb", action="store_true",
+                   help="no tocar el cable: imprime el codigo y espera")
+    s.set_defaults(func=cmd_emparejar)
+
+    s = sub.add_parser("renovar", help="abre el canal USB para renovar un pase")
+    s.add_argument("--celular")
+    s.add_argument("--sin-adb", action="store_true")
+    s.set_defaults(func=cmd_renovar)
+
+    s = sub.add_parser("celulares", help="los celulares conectados por cable")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_celulares)
+
+    for orden, func, ayuda in (("revocar", cmd_revocar, "quita un telefono"),
+                               ("desbloquear", cmd_desbloquear, "tras 5 contraseñas mal"),
+                               ("quitar-pase", cmd_quitar_pase, "le quita el pase")):
+        s = sub.add_parser(orden, help=ayuda)
+        s.add_argument("id")
+        s.set_defaults(func=func)
+
+    s = sub.add_parser("permisos", help="+permiso / -permiso")
+    s.add_argument("id")
+    s.add_argument("cambios", nargs="+")
+    s.set_defaults(func=cmd_permisos)
+
+    s = sub.add_parser("registro", help="lo ultimo que paso")
+    s.add_argument("-n", type=int, default=30)
+    s.set_defaults(func=cmd_registro)
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if len(argv) >= 3 and argv[0] == "permisos" and argv[2] != "--":
+        # «permisos X -estado»: sin esto argparse toma -estado por una opcion.
+        argv.insert(2, "--")
     args = p.parse_args(argv)
     return args.func(args)
 

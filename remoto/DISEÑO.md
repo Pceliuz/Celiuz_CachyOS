@@ -67,8 +67,12 @@ si hay una partida, `lib/canales.py` para lo que sea de una sesión.
 - Encima, opcional, la huella del celular.
 
 ### Cada teléfono tiene su clave, y se revoca
-- Al emparejar, la PC genera una clave aleatoria para ESE teléfono y se la pasa
-  por el cable. En la PC solo queda su hash.
+- Al emparejar, el celular genera un par de claves **Ed25519** y le pasa a la
+  PC, por el cable, solo la **pública**. La privada no sale nunca del teléfono
+  y en la PC no hay ningún secreto suyo que robar: con la pública se comprueba
+  una firma, pero no se fabrica. (El primer borrador decía «clave aleatoria de
+  la PC, guardando su hash» con un HMAC, y eso no se puede comprobar: para
+  verificar un HMAC hace falta la clave entera.)
 - Revocar: desde la app de la PC, o desde la consola web de Tailscale quitando el
   aparato (lo que se recomienda si te roban el celular: se corta al instante y
   sin venir a la PC).
@@ -123,6 +127,26 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
   lleva una **notificación fija** y hay que quitarle la optimización de batería.
   La app de la PC guía ese paso al instalar.
 
+### Tras reiniciar: la PC en la pantalla de SDDM (decidido 2026-10-20)
+- El usuario quiere que el servicio **arranque solo tras un reinicio** y poder
+  «entrar» a la PC desde la app aunque esté en la pantalla de inicio de sesión.
+- Por eso el servicio acaba siendo **de sistema** (siempre activo, corre como
+  el usuario), no de la sesión gráfica.
+- Con la PC en SDDM, la app ofrece «Entrar»: contraseña **de la app** + pase →
+  la PC escribe un **autologin de un solo uso** (un drop-in que se borra al
+  entrar) y la sesión arranca **ya bloqueada**. La contraseña de Linux nunca
+  viaja.
+- Lo que se pierde: gnome-keyring / kwallet quedan cerrados hasta que alguien
+  escriba la contraseña de Linux delante de la PC.
+- Hasta la fase 5 el servicio es de la sesión (`systemd --user`).
+
+### La vigilancia escucha a Tailscale, no a la app
+- Para saber si el celular sigue vivo se mira `Online` de ese aparato en
+  `tailscale status --json`: no gasta batería y no depende de que Android deje
+  viva la app. Hay que quitarle a **Tailscale** la optimización de batería.
+- El latido de la app queda solo para el «me están apagando».
+- La GPU se lee por NVML (la librería del driver), no lanzando `nvidia-smi`.
+
 ### Archivos: un explorador propio, no Dolphin
 - Ver Dolphin de verdad sería escritorio remoto, incómodo en un celular. La app
   lleva su explorador, que lee las carpetas de la PC a través del servicio.
@@ -141,12 +165,26 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
 
 ## Fases
 
-1. **Base**: servidor, emparejamiento por cable, contraseña, pase, estado en
-   tiempo real, app de la PC (emparejar y ver teléfonos).
-2. **Control**: apagar / reiniciar / suspender, ver y cerrar apps, vigilancia.
-3. **Archivos**: explorador, descargas, recientes, favoritos.
-4. **Terminal**.
-5. **Extras**: subir archivos a la PC, escritorio remoto (`wayvnc`), encender a
+Cada fase se cierra con sus pruebas en verde y probada de verdad antes de
+empezar la siguiente (acordado con el usuario el 2026-10-20).
+
+1. **El corazón del servidor** ✅ (no se ve nada todavía): los teléfonos, la
+   contraseña, el pase, el registro, el estado del equipo y el servidor HTTP
+   con `/v0/reto`, `/v0/sesion`, `/v0/equipo`, `/v0/vivo` y el canal USB. Se
+   prueba con un «teléfono de mentira» en Python contra un servidor de verdad.
+   La paleta de la app pasa a generarla `gen-colores.py`.
+2. **La app de la PC y encenderlo** ✅: la ventana GTK (detectar el celular,
+   emparejar, contraseña, permisos, renovar, revocar), `adb.py`, la unidad de
+   systemd y lo que diga `instalar.sh --revisar`.
+3. **La app del celular, primera versión**: emparejar por cable, entrar,
+   inicio con el estado en tiempo real. APK compilado en la PC.
+4. **Control**: apagar / reiniciar / suspender con cuenta atrás, ver y cerrar
+   apps, y la vigilancia (con el icono de la barra: ¿activo?, ¿hay un celular?).
+5. **Tras un reinicio (SDDM)**: servicio de sistema y entrada de un solo uso
+   (ver «Tras reiniciar» arriba).
+6. **Archivos**: explorador, descargas, recientes, favoritos.
+7. **Terminal**.
+8. **Extras**: subir archivos a la PC, escritorio remoto (`wayvnc`), encender a
    distancia (Wake-on-LAN, necesita otro aparato despierto en casa), modo
    «ayudar a un amigo» (compartir un equipo por Tailscale).
 
@@ -156,6 +194,8 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
 |---|---|
 | `~/.config/celiuz/remoto.conf` | ajustes: puerto, carpetas permitidas, márgenes |
 | `~/.config/celiuz/remoto/firma.keystore` | la clave de firma del APK |
+| `~/.local/share/celiuz/remoto/celiuz-remoto.apk` | el APK ya compilado, el que instala la ventana de la PC |
+| `~/.config/systemd/user/celiuz-remoto.service` | COPIA de `servidor/celiuz-remoto.service` (la pone `instalar.sh`; enlazada, `disable` la borraba) |
 | `~/.local/state/celiuz/remoto/dispositivos.json` (0600) | teléfonos: hash de su clave, hash de su contraseña, permisos, pase, último latido |
 | `~/.local/state/celiuz/remoto/historial.json` | recientes y favoritos |
 | `~/.local/state/celiuz/remoto/registro.jsonl` | qué hizo cada teléfono y cuándo |
@@ -175,8 +215,5 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
 
 ## Preguntas abiertas
 
-- **¿Qué pasa en la pantalla de inicio de sesión?** El servicio es de la sesión
-  gráfica (`systemd --user`): con la PC en SDDM o tras cerrar sesión, no hay
-  nadie que conteste. ¿Basta así, o hace falta un servicio de sistema?
-- El emparejamiento por cable, paso a paso (ver `PROTOCOLO.md`, «Canal USB»): se
-  cierra al codificar la fase 1.
+- Cómo escribe el servicio de sistema el autologin de un solo uso en
+  `/etc/sddm.conf.d/` sin darle root al servicio entero (fase 5).

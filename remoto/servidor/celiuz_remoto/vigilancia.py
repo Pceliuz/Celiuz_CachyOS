@@ -1,7 +1,7 @@
 """
 remoto/servidor/celiuz_remoto/vigilancia.py — el interruptor por silencio del celular.
 
-Fase 2. Pendiente: aqui solo esta lo que tiene que hacer (ver remoto/DISEÑO.md
+Fase 4. Pendiente: aqui solo esta lo que tiene que hacer (ver remoto/DISEÑO.md
 y remoto/PROTOCOLO.md).
 
 - Cada latido reinicia la cuenta atras: 2 h, o 1 h si llego «me estan apagando».

@@ -1,0 +1,26 @@
+# remoto/servidor/celiuz-remoto.service — Celiuz Remoto, como servicio del usuario.
+#
+# La COPIA ./instalar.sh en ~/.config/systemd/user (enlazada, el `disable` del
+# boton de apagar borraba el enlace), pero NO la enciende: viene
+# apagado y se enciende a mano desde la app de la PC (celiuz-remoto-config),
+# que hace `systemctl --user enable --now` (remoto/DISEÑO.md, «Se activa desde
+# la PC, y a mano»).
+#
+# Sin Tailscale conectado, `servir` sale con 1 sin escuchar en ningun sitio, y
+# Restart lo reintenta: al arrancar la PC, tailscaled tarda en tener IP.
+#
+# La ruta va por %h/.local/bin, el enlace que crea instalar.sh: vale se clone el
+# repo donde se clone (la regla de oro del CLAUDE.md).
+[Unit]
+Description=Celiuz Remoto (manejar este equipo desde el celular, solo por Tailscale)
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/celiuz-remoto servir
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

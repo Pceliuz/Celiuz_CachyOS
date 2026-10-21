@@ -9,6 +9,76 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (PC): Celiuz Remoto, fase 2 — la ventana de la PC y el servicio
+
+**Sin commitear** (el usuario lo sube él).
+
+- **La ventana** (`remoto/escritorio/celiuz-remoto-config.py`, lanzador
+  «Celiuz Remoto»): la pantalla 9 de las maquetas. Teléfonos (los pasos del
+  cable: depuración USB, Tailscale, la app, contraseña, permisos; y los
+  emparejados con su pase, desbloquear, quitar el pase, revocar), Registro y
+  Ajustes; abajo, el interruptor del servicio. Flotante y centrada (regla en
+  `lua/windowrules.lua`); el tamaño lo elige ella (la maqueta, 1200x760, no
+  cabe en la laptop). Mirada en el anidado a 1920x1080 y a 1366x768.
+- **`adb.py`** (detectar, `-s serie` siempre, nombre comercial, abrir el canal,
+  intent explícito, instalar) y **`cable.py`** (los pasos, que usan igual la
+  CLI y la ventana; cierra el canal salga como salga). Probado con los dos
+  celulares reales: HONOR X7b (Android 14, con Tailscale: es el `node` de la
+  tailnet) y Redmi Note 10S (Android 13, SIN Tailscale).
+- **Emparejar ya da el pase de 24 h** (la maqueta dice «Emparejar y dar pase»):
+  se cumple lo que pide, cable + contraseña recién creada delante de la PC. Y
+  cada teléfono guarda su serie USB, para reconocerlo al enchufarlo.
+- **El servicio**: `celiuz-remoto.service` (de usuario, `Restart=on-failure`
+  mientras Tailscale no tenga IP). `instalar.sh` lo deja puesto y APAGADO
+  (sección 9; la recarga de la sesión pasó a ser la 10). **Fallo encontrado
+  probándolo**: enlazada, `systemctl --user disable` borraba la unidad; ahora
+  se copia. Probado en la PC: dos ciclos encender/apagar, escucha solo en la
+  IP de Tailscale, sin un traceback. **Lo dejé apagado**: lo enciende el
+  usuario desde la ventana.
+- **Pruebas**: `e2e/remoto` (77: emparejar por el cable con un `adb` de
+  mentira que hace de celular; canal cerrado aunque falle a medias),
+  `unidad/remoto-escritorio` (42: textos, adb, CSS sin colores a mano, viene
+  apagado, no cae a X11). Las dos cazan sus mutaciones.
+- **Pendiente de la fase 2 del diseño que no entra aquí**: el icono en la barra
+  («¿está activo? ¿hay un celular ahora?») va con la vigilancia, en la fase 4.
+- **Lo siguiente: fase 3**, la app del celular. Hace falta un JDK para Gradle
+  (`sudo pacman -S jdk17-openjdk`); el SDK de Android ya está en
+  `~/Android/Sdk` (build-tools 36, plataformas 36.1 y 37). Se probará en el
+  HONOR, que es el que tiene Tailscale.
+
+## 2026-10-20 (PC): Celiuz Remoto, fase 1 — el corazón del servidor
+
+**Sin commitear** (el usuario lo sube él). El plan va en 8 fases
+(`remoto/DISEÑO.md`, «Fases»); el usuario pidió cerrar cada una probada y sin
+fallos antes de pasar a la siguiente.
+
+- **Decidido con el usuario** (era la propuesta pendiente): el servicio acaba
+  siendo de SISTEMA para contestar tras un reinicio, con autologin de un solo
+  uso y la sesión arrancando bloqueada (fase 5); la vigilancia mira `Online`
+  en `tailscale status` en vez de latidos; la GPU por NVML. En `DISEÑO.md`.
+- **Corregido en el protocolo**: el borrador guardaba `sha256(clave)` y
+  comprobaba un HMAC con ella, y eso es imposible (un HMAC se verifica con la
+  clave entera). Ahora el celular genera un par **Ed25519** y la PC guarda
+  solo la pública. Todo lo que se firma lleva prefijo (`PROTOCOLO.md`).
+- **Hecho**: `dispositivos.py` (0600, flock, un fichero roto no se pisa),
+  `sesion.py` (reto de un uso, firma ANTES que contraseña para que un intruso
+  no pueda bloquear al bueno, 5 intentos, sesión que caduca sin uso),
+  `pase.py`, `registro.py` (tacha secretos), `red.py` (solo 100.64.0.0/10 o
+  bucle local, nunca 0.0.0.0), `estado.py` (psutil + NVML por ctypes; en un
+  híbrido la dedicada no se toca), `ajustes.py` (`remoto.conf`), `servidor.py`
+  (red, canal USB que se abre y se cierra, socket de control) y la CLI
+  (`servir`, `estado`, `dispositivos`, `emparejar`/`renovar --sin-adb`,
+  `revocar`, `desbloquear`, `quitar-pase`, `permisos`, `registro`).
+- **La paleta de la app la genera ya `gen-colores.py`** (`colores.json`), y
+  `app.json` pasó a `app.config.ts` para leerla.
+- **Probado**: `tests/e2e/remoto.sh` (64, servidor de verdad contra un celular
+  de mentira; caza las mutaciones «contraseña antes que firma» y «renovar sin
+  contraseña») y `tests/unidad/remoto.sh` (38). Y en vivo con el Tailscale de
+  la PC: escucha solo en `100.113.246.39:47110`, entra por ahí, y no contesta
+  en `127.0.0.1` ni en la LAN.
+- **Lo siguiente: fase 2**, la app de la PC (GTK) + `adb.py` + la unidad de
+  systemd + `instalar.sh --revisar`.
+
 ## 2026-10-20 (PC): nace Celiuz Remoto (`remoto/`), solo la estructura
 
 **Sin commitear todavía** (a petición del usuario): `git status` lo enseña todo.

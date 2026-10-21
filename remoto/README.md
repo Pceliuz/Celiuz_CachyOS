@@ -1,6 +1,8 @@
 # Celiuz Remoto
 
-> **En construcción.** Todavía no hace nada: está la estructura y el diseño.
+> **En construcción.** Fases 1 y 2 de 8 hechas (2026-10-20): el servidor y la
+> ventana de la PC («Celiuz Remoto» en el lanzador) ya están; falta la app del
+> celular que los use. Las fases, en [`DISEÑO.md`](DISEÑO.md#fases).
 
 Una app Android para manejar tu PC o tu laptop desde cualquier sitio: ver su
 estado en tiempo real, apagarla, ver y cerrar sus apps, sacar archivos y abrir
@@ -25,6 +27,9 @@ PC, porque abrir un botón de «apagar» hacia fuera es decisión de cada uno.
 
 ```sh
 remoto/servidor/celiuz-remoto.py --help
-remoto/escritorio/celiuz-remoto-config.py
+remoto/servidor/celiuz-remoto.py servir           # el servicio, en primer plano
+./tests/run.sh remoto                            # sus pruebas (unidad y punta a punta)
+celiuz-remoto-config                             # la ventana de la PC
+celiuz-remoto celulares                          # lo que hay conectado por cable
 cd remoto/app && npm install && npx expo start     # la app, en modo desarrollo
 ```

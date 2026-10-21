@@ -192,12 +192,14 @@ limpiar_entorno() {
 # no del HOME. Ejecutarlos tal cual reescribiria los ficheros de verdad del
 # usuario, que es justo lo que una prueba no debe hacer nunca.
 #
-# Se dejan fuera .git y los videos de fondo: pesan y no hacen falta.
+# Se dejan fuera .git, los videos de fondo y lo que baja npm para la app del
+# remoto (node_modules son 377 MB: copiarlos triplicaba lo que tarda la prueba).
 copiar_repo() {
     local destino="$TMP/repo"
     [ -d "$destino" ] && { echo "$destino"; return; }
     mkdir -p "$destino"
-    tar -C "$REPO" --exclude=.git --exclude='hypr/wallpapers/*' -cf - . \
+    tar -C "$REPO" --exclude=.git --exclude='hypr/wallpapers/*' \
+        --exclude='remoto/app/node_modules' --exclude='remoto/app/android' -cf - . \
         | tar -C "$destino" -xf - 2>/dev/null
     echo "$destino"
 }
