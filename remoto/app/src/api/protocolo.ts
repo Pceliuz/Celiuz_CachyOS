@@ -49,6 +49,7 @@ export interface Equipo {
   ram: number; // GiB
   bateria: boolean;
   protocolo: number;
+  cuenta_atras: number; // segundos de aviso en la PC antes de apagar
 }
 
 export interface Gpu {
@@ -69,7 +70,15 @@ export interface Estado {
   bateria: { nivel: number; cargando: boolean } | null;
   encendida_desde: string;
   pase_hasta: string | null;
-  vigilancia: 'armada' | 'desarmada' | 'avisando';
+  vigilancia: 'desarmada' | 'sin_telefonos' | 'armada' | 'avisando' | 'apagando';
+  energia: EstadoEnergia | null; // una cuenta atras en marcha
+}
+
+export interface EstadoEnergia {
+  accion: AccionEnergia;
+  quedan: number; // segundos
+  hasta: string; // ISO, con el reloj de la PC
+  origen: string; // el nombre del telefono que lo pidio, o «pc»
 }
 
 // El canal USB (por adb reverse), solo mientras la app de la PC lo abre.
@@ -92,7 +101,7 @@ export interface Ventana {
   id: string;
   app: string;
   titulo: string;
-  escritorio: number;
+  escritorio: string | number;
 }
 
 export interface Entrada {

@@ -17,10 +17,13 @@ import { BackHandler, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import * as almacen from './src/almacen';
+import type { Pestana } from './src/componentes/Pestanas';
 import { leerEnlace, type Conexion, type Enlace, type EquipoGuardado } from './src/api/cliente';
+import type { Equipo } from './src/api/protocolo';
 import Bienvenida from './src/pantallas/Bienvenida';
 import Cable from './src/pantallas/Cable';
 import Entrar from './src/pantallas/Entrar';
+import Apps from './src/pantallas/Apps';
 import Inicio from './src/pantallas/Inicio';
 import PaseVencido from './src/pantallas/PaseVencido';
 
@@ -28,8 +31,9 @@ export default function App() {
   const [equipos, setEquipos] = useState<EquipoGuardado[] | null>(null);
   const [enlace, setEnlace] = useState<Enlace | null>(null);
   const [conexion, setConexion] = useState<Conexion | null>(null);
-  const [cpu, setCpu] = useState<string | null>(null);
+  const [datos, setDatos] = useState<Equipo | null>(null);
   const [verPase, setVerPase] = useState(false);
+  const [pestana, setPestana] = useState<Pestana>('inicio');
   const [aviso, setAviso] = useState<string | undefined>();
 
   const recargar = useCallback(() => almacen.equipos().then(setEquipos), []);
@@ -63,16 +67,19 @@ export default function App() {
   useEffect(() => {
     const s = BackHandler.addEventListener('hardwareBackPress', () => {
       if (verPase) { setVerPase(false); return true; }
+      if (pestana !== 'inicio') { setPestana('inicio'); return true; }
       if (conexion) { salir(); return true; }
       return false;
     });
     return () => s.remove();
-  }, [verPase, conexion, salir]);
+  }, [verPase, pestana, conexion, salir]);
 
   const entrar = useCallback((c: Conexion) => {
     setAviso(undefined);
+    setPestana('inicio');
     setConexion(c);
-    c.datosEquipo().then((d) => setCpu(d.cpu)).catch(() => setCpu(null));
+    setDatos(null);
+    c.datosEquipo().then(setDatos).catch(() => setDatos(null));
   }, []);
 
   let pantalla;
@@ -87,9 +94,12 @@ export default function App() {
   } else if (verPase) {
     pantalla = <PaseVencido equipo={conexion.equipo.equipo} paseHasta={conexion.sesion.pase_hasta}
                             alVolver={() => setVerPase(false)} />;
+  } else if (pestana === 'apps') {
+    pantalla = <Apps conexion={conexion} alCambiar={setPestana} alVerPase={() => setVerPase(true)}
+                     alCaducar={caducar} />;
   } else {
-    pantalla = <Inicio conexion={conexion} cpu={cpu} alSalir={salir} alCaducar={caducar}
-                       alVerPase={() => setVerPase(true)} />;
+    pantalla = <Inicio conexion={conexion} datos={datos} alSalir={salir} alCaducar={caducar}
+                       alVerPase={() => setVerPase(true)} alCambiar={setPestana} />;
   }
 
   return (

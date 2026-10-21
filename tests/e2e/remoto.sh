@@ -127,6 +127,15 @@ afirmar_igual "SERIE123" "$(campo "$(cat "$ALMACEN")" '[x["serie"] for x in d["d
 usb_cerrado() { local s; s="$("$TEL" pedir GET "http://127.0.0.1:$USB/usb/hola" 2>&1)"; [[ "$s" == *refused* ]]; }
 afirmar "   y el puerto USB se suelta del todo" esperar_a 3 usb_cerrado
 
+# El MISMO celular (misma serie) emparejado otra vez: con otra clave (la app
+# crea una nueva cada vez), y aun asi tiene que sustituir al viejo, no sumarse.
+echo "otra-clave" | "$CLI" emparejar > /dev/null 2> "$TMP/cable.err"; codigo=$?
+esperar_cable() { grep -q '"http": 200' "$TMP/cable.json" 2>/dev/null; }
+afirmar_igual "0" "$codigo" "emparejar otra vez el mismo celular por el cable"
+afirmar_igual "1" "$(python3 -c 'import json,sys; print(sum(1 for x in json.load(open(sys.argv[1]))["dispositivos"].values() if x.get("serie")=="SERIE123"))' "$ALMACEN")" \
+    "   lo SUSTITUYE (sigue habiendo uno con esa serie, no dos)"
+afirmar_contiene "$XDG_STATE_HOME/celiuz/remoto/registro.jsonl" '"accion": "sustituido"' "   y se apunta"
+
 # Si el celular no contesta (la app no hace nada), el canal se cierra igual
 : > "$REGISTRO/adb.log"
 binario_falso adb 0 '

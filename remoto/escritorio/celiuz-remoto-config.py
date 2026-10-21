@@ -2,7 +2,8 @@
 """
 remoto/escritorio/celiuz-remoto-config.py — la app de la PC de Celiuz Remoto.
 
-    celiuz-remoto-config        abre la ventana
+    celiuz-remoto-config                   abre la ventana
+    celiuz-remoto-config --pagina vigilancia   abierta en esa pagina
 
 Es la pantalla 9 de las maquetas (https://claude.ai/artifact/BGqHdnHe5W2Xu7LNuVwYUd):
 una ventana normal, con la paleta del escritorio (estilo.py, de colores.conf).
@@ -58,21 +59,28 @@ def _systemctl(*args):
         return 1, str(e)
 
 
-def estado_servicio():
+def estado_servicio(con_vigilancia=False):
     """{"instalado", "activo", "red", "detalle"}: lo que se enseña abajo a la izquierda."""
     codigo, salida = _systemctl("show", UNIDAD, "-p", "LoadState,ActiveState,SubState")
     props = dict(linea.split("=", 1) for linea in salida.splitlines() if "=" in linea)
     instalado = props.get("LoadState") == "loaded"
     activo = props.get("ActiveState") == "active"
-    red = None
+    red = energia = vigilancia = None
     if activo:
         try:
             c, d = control.pedir("GET", "/control/estado", timeout=2)
-            red = d.get("red") if c == 200 else None
+            if c == 200:
+                red, energia = d.get("red"), d.get("energia")
+            if con_vigilancia:
+                # Pregunta a tailscale y a hypridle: solo con la pagina a la vista.
+                c, v = control.pedir("GET", "/control/vigilancia", timeout=15)
+                vigilancia = v if c == 200 else None
         except (control.SinServicio, OSError):
-            red = None
+            pass
     detalle = props.get("SubState", "")
     return {"instalado": instalado, "activo": activo, "red": red,
+            "energia": energia,
+            **({"vigilancia": vigilancia} if con_vigilancia or not activo else {}),
             "reintentando": props.get("ActiveState") == "activating" or detalle == "auto-restart"}
 
 
@@ -195,6 +203,7 @@ class Ventana(Gtk.Window):
         self.paginas = Gtk.Stack()
         self.paginas.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.paginas.add_named(self._pagina_telefonos(), "telefonos")
+        self.paginas.add_named(self._pagina_vigilancia(), "vigilancia")
         self.paginas.add_named(self._pagina_registro(), "registro")
         self.paginas.add_named(self._pagina_ajustes(), "ajustes")
         raiz.pack_start(self.paginas, True, True, 0)
@@ -216,8 +225,8 @@ class Ventana(Gtk.Window):
         nav.pack_start(etiqueta("Celiuz Remoto", ("fuerte",)), False, False, 0)
         nav.get_children()[0].set_name("marca")
         self.pestanas = {}
-        for clave, nombre in (("telefonos", "Teléfonos"), ("registro", "Registro"),
-                              ("ajustes", "Ajustes")):
+        for clave, nombre in (("telefonos", "Teléfonos"), ("vigilancia", "Vigilancia"),
+                              ("registro", "Registro"), ("ajustes", "Ajustes")):
             b = boton(nombre, ("pestana",), lambda c=clave: self.ir(c))
             b.get_child().set_xalign(0.0)
             self.pestanas[clave] = b
@@ -231,6 +240,18 @@ class Ventana(Gtk.Window):
         self.servicio_btn = boton("", ("discreto",), self.alternar_servicio)
         for w in (self.servicio_txt, self.servicio_det, self.servicio_btn):
             tarjeta.pack_start(w, False, False, 0)
+
+        # Un apagado/reinicio pedido desde el celular, con su cuenta atras:
+        # tambien se cancela desde aqui (y desde el aviso de la PC).
+        self.apagado = caja(espacio=8, clases=("tarjeta", "chica", "robo"))
+        self.apagado.set_no_show_all(True)
+        self.apagado_txt = etiqueta("", ("alerta-titulo",), envolver=True, ancho=22)
+        self.apagado_det = etiqueta("", ("tenue", "chico"), envolver=True, ancho=26)
+        self.apagado_btn = boton("Cancelar", ("peligro",), self.cancelar_energia)
+        for w in (self.apagado_txt, self.apagado_det, self.apagado_btn):
+            w.show()
+            self.apagado.pack_start(w, False, False, 0)
+        nav.pack_end(self.apagado, False, False, 0)
         nav.pack_end(tarjeta, False, False, 0)
         return nav
 
@@ -241,6 +262,8 @@ class Ventana(Gtk.Window):
             (ctx.add_class if c == clave else ctx.remove_class)("activa")
         if clave == "registro":
             self.pintar_registro()
+        if clave == "vigilancia":
+            self.refrescar()
 
     def _tecla(self, _w, ev):
         if ev.keyval == Gdk.KEY_Escape and not self.ocupado:
@@ -678,6 +701,26 @@ class Ventana(Gtk.Window):
             self.servicio_btn.get_style_context().remove_class("peligro")
             self.servicio_btn.set_sensitive(True)
 
+    def pintar_energia(self):
+        e = self.servicio.get("energia")
+        if not e:
+            self.apagado.hide()
+            return
+        verbo = {"apagar": "Se apaga", "reiniciar": "Se reinicia", "suspender": "Se suspende"}[e["accion"]]
+        self.apagado_txt.set_text(f"{verbo} en {e['quedan']} s")
+        quien = "desde la vigilancia" if e.get("origen") == "pc" else f"lo pidió «{e.get('origen')}»"
+        self.apagado_det.set_text(quien.capitalize() + ".")
+        self.apagado.show()
+
+    def cancelar_energia(self):
+        def hilo():
+            try:
+                control.pedir("DELETE", "/control/energia")
+            except control.SinServicio:
+                pass
+            GLib.idle_add(lambda: (self.refrescar(), False)[1])
+        threading.Thread(target=hilo, daemon=True).start()
+
     def alternar_servicio(self):
         encender = not (self.servicio["activo"] or self.servicio.get("reintentando"))
         self.servicio_btn.set_sensitive(False)
@@ -697,6 +740,78 @@ class Ventana(Gtk.Window):
             return False
 
         threading.Thread(target=hilo, daemon=True).start()
+
+    # --- Vigilancia ---
+
+    def _pagina_vigilancia(self):
+        pagina = caja(espacio=16)
+        pagina.set_border_width(28)
+        fila = caja(vertical=False, espacio=16)
+        fila.pack_start(etiqueta("Vigilancia", ("h1",)), True, True, 0)
+        self.interruptor = Gtk.Switch()
+        self.interruptor.set_valign(Gtk.Align.CENTER)
+        self._senal_interruptor = self.interruptor.connect("state-set", self._al_armar)
+        fila.pack_end(self.interruptor, False, False, 0)
+        pagina.pack_start(fila, False, False, 0)
+        pagina.pack_start(etiqueta(
+            "Si tu celular deja de dar señales en Tailscale durante 2 h (1 h si avisó de que lo "
+            "apagaban), se le quita el pase. Si callan todos los que tienen pase y no hay nadie "
+            "delante de la PC, la PC se apaga, con su cuenta atrás. Pensado para cuando te roban "
+            "el celular: así nadie se queda con la PC encendida a su alcance.",
+            ("tenue",), envolver=True, ancho=90), False, False, 0)
+        self.vig_estado = etiqueta("", ("h2",), envolver=True, ancho=80)
+        pagina.pack_start(self.vig_estado, False, False, 0)
+        t = caja(espacio=10, clases=("tarjeta",))
+        t.pack_start(etiqueta("¿Hay alguien delante?", ("tenue", "chico")), False, False, 0)
+        self.vig_presencia = etiqueta("", ("fuerte",), envolver=True, ancho=80)
+        t.pack_start(self.vig_presencia, False, False, 0)
+        t.pack_start(etiqueta("Teclado o ratón en los últimos 5 min, o un vídeo reproduciéndose: "
+                              "eso es una persona, y con una persona delante NO se apaga. Una "
+                              "descarga no cuenta.", ("tenue", "chico"), envolver=True, ancho=90),
+                     False, False, 0)
+        pagina.pack_start(t, False, False, 0)
+        pagina.pack_start(etiqueta("Teléfonos", ("h2",)), False, False, 0)
+        self.vig_lista = caja(espacio=10)
+        pagina.pack_start(self.vig_lista, False, False, 0)
+        return pagina
+
+    def _al_armar(self, _sw, armar):
+        if not (self.servicio.get("activo") and self.servicio.get("red")):
+            self.op("Enciende el servicio para armar la vigilancia.", "error")
+            return True     # True: no cambies el interruptor
+        def hilo():
+            try:
+                control.pedir("POST", "/control/vigilancia", {"armada": armar}, timeout=20)
+            except control.SinServicio:
+                pass
+            GLib.idle_add(lambda: (self.refrescar(), False)[1])
+        threading.Thread(target=hilo, daemon=True).start()
+        return False
+
+    def pintar_vigilancia(self):
+        v = self.servicio.get("vigilancia")
+        self.interruptor.handler_block(self._senal_interruptor)
+        self.interruptor.set_active(bool(v and v["armada"]))
+        self.interruptor.set_state(bool(v and v["armada"]))
+        self.interruptor.handler_unblock(self._senal_interruptor)
+        self.interruptor.set_sensitive(v is not None)
+        vaciar(self.vig_lista)
+        if v is None:
+            self.vig_estado.set_text("Con el servicio apagado no se vigila nada.")
+            self.vig_presencia.set_text("—")
+            return
+        self.vig_estado.set_text(textos.VIGILANCIA.get(v["estado"], v["estado"]))
+        self.vig_presencia.set_text(textos.PRESENCIA.get(v["presencia"], v["presencia"])
+                                    + f" — {v['presencia_motivo']}")
+        if not v["telefonos"]:
+            self.vig_lista.pack_start(etiqueta("Ningún teléfono emparejado.", ("tenue",)), False, False, 0)
+        for f in v["telefonos"]:
+            fila = caja(vertical=False, espacio=16, clases=("tarjeta", "chica"))
+            fila.pack_start(etiqueta(f["nombre"], ("fuerte",)), True, True, 0)
+            texto, clase = textos.senal_telefono(f)
+            fila.pack_end(etiqueta(texto, ("chico", clase)), False, False, 0)
+            self.vig_lista.pack_start(fila, False, False, 0)
+        self.vig_lista.show_all()
 
     # --- Registro y Ajustes ---
 
@@ -765,19 +880,25 @@ class Ventana(Gtk.Window):
     # --- el ritmo ---
 
     def refrescar(self):
-        threading.Thread(target=self._leer_servicio, daemon=True).start()
+        # La pagina se mira AQUI (hilo principal): GTK no se toca desde el hilo.
+        vig = self.paginas.get_visible_child_name() == "vigilancia"
+        threading.Thread(target=self._leer_servicio, args=(vig,), daemon=True).start()
         self.pintar_emparejados()
         if self.paginas.get_visible_child_name() == "registro":
             self.pintar_registro()
 
-    def _leer_servicio(self):
-        s = estado_servicio()
+    def _leer_servicio(self, con_vigilancia):
+        s = estado_servicio(con_vigilancia)
         GLib.idle_add(self._servicio_leido, s)
 
     def _servicio_leido(self, s):
+        if "vigilancia" not in s:
+            s["vigilancia"] = self.servicio.get("vigilancia")
         self.servicio = s
         self.pintar_servicio()
         self.pintar_cable()
+        self.pintar_energia()
+        self.pintar_vigilancia()
         return False
 
     def _tic_estado(self):
@@ -807,7 +928,12 @@ def main():
     proveedor.load_from_data(estilo.css(dibujo.C, dibujo.FUENTE, dibujo.VERDE).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), proveedor,
                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-    Ventana().show_all()
+    v = Ventana()
+    v.show_all()
+    if "--pagina" in sys.argv[1:-1]:
+        pagina = sys.argv[sys.argv.index("--pagina") + 1]
+        if pagina in v.pestanas:
+            v.ir(pagina)
     Gtk.main()
     return 0
 

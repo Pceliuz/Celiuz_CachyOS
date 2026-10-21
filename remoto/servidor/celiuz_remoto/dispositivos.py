@@ -153,9 +153,15 @@ class Almacen:
             raise ErrorDispositivo(f"permisos desconocidos: {', '.join(malos)}")
         nombre = (str(nombre or "").strip() or "Celular")[:60]
         with self._abierto(True) as d:
-            # La misma clave publica dos veces seria el mismo telefono
-            # emparejado otra vez: se sustituye el viejo, no se duplica.
-            for viejo in [k for k, v in d["dispositivos"].items() if v["publica"] == publica]:
+            # El mismo telefono emparejado otra vez se SUSTITUYE, no se duplica.
+            # Por la clave publica no basta: la app crea una nueva en cada
+            # emparejamiento (y borra la vieja), asi que el registro viejo se
+            # quedaba muerto, con un pase, sin poder entrar nunca. Lo que no
+            # cambia es la serie USB (medido el 2026-10-20 con el HONOR: dos
+            # «HONOR X7b» en la lista tras emparejarlo dos veces).
+            sustituidos = [k for k, v in d["dispositivos"].items()
+                           if v["publica"] == publica or (serie and v.get("serie") == serie)]
+            for viejo in sustituidos:
                 del d["dispositivos"][viejo]
             ident = secrets.token_hex(8)
             d["dispositivos"][ident] = {
@@ -168,7 +174,7 @@ class Almacen:
                 # un secreto ni sirve para entrar.
                 "serie": serie,
             }
-            return dict(d["dispositivos"][ident])
+            return dict(d["dispositivos"][ident], sustituye=sustituidos)
 
     def cambiar(self, ident, **campos):
         """Cambia campos de un telefono. Devuelve el telefono, o None si no hay."""

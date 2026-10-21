@@ -86,6 +86,7 @@ window#waybar.hidden {
 #network,
 #bluetooth,
 #battery,
+#custom-remoto,
 #custom-notificaciones,
 #tray,
 #clock {
@@ -111,6 +112,7 @@ window#waybar.hidden {
 #network:hover,
 #bluetooth:hover,
 #battery:hover,
+#custom-remoto:hover,
 #custom-notificaciones:hover,
 #tray:hover,
 #clock:hover {
@@ -271,6 +273,16 @@ window#waybar.hidden {
  * En reposo va en @tenue y no en @amatista a proposito: "no tienes nada" no
  * merece llamarte la atencion, y si brillara igual que lo demas dejarias de
  * mirarlo cuando SI hay algo. */
+/* Celiuz Remoto: encendido y sin nadie, discreto; con un celular dentro, en
+ * verde (alguien esta manejando la PC desde fuera, y eso tiene que verse);
+ * con un apagado en marcha, en rojo. */
+#custom-remoto.activo     { color: @tenue; }
+#custom-remoto.conectado  { color: @exito; }
+#custom-remoto.apagando   {
+    color: @alerta;
+    border-color: alpha(@alerta, 0.35);
+}
+
 #custom-notificaciones.normal    { color: @tenue; }
 #custom-notificaciones.pendiente { color: @amatista; }
 #custom-notificaciones.apagado   { color: @apagado; }

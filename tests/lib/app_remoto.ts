@@ -60,7 +60,7 @@ async function emparejarYEntrar() {
   const con = await c.entrar(h, equipo, clave, contrasena);
   comprobar('con su clave y la contraseña, entra', !!con.sesion.token);
   const datos = await con.datosEquipo();
-  comprobar('datos del equipo', datos.protocolo === 0 && datos.ram > 0, datos);
+  comprobar('datos del equipo, con los segundos de la cuenta atrás de la PC', datos.protocolo === 0 && datos.ram > 0 && datos.cuenta_atras === 30, datos);
 
   const estados: any[] = [];
   let caducada: boolean | null = null;
@@ -116,8 +116,40 @@ function enlacesYFormatos() {
             f.desde('2026-10-20T16:48:00-05:00', ahora));
 }
 
+async function controlar() {
+  const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
+  const con = await c.entrar(h, equipo, clave, contrasena);
+  const e = await con.energia('apagar');
+  comprobar('energia(): empieza la cuenta atrás en la PC', e.accion === 'apagar' && e.quedan > 0, e);
+  const estados: any[] = [];
+  const cerrar = con.vivo((x) => estados.push(x), () => {});
+  await new Promise((r) => setTimeout(r, 1300));
+  cerrar();
+  comprobar('   y el estado en vivo trae la cuenta atrás', estados.some((x) => x.energia?.accion === 'apagar'), estados[0]?.energia);
+  comprobar('cancelarEnergia() la para', (await con.cancelarEnergia()) === true);
+  comprobar('   y no queda nada que cancelar', (await con.cancelarEnergia()) === false);
+  const vs = await con.ventanas();
+  comprobar('ventanas() trae las apps de la PC', vs.length === 2 && vs.some((v) => v.app === 'Brave'), vs);
+  await con.cerrarVentana('0xaaa');
+  comprobar('cerrarVentana() con pase: la PC la cierra', true);
+  const no = await error(con.cerrarVentana('0xzzz'));
+  comprobar('   una que ya no está: «no_existe»', no?.codigo === 'no_existe', no?.codigo);
+  writeFileSync(`${TMP}/token`, con.sesion.token);
+}
+
+async function sinPase() {
+  const { equipo, clave } = JSON.parse(readFileSync(`${TMP}/equipo.json`, 'utf8'));
+  const con = await c.entrar(h, equipo, clave, contrasena);
+  const e = await error(con.cerrarVentana('0xaaa'));
+  comprobar('sin pase, cerrar apps da «pase_vencido» (y la app enseña cómo renovarlo)', e?.codigo === 'pase_vencido', e?.codigo);
+  comprobar('   pero apagar sí funciona sin pase', (await con.energia('suspender')).accion === 'suspender');
+  await con.cancelarEnergia();
+}
+
 try {
   if (fase === 'emparejar') { enlacesYFormatos(); await emparejarYEntrar(); }
+  else if (fase === 'control') await controlar();
+  else if (fase === 'sinpase') await sinPase();
   else await renovarPase();
 } catch (e) {
   comprobar(`sin excepciones: ${(e as Error).message}`, false);

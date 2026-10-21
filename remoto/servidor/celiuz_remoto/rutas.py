@@ -56,6 +56,18 @@ def apk():
                         "celiuz-remoto.apk")
 
 
+def presencia():
+    """Lo que apunta hypridle: «ausente» tras 5 min quieto, «presente» al volver.
+    En $XDG_RUNTIME_DIR: no sobrevive al apagado, y no debe."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    return os.path.join(runtime, "celiuz-remoto", "presencia.json")
+
+
+def vigilancia():
+    """Si la vigilancia esta armada (la arma la persona, desde la PC)."""
+    return os.path.join(estado(), "vigilancia.json")
+
+
 def control():
     """El socket de control (la CLI y la app de la PC le hablan al servicio).
 
@@ -74,4 +86,6 @@ def todas():
         "firma_apk": firma_apk(),
         "apk": apk(),
         "control": control(),
+        "presencia": presencia(),
+        "vigilancia": vigilancia(),
     }

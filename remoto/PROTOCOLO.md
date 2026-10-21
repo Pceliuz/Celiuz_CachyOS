@@ -52,7 +52,7 @@ valga para otra:
 | entrar | `celiuz-remoto/v0/sesion:<reto>` |
 | emparejar (prueba de que tiene la privada) | `celiuz-remoto/v0/emparejar:<codigo>` |
 | renovar el pase | `celiuz-remoto/v0/renovar:<codigo>` |
-| latido **(fase 4)** | `celiuz-remoto/v0/latido:<dispositivo>:<minuto UTC>:<0\|1>` |
+| latido | `celiuz-remoto/v0/latido:<dispositivo>:<minuto>:<0\|1>` |
 
 Las firmas van en base64 (64 bytes).
 
@@ -97,7 +97,8 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
   ```json
   {"cpu": {"uso": 23, "temp": 52}, "gpu": [{"nombre": "RTX 3050", "uso": 31, "temp": 48, "vram": [1.2, 6]}],
    "ram": [8.4, 31.2], "disco": [508, 544], "red": {"bajada": 2400000, "subida": 140000},
-   "bateria": null, "encendida_desde": "...", "pase_hasta": "..." | null, "vigilancia": "desarmada"}
+   "bateria": null, "encendida_desde": "...", "pase_hasta": "..." | null,
+   "vigilancia": "desarmada"|"sin_telefonos"|"armada"|"avisando"|"apagando", "energia": null | {...}}
   ```
   Solo van los campos que el equipo tiene: sin sensor no hay `temp`, sin GPU
   dedicada no hay `vram`, sin batería `bateria` es `null`. Una GPU dormida (la
@@ -106,20 +107,29 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
   `lib/maquina.py` (`portatil` / `escritorio`).
   Al caducar la sesión, el servidor cierra con el código 4401.
 
-### Latido (vigilancia) — **(fase 4)**
-- `POST /v0/latido` `{"dispositivo", "minuto", "apagando", "firma"}` — sin
-  sesión: lo manda un servicio de fondo. Solo para el «me están apagando»; que
-  el celular vive se mira en Tailscale (ver `DISEÑO.md`).
+### Latido — «me están apagando»
+- `POST /v0/latido` `{"dispositivo", "minuto": "<minutos UTC desde 1970>", "apagando": true, "firma"}`
+  Sin sesión: lo manda un servicio de fondo. La firma es sobre
+  `<dispositivo>:<minuto>:<1|0>`, y la PC acepta su minuto y el anterior. Cuenta
+  como señal y, con `apagando`, la vigilancia le da a ese teléfono 1 h en vez de
+  2. Que el celular vive se mira en Tailscale (ver `DISEÑO.md`).
+  → `{"siguiente_en": 300}`. Un minuto viejo o una firma de otro: `401 firma`.
 
-### Energía — permiso `energia` **(fase 4)**
+### Energía — permiso `energia` (SIN pase, a propósito)
 - `POST /v0/energia` `{"accion": "apagar"|"reiniciar"|"suspender", "confirmado": true}`
-  → `{"cuenta_atras": 60}`. La PC enseña la notificación cancelable.
-- `DELETE /v0/energia` → cancelar desde el celular.
+  → `{"cuenta_atras": 60, "energia": {...}}`. En la PC sale un aviso con botón
+  «Cancelar». Al acabar, se piden cerrar las ventanas (como `SUPER+Q`), 5 s, y
+  `systemctl`. Una orden nueva sustituye a la que hubiera.
+- `GET /v0/energia` → `{"energia": {"accion", "quedan", "hasta", "origen"} | null}`.
+- `DELETE /v0/energia` → `{"cancelada": true|false}`.
+- La cuenta atrás va también en cada mensaje de `/v0/vivo` (`energia`), y la
+  duración se cambia en `remoto.conf` (`cuenta_atras`).
 
-### Ventanas — permiso `ventanas` **(fase 4)**
-- `GET /v0/ventanas` → `[{"id": "0x55d...", "app": "Brave", "titulo": "...", "escritorio": 2}]`
+### Ventanas — permiso `ventanas`
+- `GET /v0/ventanas` → `{"ventanas": [{"id": "0x55d...", "app": "Brave", "titulo": "...", "escritorio": "2"}], "sesion": true}`
+  De la sesión de Hyprland viva (la busca el servidor en caliente).
 - `POST /v0/ventanas/<id>/cerrar` `{"confirmado": true}` — **pase**. Cierra
-  pidiéndolo (como `SUPER+Q`), no matando.
+  pidiéndolo (como `SUPER+Q`), no matando. `404` si ya no está.
 
 ### Archivos — permiso `archivos`, todo **pase** **(fase 6)**
 - `GET /v0/archivos?ruta=Documentos` → `{"ruta": "...", "entradas": [{"nombre", "tipo": "carpeta"|"archivo", "tamano", "modificado"}]}`
@@ -175,4 +185,7 @@ de la PC; nadie de fuera llega aquí.
 - `GET /control/ventana?espera=<s>` → espera a que se cierre y dice cómo:
   `{"estado": "abierta"|"hecho"|"caducada"|"cancelada", "dispositivo": "..."}`.
 - `DELETE /control/ventana` → cerrarla ya.
-- `GET /control/estado` → `{"red": "100.x.y.z:47110", "sesiones": 1, "ventana": null|"emparejar"}`.
+- `GET /control/estado` → `{"red": "100.x.y.z:47110", "sesiones": 1, "ventana": null|"emparejar", "energia", "vigilancia"}`.
+- `DELETE /control/energia` → cancelar un apagado desde la PC.
+- `GET /control/vigilancia`, `POST /control/vigilancia` `{"armada": true}` →
+  `{"armada", "estado", "presencia", "presencia_motivo", "telefonos": [...]}`.

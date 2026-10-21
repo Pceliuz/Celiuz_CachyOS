@@ -15,6 +15,10 @@ remoto/servidor/celiuz-remoto.py — el servicio de Celiuz Remoto.
     celiuz-remoto.py quitar-pase <id>   le quita el pase (sigue emparejado)
     celiuz-remoto.py permisos <id> +terminal -archivos
     celiuz-remoto.py registro [-n N]    lo ultimo que paso
+    celiuz-remoto.py cancelar           cancela un apagado/reinicio/suspension en marcha
+    celiuz-remoto.py vigilancia [si|no] arma o desarma la vigilancia, o dice como esta
+    celiuz-remoto.py presencia [ausente|presente]   lo apunta hypridle; sin nada, lo dice
+    celiuz-remoto.py barra              el icono de waybar (JSON; vacio con el servicio apagado)
 
 Un <id> vale entero, por su principio o por el nombre del telefono. El diseño,
 en remoto/DISEÑO.md; lo que se dicen la app y el servidor, en PROTOCOLO.md.
@@ -323,6 +327,91 @@ def cmd_permisos(args):
     return 0
 
 
+def cmd_cancelar(args):
+    from celiuz_remoto import control
+    try:
+        codigo, d = control.pedir("DELETE", "/control/energia")
+    except control.SinServicio as e:
+        print(e, file=sys.stderr)
+        return 1
+    print("  Cancelado." if d.get("cancelada") else "  No había nada en marcha.")
+    return 0
+
+
+def cmd_vigilancia(args):
+    from celiuz_remoto import control
+    try:
+        if args.armar is None:
+            codigo, d = control.pedir("GET", "/control/vigilancia", timeout=20)
+        else:
+            codigo, d = control.pedir("POST", "/control/vigilancia",
+                                      {"armada": args.armar == "si"}, timeout=20)
+    except control.SinServicio as e:
+        print(e, file=sys.stderr)
+        return 1
+    if codigo != 200:
+        print(f"  El servicio contestó {codigo}: {d.get('mensaje')}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(d, ensure_ascii=False, indent=2))
+        return 0
+    print(f"  vigilancia   {'ARMADA' if d['armada'] else 'desarmada'} ({d['estado']})")
+    print(f"  delante      {d['presencia']} — {d['presencia_motivo']}")
+    for f in d["telefonos"]:
+        if f["vigilado"]:
+            senal = "en línea" if f["en_linea"] else (
+                f"callado {f['callado_s'] // 60} min" if f["callado_s"] is not None else "sin oír aún")
+        elif not f["pase"]:
+            senal = "no se vigila: sin pase"
+        else:
+            senal = "no se vigila: aún no ha entrado por Tailscale"
+        print(f"  {f['nombre']:<20} {senal}")
+    return 0
+
+
+def cmd_presencia(args):
+    from celiuz_remoto import escritorio
+    if args.estado:
+        escritorio.marcar_presencia(args.estado)
+        return 0
+    quien, motivo = escritorio.presencia()
+    print(f"  {quien} — {motivo}")
+    return 0
+
+
+def barra():
+    """{text, tooltip, class} para el modulo custom/remoto de waybar. Barato:
+    solo el socket de control (sin red, sin tailscale). Sin servicio, texto
+    vacio, y waybar esconde el modulo."""
+    from celiuz_remoto import control
+    try:
+        codigo, d = control.pedir("GET", "/control/estado", timeout=2)
+    except (control.SinServicio, OSError):
+        return {"text": ""}
+    if codigo != 200:
+        return {"text": ""}
+    e = d.get("energia")
+    lineas = [f"Celiuz Remoto: escuchando en {d.get('red')}"]
+    if e:
+        verbo = {"apagar": "Se apaga", "reiniciar": "Se reinicia", "suspender": "Se suspende"}[e["accion"]]
+        lineas.insert(0, f"{verbo} en {e['quedan']} s — clic para cancelar desde la ventana")
+        clase = "apagando"
+    elif d.get("sesiones"):
+        n = d["sesiones"]
+        lineas.append(f"{n} celular{'es' if n > 1 else ''} conectado{'s' if n > 1 else ''} ahora")
+        clase = "conectado"
+    else:
+        lineas.append("ningún celular conectado ahora")
+        clase = "activo"
+    lineas.append(f"vigilancia: {d.get('vigilancia', '?')}")
+    return {"text": "\U000f011c", "tooltip": "\n".join(lineas), "class": clase}
+
+
+def cmd_barra(args):
+    print(json.dumps(barra(), ensure_ascii=False), flush=True)
+    return 0
+
+
 def cmd_registro(args):
     from celiuz_remoto import registro
     for linea in registro.ultimas(args.n):
@@ -385,6 +474,21 @@ def main(argv=None):
     s.add_argument("id")
     s.add_argument("cambios", nargs="+")
     s.set_defaults(func=cmd_permisos)
+
+    s = sub.add_parser("barra", help="el icono de waybar")
+    s.set_defaults(func=cmd_barra)
+
+    s = sub.add_parser("cancelar", help="cancela un apagado en marcha")
+    s.set_defaults(func=cmd_cancelar)
+
+    s = sub.add_parser("vigilancia", help="arma, desarma o dice como esta")
+    s.add_argument("armar", nargs="?", choices=["si", "no"])
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_vigilancia)
+
+    s = sub.add_parser("presencia", help="lo apunta hypridle")
+    s.add_argument("estado", nargs="?", choices=["ausente", "presente"])
+    s.set_defaults(func=cmd_presencia)
 
     s = sub.add_parser("registro", help="lo ultimo que paso")
     s.add_argument("-n", type=int, default=30)

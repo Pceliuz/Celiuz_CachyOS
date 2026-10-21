@@ -2,15 +2,18 @@
 // por el WebSocket /v0/vivo. Solo se enseña lo que el equipo tiene: sin
 // sensor no hay temperatura, sin GPU dedicada no hay VRAM, sin bateria no sale.
 //
-// Apagar, Apps, Archivos y Terminal estan en la maqueta pero llegan en las
-// fases 4, 6 y 7 (remoto/DISEÑO.md, «Fases»): se ven, apagados, con «pronto».
+// Apagar/reiniciar/suspender abren la hoja de confirmar (HojaEnergia); con una
+// cuenta atras en marcha, sale arriba con «Cancelar». Archivos y Terminal
+// llegan en las fases 6 y 7: en la barra de abajo, con «pronto».
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 
-import type { Conexion } from '../api/cliente';
-import type { Estado } from '../api/protocolo';
+import type { Conexion, ErrorRemoto } from '../api/cliente';
+import type { AccionEnergia, Equipo, Estado } from '../api/protocolo';
 import * as f from '../formato';
 import { colores } from '../paleta';
+import HojaEnergia from '../componentes/HojaEnergia';
+import Pestanas, { type Pestana } from '../componentes/Pestanas';
 import { Barra, Boton, Pantalla, Tarjeta, Texto, fondoRojo, fondoVerde, verde } from '../componentes/ui';
 
 function Cifra({ titulo, cifra, detalle }: { titulo: string; cifra: string; detalle?: string }) {
@@ -32,15 +35,47 @@ function Fila({ titulo, valor }: { titulo: string; valor: string }) {
   );
 }
 
-const PESTANAS = ['Inicio', 'Apps', 'Archivos', 'Terminal'];
-
-export default function Inicio({ conexion, cpu, alSalir, alCaducar, alVerPase }: {
+export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase, alCambiar }: {
   conexion: Conexion;
-  cpu: string | null;
+  datos: Equipo | null;
   alSalir: () => void;
   alCaducar: (sesionCaducada: boolean) => void;
   alVerPase: () => void;
+  alCambiar: (p: Pestana) => void;
 }) {
+  const [hoja, setHoja] = useState<AccionEnergia | null>(null);
+  const [apps, setApps] = useState<number | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const puedeEnergia = conexion.sesion.permisos.includes('energia');
+
+  async function abrirHoja(a: AccionEnergia) {
+    setHoja(a);
+    setApps(null);
+    if (conexion.sesion.permisos.includes('ventanas')) {
+      conexion.ventanas().then((v) => setApps(v.length)).catch(() => setApps(null));
+    }
+  }
+
+  async function confirmar() {
+    if (!hoja) return;
+    setEnviando(true);
+    try {
+      await conexion.energia(hoja);
+      setHoja(null);
+    } catch (e) {
+      Alert.alert('No se pudo', (e as ErrorRemoto).message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function cancelarEnergia() {
+    try {
+      await conexion.cancelarEnergia();
+    } catch (e) {
+      Alert.alert('No se pudo cancelar', (e as ErrorRemoto).message);
+    }
+  }
   const [estado, setEstado] = useState<Estado | null>(null);
   const [ultimo, setUltimo] = useState(0);
   const [ahora, setAhora] = useState(() => new Date());
@@ -79,6 +114,17 @@ export default function Inicio({ conexion, cpu, alSalir, alCaducar, alVerPase }:
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16, gap: 12 }}>
+        {estado?.energia ? (
+          <Tarjeta estilo={{ backgroundColor: fondoRojo, borderColor: colores.alerta, gap: 10 }}>
+            <Texto tipo="grande" color={colores.luz}>
+              {{ apagar: 'Se apaga', reiniciar: 'Se reinicia', suspender: 'Se suspende' }[estado.energia.accion]} en {estado.energia.quedan} s
+            </Texto>
+            <Texto tipo="chico" color={colores.luz}>
+              {estado.energia.origen === 'pc' ? 'Lo pidió la vigilancia de la PC.' : `Lo pidió «${estado.energia.origen}».`}
+            </Texto>
+            {puedeEnergia ? <Boton texto="Cancelar" tipo="borde" alto={48} alPulsar={cancelarEnergia} /> : null}
+          </Tarjeta>
+        ) : null}
         <Pressable accessibilityRole="button" onPress={pase.vigente ? undefined : alVerPase}>
           <Tarjeta estilo={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -96,7 +142,7 @@ export default function Inicio({ conexion, cpu, alSalir, alCaducar, alVerPase }:
         {estado ? (
           <>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              <Cifra titulo={`CPU · ${f.familiaCpu(cpu)}`} cifra={`${estado.cpu.uso}%`}
+              <Cifra titulo={`CPU · ${f.familiaCpu(datos?.cpu)}`} cifra={`${estado.cpu.uso}%`}
                      detalle={estado.cpu.temp !== undefined ? `${estado.cpu.temp} °C` : undefined} />
               {gpu ? (
                 <Cifra titulo={`GPU · ${gpu.nombre}`}
@@ -119,27 +165,24 @@ export default function Inicio({ conexion, cpu, alSalir, alCaducar, alVerPase }:
           <Tarjeta><Texto color={colores.tenue}>Esperando el estado de la PC…</Texto></Tarjeta>
         )}
 
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
-          {['Apagar', 'Reiniciar', 'Suspender'].map((t, i) => (
-            <View key={t} style={{ flex: 1 }}>
-              <Boton texto={t} tipo={i === 0 ? 'peligro' : 'borde'} alto={64} desactivado />
-            </View>
-          ))}
-        </View>
-        <Texto tipo="chico" centrado>Apagar, reiniciar y suspender: pronto (fase 4).</Texto>
+        {puedeEnergia ? (
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+            {(['apagar', 'reiniciar', 'suspender'] as AccionEnergia[]).map((a, i) => (
+              <View key={a} style={{ flex: 1 }}>
+                <Boton texto={a[0].toUpperCase() + a.slice(1)} tipo={i === 0 ? 'peligro' : 'borde'} alto={64}
+                       alPulsar={() => abrirHoja(a)} desactivado={!!estado?.energia} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Texto tipo="chico" centrado>Este celular no tiene permiso para apagar (se da desde la PC).</Texto>
+        )}
         <Boton texto="Salir" tipo="borde" alto={48} alPulsar={alSalir} />
       </ScrollView>
 
-      <View style={{ height: 64, borderTopWidth: 1, borderTopColor: colores.apagado, backgroundColor: colores.superficie,
-                     flexDirection: 'row' }}>
-        {PESTANAS.map((p, i) => (
-          <View key={p} accessibilityState={{ disabled: i > 0 }} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2,
-                                                                          opacity: i === 0 ? 1 : 0.45 }}>
-            <Texto tipo="chico" color={i === 0 ? colores.neon : colores.tenue}>{p}</Texto>
-            {i > 0 ? <Texto tipo="chico">pronto</Texto> : null}
-          </View>
-        ))}
-      </View>
+      <Pestanas actual="inicio" permisos={conexion.sesion.permisos} alCambiar={alCambiar} />
+      <HojaEnergia accion={hoja} equipo={conexion.equipo.equipo} apps={apps}
+                   segundos={datos?.cuenta_atras ?? 60} enviando={enviando} alConfirmar={confirmar} alCerrar={() => setHoja(null)} />
     </Pantalla>
   );
 }

@@ -34,13 +34,14 @@ export function Tarjeta({ children, estilo }: { children: ReactNode; estilo?: Vi
   return <View style={[e.tarjeta, estilo]}>{children}</View>;
 }
 
-export function Texto({ children, tipo = 'normal', color, centrado }: {
+export function Texto({ children, tipo = 'normal', color, centrado, lineas }: {
   children: ReactNode;
   tipo?: 'titulo' | 'grande' | 'normal' | 'chico' | 'etiqueta' | 'cifra';
   color?: string;
   centrado?: boolean;
+  lineas?: number; // como mucho tantas lineas, con «…» al final
 }) {
-  return <Text style={[e[tipo], color ? { color } : null, centrado ? { textAlign: 'center' } : null]}>{children}</Text>;
+  return <Text numberOfLines={lineas} style={[e[tipo], color ? { color } : null, centrado ? { textAlign: 'center' } : null]}>{children}</Text>;
 }
 
 export function Boton({ texto, alPulsar, tipo = 'lleno', desactivado, cargando, alto = 56 }: {

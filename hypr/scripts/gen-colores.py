@@ -8,19 +8,20 @@ CSS de GTK, mako no tiene variables y el tema de SDDM es QML. Sin esto, el
 violeta estaria escrito a mano en cuatro sitios y tarde o temprano dejarian de
 coincidir.
 
-Cuatro destinos, una sola fuente:
+Cinco destinos, una sola fuente:
 
     waybar/colores.css    un `@define-color` por variable, que style.css importa
     mako/colores          los colores ya resueltos, que mako incluye al final
     sddm/celiuz/Colores.qml   un QtObject que Main.qml instancia
     hypr/conf/colores-pango.conf  la misma paleta en #RRGGBB, para el marcado
                           Pango de hyprlock (ver render_pango)
+    remoto/app/src/colores.json   la app del celular de Celiuz Remoto
 
 Los alfas NO se generan para waybar: el CSS de GTK sabe derivarlos solo con
 `alpha(@amatista, 0.35)`. QML tambien, con Qt.alpha().
 
 Uso:
-    gen-colores.py            genera los tres destinos
+    gen-colores.py            genera todos los destinos
     gen-colores.py --check    no escribe; sale con 1 si alguno esta viejo
 """
 import re
@@ -33,6 +34,7 @@ DESTINO = RAIZ / "waybar" / "colores.css"
 DESTINO_MAKO = RAIZ / "mako" / "colores"
 DESTINO_SDDM = RAIZ / "sddm" / "celiuz" / "Colores.qml"
 DESTINO_PANGO = RAIZ / "hypr" / "conf" / "colores-pango.conf"
+DESTINO_APP = RAIZ / "remoto" / "app" / "src" / "colores.json"
 
 # Que tono le toca a cada parte de una notificacion.
 #
@@ -252,6 +254,32 @@ def render_pango(paleta) -> str:
     )
 
 
+def render_app(paleta) -> str:
+    """La paleta para la app del celular (React Native).
+
+    JSON y no TypeScript porque la leen DOS: la app (Metro) y app.config.ts,
+    que Expo ejecuta en Node y que no sabe importar otro .ts (se probo:
+    «Cannot find module './src/colores'» con el typecheck en verde). Un JSON lo
+    entienden los dos. JSON no admite comentarios, asi que el aviso de
+    GENERADO va en una clave propia.
+
+    Y OTRA VEZ EL ORDEN DEL ALFA: React Native lee `#RRGGBBAA` como CSS, con el
+    alfa DETRAS (igual que hyprlang y al reves que QML). Para no depender de
+    acordarse de cual es cual, los opacos salen `#RRGGBB` y los translucidos
+    `rgba(r, g, b, a)`, que no tienen lectura ambigua en ningun sitio.
+    """
+    import json
+    colores = {}
+    for nombre, _, hexa, _ in paleta:
+        r, g, b, a = (int(hexa[j:j + 2], 16) for j in (0, 2, 4, 6))
+        colores[nombre] = f"#{hexa[0:6]}" if a == 255 else \
+            f"rgba({r}, {g}, {b}, {round(a / 255, 3)})"
+    datos = {"_generado": "por hypr/scripts/gen-colores.py desde hypr/conf/colores.conf "
+                          "— NO EDITAR A MANO",
+             "colores": colores}
+    return json.dumps(datos, ensure_ascii=False, indent=2) + "\n"
+
+
 def main() -> int:
     if not ORIGEN.exists():
         print(f"no encuentro la paleta: {ORIGEN}", file=sys.stderr)
@@ -265,7 +293,8 @@ def main() -> int:
     salidas = [(DESTINO, render(paleta)),
                (DESTINO_MAKO, render_mako(paleta)),
                (DESTINO_SDDM, render_sddm(paleta)),
-               (DESTINO_PANGO, render_pango(paleta))]
+               (DESTINO_PANGO, render_pango(paleta)),
+               (DESTINO_APP, render_app(paleta))]
 
     if "--check" in sys.argv:
         viejos = [d for d, nuevo in salidas

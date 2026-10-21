@@ -8,14 +8,16 @@ que no se entiende se ignoran con un aviso por stderr, nunca tumban el servicio.
     puerto_red = 47110        donde escucha por Tailscale
     puerto_usb = 47111        el canal USB (adb reverse), solo mientras se empareja
     sesion     = 300          segundos sin uso hasta que caduca una sesion
+    cuenta_atras = 60         segundos de aviso en la PC antes de apagar/reiniciar/suspender
 """
 
 import sys
 
 from . import PUERTO_RED, PUERTO_USB, rutas
 
-DE_FABRICA = {"puerto_red": PUERTO_RED, "puerto_usb": PUERTO_USB, "sesion": 300}
-LIMITES = {"puerto_red": (1024, 65535), "puerto_usb": (1024, 65535), "sesion": (30, 86400)}
+DE_FABRICA = {"puerto_red": PUERTO_RED, "puerto_usb": PUERTO_USB, "sesion": 300, "cuenta_atras": 60}
+LIMITES = {"puerto_red": (1024, 65535), "puerto_usb": (1024, 65535), "sesion": (30, 86400),
+           "cuenta_atras": (3, 600)}
 
 
 def leer(ruta=None):

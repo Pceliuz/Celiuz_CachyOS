@@ -85,6 +85,15 @@ def css(C, fuente, verde):
     button.discreto {{ border-radius: 9px; min-height: 34px; padding: 0 12px; }}
     button.discreto label {{ font-size: 12px; }}
     button:disabled {{ opacity: .4; }}
+    switch {{ background-image: none; background-color: {v['apagado']}; border: none;
+              border-radius: 13px; min-width: 46px; min-height: 26px; box-shadow: none; }}
+    switch:checked {{ background-color: {v['violeta']}; box-shadow: 0 0 8px {_rgba(C['neon'], .55)}; }}
+    switch slider {{ background-image: none; background-color: {v['tenue']}; border: none;
+                     border-radius: 50%; min-width: 20px; min-height: 20px; margin: 3px; box-shadow: none; }}
+    switch:checked slider {{ background-color: {v['luz']}; }}
+    /* La «I» y la «O» del interruptor son iconos que el tema esconde con color
+     * transparente; el `*` de arriba se lo devolvia (trampa del CLAUDE.md). */
+    switch image {{ color: transparent; }}
     combobox button {{ border-radius: 10px; min-height: 36px; padding: 0 10px; }}
     levelbar trough {{ min-height: 5px; border-radius: 3px; background-color: {v['apagado']};
                        border: none; padding: 0; }}

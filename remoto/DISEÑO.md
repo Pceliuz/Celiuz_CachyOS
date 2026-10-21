@@ -141,11 +141,30 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
 - Hasta la fase 5 el servicio es de la sesión (`systemd --user`).
 
 ### La vigilancia escucha a Tailscale, no a la app
-- Para saber si el celular sigue vivo se mira `Online` de ese aparato en
-  `tailscale status --json`: no gasta batería y no depende de que Android deje
-  viva la app. Hay que quitarle a **Tailscale** la optimización de batería.
+- Para saber si el celular sigue vivo se mira Tailscale, no latidos de la app:
+  no gasta batería y no depende de que Android deje viva la app. Hay que
+  quitarle a **Tailscale** la optimización de batería (medido: el HONOR lo
+  durmió en 17 min).
+- **El `Online` del servidor de coordinación se atasca** (medido 2026-10-20:
+  «offline, last seen 27m ago» con tráfico directo con la PC). Por eso la señal
+  de un teléfono es lo más reciente de `Online`, `LastSeen` y `LastHandshake`
+  (el saludo de WireGuard, que es de la PC misma), y a uno que lleve 10 min sin
+  señal la PC le **pregunta directamente** con `tailscale ping` (como mucho cada
+  5 min: un paquete). Solo cuenta silencio si tampoco contesta.
+- Vigila a los teléfonos **con pase** que hayan entrado alguna vez por
+  Tailscale (es su IP lo que dice cuál de los aparatos de la tailnet es cada
+  uno). La arma la persona desde la ventana de la PC; viene desarmada.
+- **La presencia la mide hypridle**: un `listener` de 5 min apunta «ausente» y
+  «presente» (`celiuz-remoto presencia`). Como hypridle respeta los
+  inhibidores, un vídeo cuenta como persona. Sin hypridle, «no lo sé», que
+  nunca apaga.
 - El latido de la app queda solo para el «me están apagando».
 - La GPU se lee por NVML (la librería del driver), no lanzando `nvidia-smi`.
+
+### El mismo celular, emparejado otra vez
+- Se **sustituye** al registro viejo (por su serie USB), no se suma: la app
+  crea una clave nueva en cada emparejamiento y borra la vieja, así que el
+  registro viejo quedaría muerto, con pase, sin poder entrar nunca.
 
 ### Archivos: un explorador propio, no Dolphin
 - Ver Dolphin de verdad sería escritorio remoto, incómodo en un celular. La app
@@ -178,8 +197,10 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
    systemd y lo que diga `instalar.sh --revisar`.
 3. **La app del celular, primera versión** ✅: emparejar por cable, entrar,
    inicio con el estado en tiempo real. APK compilado en la PC.
-4. **Control**: apagar / reiniciar / suspender con cuenta atrás, ver y cerrar
+4. **Control** ✅: apagar / reiniciar / suspender con cuenta atrás, ver y cerrar
    apps, y la vigilancia (con el icono de la barra: ¿activo?, ¿hay un celular?).
+   Falta el «me están apagando» del lado de Android (módulo nativo,
+   `ACTION_SHUTDOWN`): el servidor ya lo acepta (`/v0/latido`).
 5. **Tras un reinicio (SDDM)**: servicio de sistema y entrada de un solo uso
    (ver «Tras reiniciar» arriba).
 6. **Archivos**: explorador, descargas, recientes, favoritos.

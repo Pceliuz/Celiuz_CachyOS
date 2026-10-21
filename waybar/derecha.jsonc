@@ -22,5 +22,5 @@
 // comentarios de JSON. Se los quita antes, pero solo los que ocupan una linea
 // entera. Un `// ...` al final de una linea con datos rompe la lectura.
 {
-    "modules-right": ["pulseaudio", "network", "bluetooth", "custom/notificaciones", "tray"]
+    "modules-right": ["pulseaudio", "network", "bluetooth", "custom/remoto", "custom/notificaciones", "tray"]
 }

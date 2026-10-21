@@ -9,6 +9,53 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (PC): Celiuz Remoto, fase 4 — control y vigilancia
+
+**Sin commitear** (el usuario lo sube él). Ojo: el cambio de
+`hypr/scripts/gen-colores.py` de la fase 1 nunca se subió (no estaba en los
+`git add` que se le dieron); va con este commit.
+
+- **Servidor**: `escritorio.py` (Hyprland vivo en caliente, ventanas, cerrar
+  pidiéndolo, presencia en tres salidas), `energia.py` (cuenta atrás,
+  `notify-send --wait` con Cancelar que se cierra por id al cancelar, cerrar
+  ventanas antes de `systemctl`), `vigilancia.py` (decidir puro; Online +
+  LastSeen + LastHandshake + `tailscale ping`), rutas `/v0/energia`,
+  `/v0/ventanas`, `/v0/ventanas/{id}/cerrar` (pase), `/v0/latido`,
+  `/control/energia`, `/control/vigilancia`. `remoto.conf`: `cuenta_atras`.
+  El mismo celular emparejado otra vez SUSTITUYE al viejo (por serie USB).
+- **hypridle**: `listener` de 300 s que apunta la presencia
+  (`celiuz-remoto presencia ausente|presente`). Hace falta
+  `systemctl --user restart hypridle` para que lo lea (hecho en la PC).
+- **CLI**: `cancelar`, `vigilancia [si|no]`, `presencia`, `barra`.
+- **Barra**: `custom/remoto` (en `derecha.jsonc`): solo con el servicio
+  encendido; tenue / verde (celular dentro) / rojo (apagando). Clic: la ventana.
+  `instalar.sh` rehace `local.jsonc` al pasar.
+- **Ventana**: página Vigilancia (interruptor, presencia, cada teléfono) y la
+  cuenta atrás con Cancelar en la tarjeta del servicio. `--pagina vigilancia`.
+- **App**: hoja de Apagar/Reiniciar/Suspender (maqueta 4), pestaña Apps
+  (maqueta 3), cuenta atrás con Cancelar en Inicio. Recompilada e instalada.
+- **Probado en el HONOR real**: suspender con 300 s → aviso en la PC + barra en
+  rojo → cancelar desde el celular (y el aviso se quita); ver las apps reales;
+  cerrar una ventana de prueba en el escritorio 9 (una kitty con algo corriendo
+  pregunta, como debe); vigilancia armada reconociendo al celular.
+- **Fallos encontrados probando**: `TypeError` por `accion=` en el registro;
+  el aviso de la PC no se quitaba al cancelar; el glifo ⏻ no está en la fuente
+  del celular; `Online` atascado del coordinador (→ handshake + ping); el mismo
+  celular emparejado dos veces quedaba duplicado; el puerto USB chocaba al
+  emparejar otra vez enseguida; títulos largos en varias líneas.
+- **Un error mío en la prueba**: emparejé el celular de prueba encima del
+  emparejamiento que el usuario había hecho a las 19:50, y la app sustituyó su
+  clave. Su registro (`c0615dcf…`) sigue en la PC pero ya no puede entrar:
+  **el usuario tiene que volver a emparejar** (con el arreglo de la serie, ese
+  registro viejo se sustituye solo).
+- **Pruebas**: `unidad/remoto-vigilancia` (39), `e2e/remoto-control` (41),
+  `e2e/remoto-app` con ronda de control, `e2e/remoto` (81).
+- **Falta de la fase 4**: el «me están apagando» del lado de Android (módulo
+  nativo con `ACTION_SHUTDOWN`); el servidor ya lo acepta. Va a la fase 8 o
+  cuando toque.
+- **Lo siguiente: fase 5** — tras un reinicio (servicio de sistema y autologin
+  de un solo uso).
+
 ## 2026-10-20 (PC): Celiuz Remoto, fase 3 — la app del celular
 
 **Sin commitear** (el usuario lo sube él).

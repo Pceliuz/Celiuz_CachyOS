@@ -301,6 +301,21 @@
         "escape": true
     },
 
+    // --- DERECHA: Celiuz Remoto (remoto/) ---
+    // Solo se ve con el servicio encendido: apagado (como viene) no ocupa
+    // nada. El color dice el estado y lo pone style.css por la CLASE:
+    // activo / conectado (un celular dentro ahora) / apagando (cuenta atras).
+    // Va por el enlace de ~/.local/bin que crea instalar.sh: sin el, la orden
+    // falla y el modulo no sale, que es lo correcto en un equipo sin instalar.
+    "custom/remoto": {
+        "exec": "$HOME/.local/bin/celiuz-remoto barra",
+        "return-type": "json",
+        "interval": 5,
+        "format": "<span size='150%'>{}</span>",
+        "on-click": "$HOME/.config/hypr/scripts/lanzar.sh celiuz-remoto-config",
+        "escape": true
+    },
+
     "tray": {
         // Los iconos del tray son imagenes, no glifos: no les llega el <span>.
         // Va a mano a la par de ellos: 20 cuando el <span> estaba al 130%, 23

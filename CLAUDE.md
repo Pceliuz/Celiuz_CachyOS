@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (50 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (52 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -100,7 +100,8 @@ enumera SDL**, no si el device existe.
 Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
 apps, archivos, terminal). **Va por fases (8, en `remoto/DISEÑO.md`), y cada
 una se cierra probada antes de empezar la siguiente**: lo pidió el usuario.
-Hechas la 1, la 2 y la 3 (2026-10-20): el servidor empareja por el canal USB,
+Hechas la 1, la 2, la 3 y la 4 (2026-10-20; la 4 trae apagar con cuenta
+atrás, ver y cerrar apps, la vigilancia y el icono de la barra): el servidor empareja por el canal USB,
 deja entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado
 en vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las
 maquetas) guía el cable, empareja, renueva, revoca y enciende el servicio; y
@@ -1256,6 +1257,16 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   la paleta de la app es un JSON (`remoto/app/src/colores.json`), que leen la
   config y la app. Comprobar con `npx expo config --type public`, no con el
   typecheck.
+- **El `Online` de `tailscale status` lo da el servidor de coordinación y se
+  ATASCA**: el HONOR salía «offline, last seen 27m ago» con tráfico directo con
+  la PC. Para saber si un aparato vive: `LastHandshake` (de la PC misma) o
+  `tailscale ping` (contesta el aparato). Lo usa `remoto/.../vigilancia.py`.
+- **Matar un `notify-send --wait` NO quita la notificación de la pantalla.** Se
+  cierra por su id (`-p` lo imprime) con `CloseNotification` por D-Bus
+  (`gdbus call ...`). Se quedaba «La PC se suspenderá en 300 s» tras cancelar.
+- **`registro.apuntar(accion, ...)` ya usa `accion`**: pasarle `accion=` en el
+  detalle es un `TypeError` y la petición entera un 500. El detalle va como
+  `que=`.
 - **`adb shell` se come la entrada estándar de quien lo llama.** La CLI miraba
   el celular con adb y DESPUÉS leía la contraseña por stdin: llegaba vacía.
   `adb.py` le cierra stdin siempre (`DEVNULL`); el `adb` de mentira de

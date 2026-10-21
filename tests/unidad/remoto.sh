@@ -42,7 +42,7 @@ import json, os, sys
 casa, repo, run = (os.path.realpath(x) for x in sys.argv[2:5])
 for clave, ruta in json.loads(sys.argv[1]).items():
     r = os.path.realpath(ruta)
-    dentro = run if clave == "control" else casa
+    dentro = run if clave in ("control", "presencia") else casa
     assert r.startswith(dentro + os.sep), (clave, r)
     assert not r.startswith(repo + os.sep), (clave, r)
 ' "$salida" "$HOME" "$REPO" "$XDG_RUNTIME_DIR"

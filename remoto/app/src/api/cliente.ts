@@ -10,7 +10,10 @@
 //    llama, con `abrirSocket`.
 import { firmar } from './cripto.ts';
 import {
+  type AccionEnergia,
   CIERRE_SIN_SESION,
+  type EstadoEnergia,
+  type Ventana,
   PUERTO_RED,
   PUERTO_USB,
   type CodigoError,
@@ -166,6 +169,32 @@ export class Conexion {
       cerrado = true;
       s.close(1000);
     };
+  }
+
+  // Apagar / reiniciar / suspender: empieza la cuenta atras en la PC (con su
+  // aviso cancelable). Siempre confirmado: la confirmacion la hace la pantalla.
+  async energia(accion: AccionEnergia): Promise<EstadoEnergia> {
+    const r = await pedir<{ energia: EstadoEnergia }>(this.h, 'POST', `${this.base}/v0/energia`,
+      { accion, confirmado: true }, this.sesion.token);
+    return r.energia;
+  }
+
+  async cancelarEnergia(): Promise<boolean> {
+    const r = await pedir<{ cancelada: boolean }>(this.h, 'DELETE', `${this.base}/v0/energia`,
+      undefined, this.sesion.token);
+    return r.cancelada;
+  }
+
+  async ventanas(): Promise<Ventana[]> {
+    const r = await pedir<{ ventanas: Ventana[] }>(this.h, 'GET', `${this.base}/v0/ventanas`,
+      undefined, this.sesion.token);
+    return r.ventanas;
+  }
+
+  // Pide el pase: sin el, ErrorRemoto con codigo «pase_vencido» (423).
+  async cerrarVentana(id: string): Promise<void> {
+    await pedir(this.h, 'POST', `${this.base}/v0/ventanas/${encodeURIComponent(id)}/cerrar`,
+      { confirmado: true }, this.sesion.token);
   }
 
   async salir(): Promise<void> {

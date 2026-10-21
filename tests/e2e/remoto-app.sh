@@ -14,7 +14,13 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 preparar_entorno
 CLI="$REPO/remoto/servidor/celiuz-remoto.py"
 APP="$REPO/remoto/app"
-binario_falso notify-send 0
+binario_falso notify-send 0 'case "$*" in *--wait*) sleep 30 ;; esac'
+binario_falso systemctl 0
+binario_falso hyprctl 0 'case "$*" in
+    "clients -j") echo "[{\"address\":\"0xaaa\",\"class\":\"brave-browser\",\"title\":\"x\",\"mapped\":true,\"workspace\":{\"id\":2,\"name\":\"2\"}},
+                    {\"address\":\"0xbbb\",\"class\":\"kitty\",\"title\":\"y\",\"mapped\":true,\"workspace\":{\"id\":1,\"name\":\"1\"}}]" ;;
+    "eval return 1") echo ok ;;
+esac'
 
 if ! command -v node >/dev/null || [ ! -d "$APP/node_modules/@noble/ed25519" ]; then
     _gris "  sin node o sin las dependencias de la app (cd remoto/app && npm install): se salta"
@@ -33,12 +39,18 @@ esperar_a() {
 puerto_libre() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])'; }
 RED="$(puerto_libre)"; USB="$(puerto_libre)"
 mkdir -p "$XDG_CONFIG_HOME/celiuz"
-printf 'puerto_red = %s\npuerto_usb = %s\n' "$RED" "$USB" > "$XDG_CONFIG_HOME/celiuz/remoto.conf"
+printf 'puerto_red = %s\npuerto_usb = %s\ncuenta_atras = 30\n' "$RED" "$USB" > "$XDG_CONFIG_HOME/celiuz/remoto.conf"
+# Un Hyprland que solo atiende su socket (para que el servidor vea una sesion)
+mkdir -p "$XDG_RUNTIME_DIR/hypr/prueba_1792449598_1"
+python3 -c 'import socket,sys
+s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(16)
+while True: s.accept()[0].close()' "$XDG_RUNTIME_DIR/hypr/prueba_1792449598_1/.socket.sock" &
+PID_HYPR=$!
 binario_falso tailscale 0 'echo 127.0.0.1'
 
 "$CLI" servir 2>"$TMP/servidor.log" &
 PID_SERVIDOR=$!
-trap 'kill $PID_SERVIDOR 2>/dev/null; wait $PID_SERVIDOR 2>/dev/null; limpiar_entorno' EXIT INT TERM
+trap 'kill $PID_SERVIDOR $PID_HYPR 2>/dev/null; wait $PID_SERVIDOR 2>/dev/null; limpiar_entorno' EXIT INT TERM
 esta_arriba() { test -S "$XDG_RUNTIME_DIR/celiuz-remoto.sock"; }
 esperar_a 10 esta_arriba
 
@@ -57,7 +69,7 @@ leer() {
 hay_codigo() { grep -q '^CODIGO ' "$1"; }
 
 titulo "1. Emparejar, entrar y ver el estado, con el código de la app"
-echo "clave-app" | "$CLI" emparejar --sin-adb > "$TMP/emp.out" 2>/dev/null &
+echo "clave-app" | "$CLI" emparejar --sin-adb --permisos estado,energia,ventanas > "$TMP/emp.out" 2>/dev/null &
 esperar_a 10 hay_codigo "$TMP/emp.out"
 TMP="$TMP" app "$RED" "$USB" "$(sed -n 's/^CODIGO //p' "$TMP/emp.out")" clave-app emparejar > "$TMP/app1.txt" 2>"$TMP/app1.err"
 leer "$TMP/app1.txt"
@@ -74,6 +86,15 @@ afirmar "   sin nada por stderr" test ! -s "$TMP/app2.err"
 wait "$PID_REN"; codigo=$?
 afirmar_igual "0" "$codigo" "   y la PC da la renovación por hecha"
 afirmar "el servidor sigue vivo después de todo" kill -0 "$PID_SERVIDOR"
+
+titulo "3. Apagar y las apps, con el código de la app"
+TMP="$TMP" app "$RED" "$USB" - clave-app control > "$TMP/app3.txt" 2>"$TMP/app3.err"
+leer "$TMP/app3.txt"
+afirmar "   sin nada por stderr" test ! -s "$TMP/app3.err"
+"$CLI" quitar-pase "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["equipo"]["dispositivo"])' "$TMP/equipo.json")" > /dev/null
+TMP="$TMP" app "$RED" "$USB" - clave-app sinpase > "$TMP/app4.txt" 2>"$TMP/app4.err"
+leer "$TMP/app4.txt"
+afirmar "   sin nada por stderr" test ! -s "$TMP/app4.err"
 
 afirmar_no_contiene "$TMP/servidor.log" "Traceback" "el servidor no tuvo ni un traceback"
 afirmar_intacta_la_casa_real

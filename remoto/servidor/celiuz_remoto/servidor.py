@@ -21,10 +21,13 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 
 from aiohttp import WSCloseCode, web
 
-from . import VERSION_PROTOCOLO, ajustes, dispositivos as dsp, pase, red, registro, rutas
+from . import VERSION_PROTOCOLO, ajustes, dispositivos as dsp, escritorio, pase, red, registro, rutas
+from .energia import ACCIONES, Energia
+from .vigilancia import CADA as VIGILANCIA_CADA, Vigilancia
 from .sesion import FIRMA_MALA, Rechazo, Sesiones, firma_buena, texto_firmado
 
 VENTANA_DURA = 120          # segundos que se queda abierto el canal USB
@@ -101,6 +104,9 @@ class Servicio:
         self.almacen = almacen or dsp.Almacen()
         self.avisar = avisar
         self.sesiones = Sesiones(self.almacen, avisar=avisar, caducidad=self.valores["sesion"])
+        self.energia = Energia(self.valores["cuenta_atras"], avisar)
+        self.vigilancia = Vigilancia(self.almacen, self._apagar_desde_hilo, avisar)
+        self._bucle = None
         self.muestreador = muestreador
         self._muestra = (0.0, None)
         self.ventana = None
@@ -108,6 +114,7 @@ class Servicio:
         self._temporizador = None
         self._runners = []
         self._tareas = set()
+        self._pendiente = None     # (runner, plazo) del canal USB que se esta soltando
 
     # --- utilidades ---
 
@@ -123,7 +130,20 @@ class Servicio:
         if permiso and permiso not in disp.get("permisos", []):
             raise _rechazo(403, "sin_permiso",
                            "Este celular no tiene permiso para esto. Actívalo desde la PC.")
+        self._apuntar_ip(peticion, disp)
         return token, disp
+
+    def _apuntar_ip(self, peticion, disp):
+        """La IP de Tailscale del telefono: es como la vigilancia sabe cual de
+        los aparatos de `tailscale status` es (vigilancia.py)."""
+        ip = peticion.remote
+        if ip and ip != disp.get("ip_tailscale"):
+            self.almacen.cambiar(disp["id"], ip_tailscale=ip)
+            disp["ip_tailscale"] = ip
+
+    def _pase(self, disp):
+        if not pase.vigente(disp):
+            raise _rechazo(423, "pase_vencido", pase.mensaje_vencido(disp))
 
     def _muestrear(self):
         t = asyncio.get_running_loop().time()
@@ -152,6 +172,7 @@ class Servicio:
                 registro.apuntar("entrar_mal", d["dispositivo"], motivo=r.error)
             raise
         self.almacen.cambiar(disp["id"], ultima_sesion=pase.iso(pase.ahora()))
+        self._apuntar_ip(peticion, disp)
         registro.apuntar("entrar", disp["id"])
         return web.json_response({
             "token": token, "caduca_en": self.valores["sesion"],
@@ -167,7 +188,8 @@ class Servicio:
 
     async def v0_equipo(self, peticion):
         self._telefono(peticion, "estado")
-        return web.json_response(dict(self.muestreador.equipo(), protocolo=VERSION_PROTOCOLO))
+        return web.json_response(dict(self.muestreador.equipo(), protocolo=VERSION_PROTOCOLO,
+                                      cuenta_atras=self.valores["cuenta_atras"]))
 
     async def v0_vivo(self, peticion):
         token, disp = self._telefono(peticion, "estado")
@@ -182,7 +204,8 @@ class Servicio:
                     break
                 muestra = dict(self._muestrear(),
                                pase_hasta=disp["pase_hasta"] if pase.vigente(disp) else None,
-                               vigilancia="desarmada")
+                               vigilancia=self.vigilancia.estado,
+                               energia=self.energia.estado())
                 await ws.send_json(muestra)
                 hecho, _ = await asyncio.wait({lector}, timeout=VIVO_CADA)
                 if hecho:
@@ -194,6 +217,66 @@ class Servicio:
             if not ws.closed:
                 await ws.close(code=WSCloseCode.GOING_AWAY)
         return ws
+
+    # --- energia, ventanas y latido ---
+
+    async def v0_energia(self, peticion):
+        _, disp = self._telefono(peticion, "energia")
+        if peticion.method == "GET":
+            return web.json_response({"energia": self.energia.estado()})
+        if peticion.method == "DELETE":
+            return web.json_response({"cancelada": self.energia.cancelar(disp)})
+        d = await _cuerpo(peticion, "accion")
+        if d["accion"] not in ACCIONES:
+            raise _rechazo(400, "peticion", "La acción es apagar, reiniciar o suspender.")
+        if d.get("confirmado") is not True:
+            raise _rechazo(409, "confirmar", "Falta confirmarlo.")
+        estado = self.energia.programar(d["accion"], disp)
+        return web.json_response({"cuenta_atras": estado["quedan"], "energia": estado})
+
+    async def v0_ventanas(self, peticion):
+        self._telefono(peticion, "ventanas")
+        lista = await asyncio.get_running_loop().run_in_executor(None, escritorio.ventanas)
+        return web.json_response({"ventanas": [{k: v[k] for k in ("id", "app", "titulo", "escritorio")}
+                                               for v in lista],
+                                  "sesion": lista != [] or escritorio.instancia() is not None})
+
+    async def v0_cerrar_ventana(self, peticion):
+        _, disp = self._telefono(peticion, "ventanas")
+        self._pase(disp)
+        d = await _cuerpo(peticion)
+        if d.get("confirmado") is not True:
+            raise _rechazo(409, "confirmar", "Falta confirmarlo.")
+        ident = peticion.match_info["id"]
+        ok = await asyncio.get_running_loop().run_in_executor(None, escritorio.cerrar, ident)
+        if not ok:
+            raise _rechazo(404, "no_existe", "Esa ventana ya no está abierta.")
+        registro.apuntar("ventana_cerrada", disp["id"], ventana=ident)
+        return web.json_response({"pedido": True})
+
+    async def v0_latido(self, peticion):
+        """«Me estan apagando» (y de paso, una señal). Sin sesion: lo manda un
+        servicio de fondo de la app. La firma es sobre el minuto, que la PC
+        acepta si es el suyo o el anterior (PROTOCOLO.md, «Latido»)."""
+        d = await _cuerpo(peticion, "dispositivo", "minuto", "firma")
+        disp = self.almacen.uno(d["dispositivo"])
+        apagando = bool(d.get("apagando"))
+        minuto_pc = int(time.time() // 60)
+        try:
+            minuto = int(d["minuto"])
+        except ValueError:
+            minuto = -1
+        texto = f"{d['dispositivo']}:{minuto}:{1 if apagando else 0}"
+        if disp is None or minuto not in (minuto_pc, minuto_pc - 1) or \
+                not firma_buena(disp["publica"], texto_firmado("latido", texto), d["firma"]):
+            raise Rechazo(*FIRMA_MALA)
+        cambios = {"ultima_senal": time.time()}
+        if apagando:
+            cambios["apagando_en"] = time.time()
+            registro.apuntar("latido_apagando", disp["id"])
+        self.almacen.cambiar(disp["id"], **cambios)
+        self._apuntar_ip(peticion, disp)
+        return web.json_response({"siguiente_en": 300})
 
     # --- USB: /usb ---
 
@@ -214,8 +297,8 @@ class Servicio:
         if not v.codigo_bueno(d["codigo"]) or not dsp.publica_valida(d["publica"]) or \
                 not firma_buena(d["publica"], texto_firmado("emparejar", d["codigo"]), d["firma"]):
             raise Rechazo(*FIRMA_MALA)
-        disp = self.almacen.crear(v.nombre or d.get("nombre"), d["publica"], v.contrasena,
-                                  v.permisos, pase.iso(pase.ahora()), serie=v.serie)
+        disp = disp_creado = self.almacen.crear(v.nombre or d.get("nombre"), d["publica"], v.contrasena,
+                                                v.permisos, pase.iso(pase.ahora()), serie=v.serie)
         # Emparejar DA el pase: se cumple lo que pide (cable, y la contraseña
         # recien creada delante de la PC). Es el «Emparejar y dar pase de 24 h»
         # de la maqueta.
@@ -223,6 +306,9 @@ class Servicio:
         disp = self.almacen.cambiar(disp["id"], pase_hasta=hasta)
         registro.apuntar("emparejado", disp["id"], nombre=disp["nombre"],
                          permisos=disp["permisos"], pase_hasta=hasta)
+        for viejo in disp_creado.get("sustituye", []):
+            self.sesiones.echar(viejo)
+            registro.apuntar("sustituido", viejo, por=disp["id"])
         self._cerrar_ventana("hecho", disp["id"])
         return web.json_response({
             "dispositivo": disp["id"], "equipo": self.equipo(),
@@ -276,6 +362,14 @@ class Servicio:
                 raise _rechazo(400, "peticion", str(e)) from None
         elif modo != "renovar":
             raise _rechazo(400, "peticion", "El modo es «emparejar» o «renovar».")
+        if self._pendiente is not None:
+            # La ventana anterior acaba de cerrarse y su puerto aun no se ha
+            # soltado: emparejar otra vez enseguida daba «address already in
+            # use» (lo destapo la prueba de emparejar dos veces el mismo celular).
+            viejo, plazo = self._pendiente
+            plazo.cancel()
+            self._pendiente = None
+            await viejo.cleanup()
         runner = web.AppRunner(self._app_usb(), access_log=None)
         await runner.setup()
         try:
@@ -305,10 +399,13 @@ class Servicio:
             registro.apuntar("ventana_usb_cerrada", estado=estado)
         if runner is not None:
             # Despues de contestar: cerrar el canal dentro de su propia peticion
-            # cortaria la respuesta a medias.
-            asyncio.get_running_loop().call_later(0.2, self._soltar_usb, runner)
+            # cortaria la respuesta a medias. Se apunta, por si se abre otra
+            # ventana antes de esos 0,2 s (abrir_ventana lo suelta ya).
+            self._pendiente = (runner, asyncio.get_running_loop().call_later(
+                0.2, self._soltar_usb, runner))
 
     def _soltar_usb(self, runner):
+        self._pendiente = None
         # La tarea se guarda: asyncio solo apunta las tareas con una referencia
         # DEBIL, y una sin dueño puede desaparecer antes de acabar. Si no se
         # guardaba, el puerto USB se quedaba escuchando (contestando 404).
@@ -346,6 +443,18 @@ class Servicio:
         self._cerrar_ventana("cancelada")
         return web.json_response({"ok": True})
 
+    async def control_energia(self, peticion):
+        """Cancelar desde la PC (la ventana, la CLI)."""
+        return web.json_response({"cancelada": self.energia.cancelar(desde_pc=True),
+                                  "energia": self.energia.estado()})
+
+    async def control_vigilancia(self, peticion):
+        loop = asyncio.get_running_loop()
+        if peticion.method == "POST":
+            d = await _cuerpo(peticion)
+            await loop.run_in_executor(None, self.vigilancia.armar, bool(d.get("armada")))
+        return web.json_response(await loop.run_in_executor(None, self.vigilancia.resumen))
+
     async def control_estado(self, peticion):
         v = self.ventana
         return web.json_response({
@@ -353,7 +462,21 @@ class Servicio:
             "sesiones": self.sesiones.cuantas(),
             "ventana": v.modo if v is not None and v.estado == "abierta" else None,
             "equipo": self.equipo(),
+            "energia": self.energia.estado(),
+            "vigilancia": self.vigilancia.estado,
         })
+
+    def _apagar_desde_hilo(self):
+        self._bucle.call_soon_threadsafe(self.energia.programar, "apagar", None)
+
+    async def _vigilar(self):
+        loop = self._bucle = asyncio.get_running_loop()
+        while True:
+            try:
+                await loop.run_in_executor(None, self.vigilancia.vuelta)
+            except Exception as e:  # noqa: BLE001  una vuelta rota no para la vigilancia
+                print(f"celiuz-remoto: la vigilancia falló una vuelta: {e!r}", file=sys.stderr)
+            await asyncio.sleep(VIGILANCIA_CADA)
 
     # --- arrancar ---
 
@@ -365,6 +488,12 @@ class Servicio:
             web.delete("/v0/sesion", self.v0_salir),
             web.get("/v0/equipo", self.v0_equipo),
             web.get("/v0/vivo", self.v0_vivo),
+            web.get("/v0/energia", self.v0_energia),
+            web.post("/v0/energia", self.v0_energia),
+            web.delete("/v0/energia", self.v0_energia),
+            web.get("/v0/ventanas", self.v0_ventanas),
+            web.post("/v0/ventanas/{id}/cerrar", self.v0_cerrar_ventana),
+            web.post("/v0/latido", self.v0_latido),
         ])
         return app
 
@@ -375,6 +504,9 @@ class Servicio:
             web.get("/control/ventana", self.control_esperar),
             web.delete("/control/ventana", self.control_cerrar),
             web.get("/control/estado", self.control_estado),
+            web.delete("/control/energia", self.control_energia),
+            web.get("/control/vigilancia", self.control_vigilancia),
+            web.post("/control/vigilancia", self.control_vigilancia),
         ])
         return app
 
@@ -400,8 +532,12 @@ class Servicio:
         finally:
             os.umask(viejo)
         self._runners.append(c)
+        self._tareas.add(asyncio.ensure_future(self._vigilar()))
 
     async def parar(self):
+        for tarea in list(self._tareas):
+            tarea.cancel()
+        self.energia.cancelar(silencio=True)
         self._cerrar_ventana("cancelada")
         if self._usb is not None:
             await self._usb.cleanup()

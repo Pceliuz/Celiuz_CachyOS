@@ -25,6 +25,7 @@ ACCIONES = {
     "ventana_usb": "Se abrió el canal USB",
     "ventana_usb_cerrada": "Se cerró el canal USB sin terminar",
     "emparejado": "Se emparejó",
+    "sustituido": "Se sustituyó (el mismo celular se emparejó otra vez)",
     "entrar": "Entró",
     "entrar_mal": "Intento de entrada fallido",
     "salir": "Salió",
@@ -34,7 +35,44 @@ ACCIONES = {
     "revocado": "Se revocó",
     "desbloqueado": "Se desbloqueó",
     "permisos": "Cambiaron sus permisos",
+    "energia_pedida": "Pidió apagar / reiniciar / suspender",
+    "energia_cancelada": "Se canceló el apagado",
+    "energia_ejecutada": "Se ejecutó",
+    "energia_fallo": "No se pudo apagar",
+    "ventana_cerrada": "Cerró una app",
+    "latido_apagando": "Avisó de que lo estaban apagando",
+    "vigilancia_armada": "Se armó la vigilancia",
+    "vigilancia_desarmada": "Se desarmó la vigilancia",
+    "vigilancia_pase_quitado": "La vigilancia le quitó el pase (sin señal)",
+    "vigilancia_apaga": "La vigilancia apaga la PC",
+    "vigilancia_avisa": "La vigilancia avisó (había alguien delante)",
 }
+
+VIGILANCIA = {
+    "desarmada": "Desarmada: no se vigila nada.",
+    "sin_telefonos": "Armada, pero sin nadie a quien vigilar: hace falta un teléfono con pase "
+                     "que haya entrado alguna vez por Tailscale.",
+    "armada": "Armada: vigilando.",
+    "avisando": "Armada. Un teléfono calló más de 2 h y había alguien delante: se avisó y no se apagó.",
+    "apagando": "Armada. Todos callaron y no había nadie: apagando.",
+}
+
+PRESENCIA = {"presente": "Sí", "nadie": "No", "no_lo_se": "No lo sé (y entonces no se apaga)"}
+
+
+def senal_telefono(f):
+    """(texto, clase) de un telefono en la pagina de Vigilancia."""
+    if not f["pase"]:
+        return "no se vigila: sin pase", "tenue"
+    if not f["ip_tailscale"]:
+        return "no se vigila: aún no ha entrado por Tailscale", "atencion"
+    if f["en_linea"]:
+        return "en línea", "ok"
+    if f["callado_s"] is None:
+        return "sin oír aún", "tenue"
+    m = f["callado_s"] // 60
+    texto = f"sin señal {m // 60} h {m % 60:02d} min" if m >= 60 else f"sin señal {m} min"
+    return texto, "atencion" if f["callado_s"] < 3600 else "rojo"
 
 MOTIVOS = {"contrasena": "contraseña incorrecta", "bloqueado": "bloqueado por intentos"}
 
@@ -115,6 +153,12 @@ def linea_registro(linea, nombres, ahora):
         texto += f" · {nombres.get(disp) or linea.get('nombre') or disp[:8]}"
     if linea.get("motivo"):
         texto += f" ({MOTIVOS.get(linea['motivo'], linea['motivo'])})"
+    if accion in ("energia_pedida", "energia_cancelada", "energia_ejecutada") and linea.get("que"):
+        texto = texto.replace("apagar / reiniciar / suspender", linea["que"])
+        if accion == "energia_ejecutada":
+            texto += f": {linea['que']}"
+        if accion == "energia_cancelada":
+            texto += f" ({linea['que']}, desde {'la PC' if linea.get('por') == 'pc' else 'el celular'})"
     if accion == "ventana_usb" and linea.get("modo"):
         texto += f" para {linea['modo']}"
     if accion == "ventana_usb_cerrada" and linea.get("estado"):
