@@ -184,8 +184,8 @@ cd ~/dotfiles
 > siempre lo deja puesto pero sin sus dependencias. Antes de abrir la app,
 > `./instalar.sh --remoto-todo` instala **todo de una vez** —los paquetes,
 > Tailscale encendido y con sesión, y lo de apagar/entrar tras un reinicio— en
-> vez de ir descubriendo lo que falta de uno en uno. Detalle en
-> [`remoto/README.md`](remoto/README.md#para-empezar).
+> vez de ir descubriendo lo que falta de uno en uno. La guía entera, paso a
+> paso: [`remoto/INSTALAR.md`](remoto/INSTALAR.md).
 
 **Clónalo donde quieras.** `~/dotfiles`, `~/.dotfiles`, `~/repos/mis-configs`: da
 igual. Los `.conf` se referencian entre ellos por `$HOME/.config/hypr/...`, que

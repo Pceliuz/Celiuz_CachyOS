@@ -21,8 +21,9 @@ Lo que hace:
      comprobacion que no se puede saltar: no se fia de que el servicio la haya
      hecho antes.
   2. Mira que SDDM esta en la pantalla de inicio (hay una sesion `greeter`).
-  3. Escribe un autologin de un solo uso (DROPIN) y reinicia SDDM, que solo
-     lee el autologin al arrancar.
+  3. Escribe un autologin de un solo uso (DROPIN), con la sesion con la que
+     entraste la ultima vez (sesion_a_entrar), y reinicia SDDM, que solo lee
+     el autologin al arrancar.
   4. Espera a que aparezca la sesion del usuario y BORRA el autologin. Si no
      aparece, lo borra igual al rendirse. Por si este proceso muriera a medias,
      la unidad lo borra tambien al acabar (ExecStopPost) y tmpfiles al
@@ -49,6 +50,11 @@ import time
 # unidad de sistema.
 DROPIN = os.environ.get("CELIUZ_ENTRAR_DROPIN", "/etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf")
 ESPERA = float(os.environ.get("CELIUZ_ENTRAR_ESPERA", "90"))
+# Donde apunta SDDM con que sesion entraste la ultima vez (solo lo lee root), y
+# donde estan las sesiones que existen.
+ESTADO_SDDM = os.environ.get("CELIUZ_ENTRAR_ESTADO", "/var/lib/sddm/state.conf")
+SESIONES = os.environ.get("CELIUZ_ENTRAR_SESIONES",
+                          "/usr/share/wayland-sessions:/usr/share/xsessions").split(":")
 
 
 def decir(texto):
@@ -94,13 +100,50 @@ def borrar_dropin():
         pass
 
 
+def _existe_sesion(nombre):
+    return any(os.path.isfile(os.path.join(d, nombre)) for d in SESIONES)
+
+
+def sesion_a_entrar():
+    """La sesion con la que se entro la ULTIMA vez (state.conf de SDDM, [Last]
+    Session=, que puede ser la ruta entera o solo el nombre), si existe; si no,
+    la de Hyprland con uwsm, y si no, la de Hyprland. None: no se sabe.
+
+    Hace falta escribirla: dejar Session= vacio («SDDM usa la ultima») NO
+    funcionaba, porque el instalador de CachyOS deja `[Autologin]
+    Session=hyprland` en /etc/sddm.conf, que SDDM lee el ultimo y gana. Se
+    entraba en Hyprland SIN uwsm (lo vio la laptop del usuario, 2026-10-21), y
+    sin uwsm fallan los lanzadores (lanzar.sh usa `uwsm app`). instalar.sh
+    --remoto-sistema comenta esa linea, y esto pone la buena."""
+    try:
+        with open(ESTADO_SDDM, encoding="utf-8") as fh:
+            seccion = ""
+            for linea in fh:
+                linea = linea.strip()
+                if linea.startswith("["):
+                    seccion = linea
+                elif seccion == "[Last]" and linea.startswith("Session="):
+                    nombre = os.path.basename(linea[len("Session="):].strip())
+                    if nombre and not nombre.endswith(".desktop"):
+                        nombre += ".desktop"
+                    if nombre and _existe_sesion(nombre):
+                        return nombre
+    except OSError:
+        pass
+    for nombre in ("hyprland-uwsm.desktop", "hyprland.desktop"):
+        if _existe_sesion(nombre):
+            return nombre
+    return None
+
+
 def escribir_dropin(usuario):
-    # Sin Session=: SDDM usa la ultima con la que se entro (lo que quiere quien
-    # clone el repo con otra sesion). Relogin=false: si se sale, no vuelve a
-    # entrar solo.
+    # Session=: la de la ultima vez (sesion_a_entrar). Relogin=false: si se
+    # sale, no vuelve a entrar solo.
+    sesion = sesion_a_entrar()
     texto = ("# Celiuz Remoto: entrada de UN SOLO USO desde el celular.\n"
              "# La borra remoto/sistema/entrar.py al entrar; si la ves aqui, borrala.\n"
-             f"[Autologin]\nUser={usuario}\nRelogin=false\n")
+             f"[Autologin]\nUser={usuario}\nRelogin=false\n"
+             + (f"Session={sesion}\n" if sesion else ""))
     tmp = DROPIN + ".nuevo"
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(texto)

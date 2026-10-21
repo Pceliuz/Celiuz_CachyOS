@@ -165,6 +165,21 @@ def abrir_app(serie, modo, codigo, puerto):
                        + salida.strip().splitlines()[-1])
 
 
+OTRA_FIRMA = ("La app de este celular la instaló OTRO equipo, firmada con otra clave, y "
+              "Android no deja actualizarla desde aquí. No hace falta: emparejar funciona con "
+              "la que ya tiene. Para actualizarla, hazlo desde el equipo que la instaló, o usa "
+              "en todos tus equipos la misma clave (~/.config/celiuz/remoto/firma.keystore y "
+              "firma.clave, copiadas ANTES de compilar: remoto/INSTALAR.md).")
+
+
 def instalar(serie, apk):
-    """-r: actualiza conservando los datos (la clave del celular vive ahi)."""
-    _ok(_adb("install", "-r", apk, serie=serie, timeout=180), "no pude instalar la app")
+    """-r: actualiza conservando los datos (la clave del celular vive ahi).
+
+    Si el celular ya la tiene de OTRO equipo, cada uno firma con su clave
+    (compilar.sh la crea la primera vez) y Android lo rechaza con
+    INSTALL_FAILED_UPDATE_INCOMPATIBLE: se dice que es eso y que hacer, no la
+    linea de adb. Pasa al usar el mismo celular con la PC y con la laptop."""
+    r = _adb("install", "-r", apk, serie=serie, timeout=180)
+    if r.returncode != 0 and "INSTALL_FAILED_UPDATE_INCOMPATIBLE" in (r.stdout or "") + (r.stderr or ""):
+        raise ErrorAdb(OTRA_FIRMA)
+    _ok(r, "no pude instalar la app")

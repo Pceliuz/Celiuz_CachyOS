@@ -55,7 +55,12 @@ echo sddm.service > "$TMP/gestor"
 
 export CELIUZ_ENTRAR_DROPIN="$TMP/sddm.conf.d/zz-celiuz-remoto-entrar.conf"
 export CELIUZ_ENTRAR_ESPERA=3
-mkdir -p "$TMP/sddm.conf.d"
+export CELIUZ_ENTRAR_ESTADO="$TMP/sddm-state.conf"
+export CELIUZ_ENTRAR_SESIONES="$TMP/wayland-sessions:$TMP/xsessions"
+mkdir -p "$TMP/sddm.conf.d" "$TMP/wayland-sessions" "$TMP/xsessions"
+: > "$TMP/wayland-sessions/hyprland.desktop"
+: > "$TMP/wayland-sessions/hyprland-uwsm.desktop"
+: > "$TMP/xsessions/plasmax11.desktop"
 entrar() { rm -f "$TMP/reiniciado" "$TMP/dropin-al-reiniciar" "$REGISTRO/systemctl.log"
            "$ENTRAR" "$@" 2>"$TMP/entrar.err"; echo $?; }
 reinicio() { grep -c '^restart display-manager' "$REGISTRO/systemctl.log" 2>/dev/null || echo 0; }
@@ -94,9 +99,18 @@ else
     afirmar "  con el autologin de ESTE usuario puesto en ese momento" \
         grep -qx "User=$YO" "$TMP/dropin-al-reiniciar"
     afirmar "  que no vuelve a entrar solo al salir" grep -qx "Relogin=false" "$TMP/dropin-al-reiniciar"
-    afirmar "  sin Session= (SDDM usa la ultima)" sh -c "! grep -q '^Session=' '$TMP/dropin-al-reiniciar'"
+    afirmar "  sin saber la ultima: la de Hyprland CON uwsm (sin ella fallan los lanzadores)" \
+        grep -qx "Session=hyprland-uwsm.desktop" "$TMP/dropin-al-reiniciar"
     afirmar "  y al entrar lo BORRA" test ! -e "$CELIUZ_ENTRAR_DROPIN"
-    rm -f "$TMP/entra"
+    printf '[Last]\nSession=/usr/share/xsessions/plasmax11.desktop\nUser=%s\n' "$YO" > "$CELIUZ_ENTRAR_ESTADO"
+    igual "otra vez, con SDDM recordando otra sesion" "0" "$(entrar "$YO")"
+    afirmar "  entra en la que usaste la ultima vez (de state.conf, aunque traiga la ruta)" \
+        grep -qx "Session=plasmax11.desktop" "$TMP/dropin-al-reiniciar"
+    printf '[Last]\nSession=borrada.desktop\n' > "$CELIUZ_ENTRAR_ESTADO"
+    entrar "$YO" >/dev/null
+    afirmar "  una ultima que ya no existe no vale: la de uwsm" \
+        grep -qx "Session=hyprland-uwsm.desktop" "$TMP/dropin-al-reiniciar"
+    rm -f "$TMP/entra" "$CELIUZ_ENTRAR_ESTADO"
     igual "si la sesion no aparece: se rinde (6)" "6" "$(entrar "$YO")"
     afirmar "  y lo borra igual" test ! -e "$CELIUZ_ENTRAR_DROPIN"
 fi
@@ -111,6 +125,42 @@ afirmar "la unidad ejecuta la COPIA de root, no el repo" \
     grep -qx 'ExecStart=/usr/local/lib/celiuz-remoto/entrar %i' "$UNIDAD"
 afirmar "con freno (no reinicia SDDM en bucle)" grep -q '^StartLimitBurst=' "$UNIDAD"
 afirmar "entrar.py arranca aislado (python -I)" sh -c "head -1 '$ENTRAR' | grep -q -- ' -I$'"
+
+titulo "2b. /etc/sddm.conf: el Session= que pisaba la sesion (sddm_conf.py)"
+CONF="$REPO/remoto/sistema/sddm_conf.py"
+printf '[Autologin]\nSession=hyprland\n\n[Theme]\nCurrent=celiuz\n' > "$TMP/sddm.conf"
+nuevo="$(python3 "$CONF" "$TMP/sddm.conf")"; codigo=$?
+igual "el de CachyOS (Session= sin User=): hay que tocarlo (0)" "0" "$codigo"
+afirmar "  la linea queda COMENTADA, no borrada" grep -qx "# Session=hyprland" <<< "$nuevo"
+afirmar "  con quien y por que" grep -q "Celiuz Remoto la comento" <<< "$nuevo"
+afirmar "  y lo demas, intacto" grep -qx "Current=celiuz" <<< "$nuevo"
+printf '%s\n' "$nuevo" > "$TMP/sddm.conf"
+python3 "$CONF" "$TMP/sddm.conf" >/dev/null; codigo=$?
+igual "ya comentado: nada que hacer (1)" "1" "$codigo"
+printf '[Autologin]\nUser=alguien\nSession=plasma\n' > "$TMP/sddm.conf"
+salida="$(python3 "$CONF" "$TMP/sddm.conf")"; codigo=$?
+igual "con un autologin DE VERDAD (User=): no se toca (2)" "2|" "$codigo|$salida"
+python3 "$CONF" "$TMP/no-existe.conf" >/dev/null; codigo=$?
+igual "sin /etc/sddm.conf: nada que hacer (1)" "1" "$codigo"
+printf '[Theme]\nSession=otra\n' > "$TMP/sddm.conf"
+python3 "$CONF" "$TMP/sddm.conf" >/dev/null; codigo=$?
+igual "un Session= fuera de [Autologin] no es asunto suyo (1)" "1" "$codigo"
+
+titulo "2c. revisar: lo de root, al dia o no"
+R="$TMP/raiz-revisar"
+estado_sistema() { CELIUZ_REMOTO_RAIZ_SISTEMA="$R" python3 -c '
+import sys; sys.path.insert(0, sys.argv[1])
+from celiuz_remoto import inicio; print(inicio.sistema_estado())' "$REPO/remoto/servidor"; }
+mkdir -p "$R/etc/systemd/system" "$R/usr/local/lib/celiuz-remoto"
+igual "sin pasar --remoto-sistema: falta" "falta" "$(estado_sistema)"
+: > "$R/etc/systemd/system/celiuz-remoto-entrar@.service"
+printf '#!/usr/bin/python3\n# la de antes\n' > "$R/usr/local/lib/celiuz-remoto/entrar"; chmod +x "$R/usr/local/lib/celiuz-remoto/entrar"
+igual "con la copia de root distinta de la del repo (un git pull con arreglo): vieja" "vieja" "$(estado_sistema)"
+cp "$REPO/remoto/sistema/entrar.py" "$R/usr/local/lib/celiuz-remoto/entrar"
+printf '[Autologin]\nSession=hyprland\n' > "$R/etc/sddm.conf"
+igual "al dia, pero /etc/sddm.conf pisa la sesion: sddm_conf" "sddm_conf" "$(estado_sistema)"
+python3 "$REPO/remoto/sistema/sddm_conf.py" "$R/etc/sddm.conf" > "$R/nuevo" && mv "$R/nuevo" "$R/etc/sddm.conf"
+igual "y arreglado eso: ok" "ok" "$(estado_sistema)"
 
 titulo "3. La regla de polkit: lo justo"
 if ! command -v node >/dev/null 2>&1; then

@@ -114,7 +114,13 @@ apagado** (se activa a mano desde la PC), **escucha solo por Tailscale**, y
 **lo que escucha por la red nunca corre como root**; lo poco que necesita root
 (`remoto/sistema/`) se COPIA a `/usr/local` con `./instalar.sh
 --remoto-sistema`, nunca se ejecuta desde el repo (cualquier programa tuyo
-podría editarlo). La app se compila en la PC (nunca en la nube de Expo) y su
+podría editarlo).
+
+**Para instalarlo en un equipo (el tuyo o el de un amigo): `remoto/INSTALAR.md`**,
+paso a paso y con cómo comprobar cada uno. Si te piden «sigue con la
+instalación del remoto», pasa `./instalar.sh --revisar` y `celiuz-remoto
+revisar` y continúa desde el primer paso que no esté bien; no rehagas lo que ya
+lo está. La app se compila en la PC (nunca en la nube de Expo) y su
 `node_modules` no se versiona.
 
 ---

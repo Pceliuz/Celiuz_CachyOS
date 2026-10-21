@@ -926,6 +926,13 @@ sddm_estado() {
     titulo "8. Pantalla de inicio de sesion"
     if [ -f "$SDDM_TEMA/Main.qml" ]; then
         verde "  el tema celiuz esta puesto"
+        # Lo que se ve al arrancar es una COPIA: un git pull con colores o QML
+        # nuevos no llega solo (lo vio la laptop, 2026-10-21).
+        local f vieja=""
+        for f in Main.qml FondoVideo.qml Colores.qml theme.conf metadata.desktop; do
+            cmp -s "$REPO/sddm/celiuz/$f" "$SDDM_TEMA/$f" || vieja="$vieja $f"
+        done
+        [ -z "$vieja" ] || aviso "el tema instalado es una copia VIEJA (${vieja# }): ./instalar.sh --sddm"
         if [ -d "$SDDM_COMPARTIDA" ]; then
             gris "    el fondo se rehace solo al cambiar de fondo"
         else
@@ -1031,6 +1038,25 @@ RS_PROGRAMA="$RS_RAIZ/usr/local/lib/celiuz-remoto/entrar"
 RS_UNIDAD="$RS_RAIZ/etc/systemd/system/celiuz-remoto-entrar@.service"
 RS_TMPFILES="$RS_RAIZ/etc/tmpfiles.d/celiuz-remoto.conf"
 RS_POLKIT="$RS_RAIZ/etc/polkit-1/rules.d/50-celiuz-remoto.rules"
+RS_SDDM_CONF="$RS_RAIZ/etc/sddm.conf"
+
+# El [Autologin] Session= que deja el instalador de CachyOS en /etc/sddm.conf
+# pisa la sesion de entrar desde el celular (se entraba SIN uwsm). Lo decide
+# remoto/sistema/sddm_conf.py; aqui solo se guarda copia y se pone con sudo.
+remoto_sddm_conf() {
+    local nuevo codigo
+    nuevo="$(mktemp)"
+    python3 "$REPO/remoto/sistema/sddm_conf.py" "$RS_SDDM_CONF" > "$nuevo"; codigo=$?
+    case "$codigo" in
+        0)
+            echo "  $RS_SDDM_CONF: se comenta el Session= de [Autologin] (entraria sin uwsm)"
+            raiz cp -n "$RS_SDDM_CONF" "$RS_SDDM_CONF.antes-celiuz-remoto"
+            raiz install -m 644 -o root -g root "$nuevo" "$RS_SDDM_CONF"
+            gris "    la copia de antes: $RS_SDDM_CONF.antes-celiuz-remoto" ;;
+        2)  aviso "$RS_SDDM_CONF tiene un autologin tuyo en [Autologin]: no lo toco; al entrar desde el celular mandara SU Session=" ;;
+    esac
+    rm -f "$nuevo"
+}
 
 remoto_sistema_instalar() {
     titulo "Celiuz Remoto tras reiniciar (apagar y entrar desde la pantalla de inicio)"
@@ -1058,6 +1084,7 @@ remoto_sistema_instalar() {
     raiz install -D -m 644 -o root -g root "$regla" "$RS_POLKIT"
     rm -f "$regla"
     raiz systemctl daemon-reload
+    remoto_sddm_conf
     hecho "  puesto: polkit para $USER, la unidad celiuz-remoto-entrar@$USER y su programa"
     gris "    se quita con: ./instalar.sh --remoto-sistema-quitar"
     gris "    para que arranque sin entrar: enciende el servicio desde la ventana (linger)"
@@ -1083,6 +1110,8 @@ remoto_sistema_estado() {
        ! cmp -s "$REPO/remoto/sistema/celiuz-remoto-entrar@.service" "$RS_UNIDAD" || \
        ! cmp -s "$REPO/remoto/sistema/celiuz-remoto.tmpfiles" "$RS_TMPFILES"; then
         aviso "la parte de root de Celiuz Remoto está vieja: ./instalar.sh --remoto-sistema"
+    elif python3 "$REPO/remoto/sistema/sddm_conf.py" "$RS_SDDM_CONF" >/dev/null 2>&1; then
+        aviso "$RS_SDDM_CONF fija la sesion sin uwsm para el autologin: ./instalar.sh --remoto-sistema"
     else
         gris "    tras reiniciar: apagar y entrar desde SDDM, puesto"
     fi

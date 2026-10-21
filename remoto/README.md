@@ -8,33 +8,18 @@
 
 ## Para empezar
 
-> **Al clonar el repo en un equipo nuevo, antes de abrir la app**: no vayas
-> instalando lo que falta de uno en uno. Desde la carpeta del repo, una sola vez:
->
-> ```sh
-> ./instalar.sh                # lo de siempre (deja la app y su servicio, apagado)
-> ./instalar.sh --remoto-todo  # TODO lo del remoto de una vez (pide sudo)
-> ```
->
-> `--remoto-todo` instala todos los paquetes (`celiuz-remoto.py paquetes`: los
-> del servidor, los opcionales —miniaturas, ver la pantalla— y Java 17 y node
-> para compilar la app), enciende Tailscale y te pide iniciar sesión en él si
-> aún no lo hiciste (sale un enlace para el navegador), y deja lo de apagar y
-> entrar tras un reinicio (lo mismo que `--remoto-sistema`). Se puede repetir:
-> no reinstala lo que ya está. Lo único que no pone es el **SDK de Android**,
-> que no viene en los repos (Android Studio, en `~/Android/Sdk`).
->
-> Si algo falta igual, la ventana de Celiuz Remoto lo dice arriba, con ese
-> mismo comando; y `celiuz-remoto revisar` lo dice en la terminal.
+**La guía de instalación, paso a paso y con cómo comprobar cada paso, está en
+[`INSTALAR.md`](INSTALAR.md).** Lo corto, en un equipo con el repo ya clonado:
 
-1. `remoto/app/compilar.sh` (una vez; pide Java 17 y el SDK de Android).
-2. Abre «Celiuz Remoto» en la PC, enciende el servicio, conecta el celular por
-   cable (con la «Depuración USB») e instala la app desde ahí.
-3. Crea la contraseña, elige qué puede hacer y pulsa «Emparejar».
-4. En el celular, instala Tailscale y entra con **la misma cuenta** que la PC.
-5. Para ver la pantalla desde el celular, da el permiso «Ver y manejar la
-   pantalla» a ese celular (Permisos, en la ventana). Lo de quitar la parte de
-   tras reiniciar: `./instalar.sh --remoto-sistema-quitar`.
+```sh
+./instalar.sh                 # lo de siempre (deja la app y su servicio, apagado)
+./instalar.sh --remoto-todo   # paquetes, Tailscale y lo de tras reiniciar (pide sudo)
+remoto/app/compilar.sh        # la app del celular (hace falta el SDK de Android)
+celiuz-remoto revisar         # ¿qué falta todavía?
+```
+
+Y después, la ventana «Celiuz Remoto»: encender el servicio, conectar el
+celular por cable, instalar la app y emparejar.
 
 Una app Android para manejar tu PC o tu laptop desde cualquier sitio: ver su
 estado en tiempo real, apagarla, ver y cerrar sus apps, sacar archivos y abrir

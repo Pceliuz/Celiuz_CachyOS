@@ -31,7 +31,7 @@ import pwd
 import subprocess
 import time
 
-from . import escritorio, rutas
+from . import REPO, escritorio, rutas
 
 UNIDAD = "celiuz-remoto-entrar@{}.service"
 MARCA_VALE = 180     # segundos: una marca mas vieja no bloquea (la entrada fallo)
@@ -54,6 +54,38 @@ def sistema_instalado():
     r = _raiz()
     return (os.path.isfile(os.path.join(r, "etc/systemd/system/celiuz-remoto-entrar@.service"))
             and os.access(os.path.join(r, "usr/local/lib/celiuz-remoto/entrar"), os.X_OK))
+
+
+def sistema_estado():
+    """Como esta lo de root, con lo que hay que hacer:
+      «falta»      nunca se paso `./instalar.sh --remoto-sistema`;
+      «vieja»      la copia de entrar.py no es la del repo (se trajo un arreglo
+                   con git pull y no se volvio a pasar);
+      «sddm_conf»  /etc/sddm.conf fija para el autologin la sesion SIN uwsm
+                   (remoto/sistema/sddm_conf.py: lo vio la laptop, 2026-10-21);
+      «ok».
+    Los tres primeros se arreglan con lo mismo: ./instalar.sh --remoto-sistema."""
+    if not sistema_instalado():
+        return "falta"
+    import filecmp
+    try:
+        if not filecmp.cmp(os.path.join(REPO, "remoto", "sistema", "entrar.py"),
+                           os.path.join(_raiz(), "usr/local/lib/celiuz-remoto/entrar"), shallow=False):
+            return "vieja"
+    except OSError:
+        return "vieja"
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "sddm_conf", os.path.join(REPO, "remoto", "sistema", "sddm_conf.py"))
+    sddm_conf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sddm_conf)
+    try:
+        with open(os.path.join(_raiz(), "etc/sddm.conf"), encoding="utf-8") as fh:
+            if sddm_conf.arreglar(fh.read())[0] == 0:
+                return "sddm_conf"
+    except OSError:
+        pass
+    return "ok"
 
 
 def linger():

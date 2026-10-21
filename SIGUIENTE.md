@@ -10,6 +10,33 @@ terminal de Celiuz Remoto (la PC en SDDM, el usuario en el trabajo).
 
 ---
 
+## 2026-10-21 (tarde-noche, PC): la guía de instalación del remoto, y SDDM sin uwsm
+
+El usuario estaba instalando Celiuz Remoto con un amigo, en su laptop y la del
+amigo, sin instrucciones. Hecho (sin commitear al escribir esto):
+- **`remoto/INSTALAR.md`**: la guía entera, 11 pasos con cómo comprobar cada
+  uno, las tres decisiones de antes (cuenta de Tailscale por persona, si el
+  celular ya tiene la app, la misma clave de firma en varios equipos) y una
+  tabla de problemas. CLAUDE.md y los README apuntan ahí.
+- **SDDM entraba SIN uwsm al «Entrar» desde el celular** (lo encontró el Claude
+  de la laptop; la PC tenía lo mismo): `/etc/sddm.conf` trae `[Autologin]
+  Session=hyprland` del instalador de CachyOS y SDDM lo lee el último. Ahora
+  `entrar.py` escribe `Session=` con la de la última vez (state.conf de SDDM;
+  si no, `hyprland-uwsm.desktop`), y `--remoto-sistema` comenta esa línea
+  (`remoto/sistema/sddm_conf.py`, con copia; no toca un autologin con
+  `User=`). `celiuz-remoto revisar` dice si lo de root está «falta», «vieja»
+  (un pull con arreglo) o si sddm.conf aún estorba.
+- **El tema de SDDM viejo** ya lo avisa `./instalar.sh --revisar` (comparando
+  la copia con el repo). La PC también lo tenía viejo (Colores.qml).
+- **Firma del APK**: «Actualizar» desde un equipo con otra clave ya dice qué
+  pasa (`adb.OTRA_FIRMA`) en vez de la línea de adb.
+- **En cada equipo, tras traer esto**: `git pull && ./instalar.sh`, luego
+  `./instalar.sh --remoto-sistema` (o `--remoto-todo`) y `./instalar.sh
+  --sddm`; y seguir `remoto/INSTALAR.md` desde lo que diga `celiuz-remoto
+  revisar`. En la laptop del usuario, su Claude ya había puesto
+  `Session=hyprland-uwsm` a mano en /etc/sddm.conf: `--remoto-sistema` lo
+  comenta igual (entrar.py ya escribe la buena).
+
 ## 2026-10-21 (tarde, desde la laptop): el saludo de la terminal
 
 Lo pidió el usuario con capturas de la laptop. Hecho y con pruebas, **sin

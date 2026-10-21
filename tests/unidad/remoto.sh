@@ -174,6 +174,26 @@ reloj[0] += estado.Nvml.REINTENTO
 comprobar("NVML: se reintenta y, cuando la tarjeta ya esta, mide",
           n.medir("0000:01:00.0") == {"uso": 37, "temp": 51, "vram": [1.0, 6.0]})
 
+# --- adb install con la app firmada por OTRO equipo: se dice que es eso
+import subprocess
+from celiuz_remoto import adb
+_adb_real = adb._adb
+adb._adb = lambda *a, **k: subprocess.CompletedProcess(a, 1, "Performing Streamed Install\n",
+    "adb: failed to install x.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package "
+    "com.celiuz.remoto signatures do not match newer version; ignoring!]\n")
+try:
+    adb.instalar("SERIE", "x.apk")
+    comprobar("adb: la app de otro equipo (otra firma) da error", False)
+except adb.ErrorAdb as e:
+    comprobar("adb: la app firmada por otro equipo dice que es eso y que emparejar vale igual",
+              "OTRO equipo" in str(e) and "emparejar funciona" in str(e))
+adb._adb = lambda *a, **k: subprocess.CompletedProcess(a, 1, "", "adb: device offline\n")
+try:
+    adb.instalar("SERIE", "x.apk")
+except adb.ErrorAdb as e:
+    comprobar("adb: cualquier otro fallo sale tal cual", "device offline" in str(e) and "OTRO" not in str(e))
+adb._adb = _adb_real
+
 # --- terminales sueltas: se cierran solas pasada SUELTA_DURA sin nadie mirando
 ts = term.Terminales()
 ts.abiertas = {"mirada": SimpleNamespace(ws=object(), suelta_desde=None),

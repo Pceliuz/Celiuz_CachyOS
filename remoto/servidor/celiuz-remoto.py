@@ -111,7 +111,9 @@ def arranque():
     """Lo de la fase 5, que no son paquetes: ¿arranca con el equipo? ¿se puede
     entrar desde la pantalla de inicio? (remoto/DISEÑO.md, «Tras reiniciar»)."""
     from celiuz_remoto import despertar, inicio
-    return {"linger": inicio.linger(), "sistema": inicio.sistema_instalado(), "despertar": despertar.info()}
+    estado = inicio.sistema_estado()
+    return {"linger": inicio.linger(), "sistema": estado == "ok", "sistema_estado": estado,
+            "despertar": despertar.info()}
 
 
 def cmd_revisar(args):
@@ -142,8 +144,12 @@ def cmd_revisar(args):
         print("\n  Tras reiniciar:")
         print("    arranca con el equipo       " + (
             "sí (linger)" if tras["linger"] else "no: se enciende con el servicio, desde la ventana"))
-        print("    entrar desde SDDM           " + (
-            "sí" if tras["sistema"] else "no: ./instalar.sh --remoto-sistema (pide sudo)"))
+        print("    entrar desde SDDM           " + {
+            "ok": "sí",
+            "falta": "no: ./instalar.sh --remoto-sistema (pide sudo)",
+            "vieja": "la copia de root es VIEJA (trajiste un arreglo): ./instalar.sh --remoto-sistema",
+            "sddm_conf": "no: /etc/sddm.conf entraría SIN uwsm: ./instalar.sh --remoto-sistema",
+        }[tras["sistema_estado"]])
         w = tras["despertar"]
         print("    despertarlo desde otro      " + {"si": "sí", "no": "no", "no_lo_se": "no lo sé"}[w["wol"]]
               + f" — {w['motivo']}")
