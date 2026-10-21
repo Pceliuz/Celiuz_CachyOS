@@ -14,7 +14,9 @@ import {
   CIERRE_SIN_SESION,
   type EstadoEnergia,
   type Busqueda,
+  type Conversion,
   type Favorito,
+  type FichaVideo,
   type Listado,
   type Reciente,
   type Ventana,
@@ -254,6 +256,30 @@ export class Conexion {
       `${this.base}/v0/favoritos?ruta=${encodeURIComponent(ruta)}`, undefined, this.sesion.token)).favoritos;
   }
 
+  // --- vídeos que el celular no puede reproducir (conversion.py) ---
+
+  async fichaVideo(ruta: string): Promise<FichaVideo> {
+    return pedir<FichaVideo>(this.h, 'GET', `${this.base}/v0/archivos/video?ruta=${encodeURIComponent(ruta)}`,
+      undefined, this.sesion.token, 20000);
+  }
+
+  // Empieza (o retoma, si ya estaba) la conversión al lado corto y los fps dados.
+  async convertir(ruta: string, lado: number, fps: number): Promise<Conversion> {
+    return pedir<Conversion>(this.h, 'POST', `${this.base}/v0/archivos/convertir`,
+      { ruta, lado, fps }, this.sesion.token, 20000);
+  }
+
+  // Cómo va. Preguntar es lo que la mantiene viva: sin preguntas, la PC la para.
+  async conversion(id: string): Promise<Conversion> {
+    return pedir<Conversion>(this.h, 'GET', `${this.base}/v0/archivos/convertir/${encodeURIComponent(id)}`,
+      undefined, this.sesion.token);
+  }
+
+  async cancelarConversion(id: string): Promise<void> {
+    await pedir(this.h, 'DELETE', `${this.base}/v0/archivos/convertir/${encodeURIComponent(id)}`,
+      undefined, this.sesion.token);
+  }
+
   // --- terminal (fase 7): pase, permiso de terminal y la contraseña OTRA VEZ ---
 
   // Devuelve el billete (vale 30 s y una sola vez) para abrir la terminal.
@@ -309,8 +335,10 @@ export class Conexion {
   }
 
   // Lo que bajan otros (el gestor de descargas, <Image>): la URL y la cabecera.
-  urlDescarga(ruta: string): string {
-    return `${this.base}/v0/archivos/descargar?ruta=${encodeURIComponent(ruta)}`;
+  // Con `conversion`, lo convertido para el celular en vez del original.
+  urlDescarga(ruta: string, conversion?: string): string {
+    return `${this.base}/v0/archivos/descargar?ruta=${encodeURIComponent(ruta)}`
+      + (conversion ? `&conversion=${encodeURIComponent(conversion)}` : '');
   }
 
   // Subir (fase 8): el cuerpo es el archivo tal cual; la PC lo deja en

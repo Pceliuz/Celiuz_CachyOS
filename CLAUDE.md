@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (58 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (59 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -1305,6 +1305,15 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   explorador y el vídeo no se reproducía (el usuario, 2026-10-20). Lo que ven
   todas las apps es MediaStore (`Pictures/`, `Movies/`, `Download/`...); desde
   Android 10 no pide permiso. Lo hace `remoto/app/modules/celiuz-nativo`.
+- **Un vídeo que sale en la galería y no se reproduce NO está roto: es el
+  decodificador.** La galería saca la portada sin decodificar el vídeo
+  entero. Medido el 2026-10-21 con los fondos de moewalls en el HONOR: 1080p
+  30 bien, 4K 60 H.264 y 4K 30 HEVC en negro, con el md5 igual al de la PC.
+  `media_codecs.xml` del Redmi: H.264 hasta `performance-point-3840x2160 =
+  30`. Por eso la app pregunta al decodificador (`puedeVideo`, por HARDWARE:
+  el de software dice aguantar 1080p y no llega) y la PC convierte
+  (`remoto/servidor/celiuz_remoto/conversion.py`). Con libx264 y no NVENC: lo
+  lento es decodificar el 4K, no codificar (7,7 s contra 6,8 s).
 - **Gboard dentro de un WebView repite lo que compone**: xterm.js recibía
   «echo hola» como «echchho hholla». Lo tecleado va por un `TextInput` nativo
   invisible con `keyboardType="visible-password"` (sin composición ni
@@ -1326,6 +1335,19 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   con `adb shell input tap/text` y `adb exec-out screencap`. Ojo: lo que sale
   en pantalla son cosas del usuario (notificaciones); no se leen ni se
   copian, y nunca se elige «Siempre» en un selector de apps.
+- **En la pantalla de inicio el USB NO es tuyo.** El permiso para abrir un
+  aparato USB (un celular por adb) lo da logind con una ACL al usuario de la
+  sesión ACTIVA (`getfacl /dev/bus/usb/...` → `user:celiuz`); en SDDM pasa al
+  usuario `sddm`, y un servicio tuyo con linger recibe «no permissions». Hace
+  falta una regla de udev que no dependa de la sesión: el paquete
+  `android-udev` y el grupo `adbusers`. Lo dice `celiuz-remoto anclaje`.
+- **Un Android apaga el anclaje USB cuando la PC reinicia** (cree que lo
+  desenchufaron), y la pantalla de inicio se queda sin internet. Con la
+  depuración USB autorizada, `adb shell svc usb setFunctions rndis` lo vuelve a
+  poner (medido en un Redmi, Android 13: 3 s); `getprop sys.usb.config` lo lee
+  sin la traza de Java que MIUI escupe en cada `svc`. Lo hace
+  `remoto/servidor/celiuz_remoto/anclaje.py`, solo a celulares que ya dieron
+  internet a esta PC y solo sin otra ruta por defecto.
 - **`afirmar_contiene` usa `grep -E`**: un base64 (con `+`) o cualquier texto
   con metacaracteres no casa consigo mismo. Para buscar algo literal,
   `afirmar "..." grep -qF -- "$texto" fichero`.

@@ -78,7 +78,14 @@ export default function Recientes({ conexion, alVolver, alAbrirCarpeta, alVerPas
   function boton(r: Reciente) {
     const copia = descargas.tieneCopia(r.ruta);
     const p = descargas.progreso[r.ruta];
-    if (p !== undefined) return <View style={{ flex: 1 }}><Barra valor={p < 0 ? 0.5 : p} /></View>;
+    if (p !== undefined) {
+      return (
+        <View style={{ flex: 1, gap: 4 }}>
+          <Barra valor={p < 0 ? 0.5 : p} />
+          {descargas.fase[r.ruta] ? <Texto tipo="chico" lineas={1}>{descargas.fase[r.ruta]}</Texto> : null}
+        </View>
+      );
+    }
     if (r.estado === 'nueva_version') return <Boton texto="Bajar otra vez" alto={44} alPulsar={() => bajar(r.ruta)} />;
     if (copia) return <Boton texto={r.estado === 'no_esta' ? 'Abrir copia' : 'Abrir'} tipo="borde" alto={44}
                              alPulsar={() => descargas.abrirCopia(r.ruta)} />;

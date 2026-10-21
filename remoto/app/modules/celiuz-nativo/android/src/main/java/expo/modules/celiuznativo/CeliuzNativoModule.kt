@@ -20,6 +20,8 @@ package expo.modules.celiuznativo
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
@@ -85,6 +87,27 @@ class CeliuzNativoModule : Module() {
 
     Function("existe") { uri: String -> existe(uri) }
 
+    // ¿Hay un decodificador DE VERDAD (por hardware) que aguante este vídeo a
+    // esta velocidad? Lo pregunta la app antes de bajar un vídeo: si no, pide
+    // a la PC una versión que sí (remoto/servidor/celiuz_remoto/conversion.py).
+    // POR QUE por hardware: el de software (c2.android.*) dice aguantar hasta
+    // 1080p y luego no llega en tiempo real; un 4K 60 en el HONOR salía negro.
+    // Y los «performance points» antes que areSizeAndRateSupported: son lo que
+    // el fabricante MIDIÓ (en el Redmi, 4K a 30 para H.264), mientras que el
+    // otro solo mira límites de tamaño y de bloques.
+    Function("puedeVideo") { mime: String, ancho: Int, alto: Int, fps: Double ->
+      MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+        !info.isEncoder && porHardware(info) && info.supportedTypes.any { it.equals(mime, true) } &&
+          aguanta(info.getCapabilitiesForType(mime), ancho, alto, fps)
+      }
+    }
+
+    Function("puedeAudio") { mime: String ->
+      MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+        !info.isEncoder && info.supportedTypes.any { it.equals(mime, true) }
+      }
+    }
+
     // Con la app que tenga el celular para ese tipo (la predeterminada, o el
     // selector de Android si hay varias). false si no hay NINGUNA: la app de
     // Celiuz Remoto ofrece entonces su visor o Compartir.
@@ -137,6 +160,28 @@ class CeliuzNativoModule : Module() {
         String(buf, 0, n, Charsets.UTF_8)
       }
     }
+  }
+
+  private fun porHardware(info: MediaCodecInfo): Boolean =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) info.isHardwareAccelerated
+    else !info.name.startsWith("OMX.google.") && !info.name.startsWith("c2.android.")
+
+  // En las dos orientaciones: un vídeo vertical es 1080x1920 y hay
+  // decodificadores que solo declaran el apaisado.
+  private fun aguanta(caps: MediaCodecInfo.CodecCapabilities, ancho: Int, alto: Int, fps: Double): Boolean {
+    val v = caps.videoCapabilities ?: return false
+    for ((w, h) in listOf(ancho to alto, alto to ancho)) {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val puntos = v.supportedPerformancePoints
+        if (!puntos.isNullOrEmpty()) {
+          val pedido = MediaCodecInfo.VideoCapabilities.PerformancePoint(w, h, Math.ceil(fps).toInt())
+          if (puntos.any { it.covers(pedido) }) return true
+          continue
+        }
+      }
+      if (v.isSizeSupported(w, h) && v.areSizeAndRateSupported(w, h, fps)) return true
+    }
+    return false
   }
 
   private fun abrirEntrada(origen: String): InputStream {

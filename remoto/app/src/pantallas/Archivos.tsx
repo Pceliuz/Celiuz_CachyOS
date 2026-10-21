@@ -246,6 +246,7 @@ export default function Archivos({ conexion, inicial = '', alCambiar, alVerPase,
                   {item.tipo === 'archivo' && descargas.tieneCopia(item.ruta) ? ' · en el celular' : ''}
                 </Texto>
                 {p !== undefined ? <Barra valor={p < 0 ? 0.5 : p} /> : null}
+                {descargas.fase[item.ruta] ? <Texto tipo="chico" lineas={1}>{descargas.fase[item.ruta]}</Texto> : null}
               </View>
             </Pressable>
           );

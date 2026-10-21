@@ -100,6 +100,12 @@ titulo "4. Archivos (fase 6), con el código de la app"
 mkdir -p "$HOME/Documentos" "$HOME/.ssh"
 printf 'hola mundo\n' > "$HOME/Documentos/nota.txt"
 printf 'PRIVADA' > "$HOME/.ssh/id_ed25519"
+# Un vídeo para la ficha y la conversión (sin ffmpeg, esas comprobaciones no salen)
+if command -v ffmpeg >/dev/null 2>&1; then
+    mkdir -p "$HOME/Videos"
+    ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=s=640x360:r=60:d=1 -f lavfi -i sine=d=1 \
+        -c:v libx264 -c:a aac -shortest "$HOME/Videos/fondo.mp4"
+fi
 DISP_APP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["equipo"]["dispositivo"])' "$TMP/equipo.json")"
 "$CLI" permisos "$DISP_APP" +archivos > /dev/null
 "$CLI" renovar --sin-adb > "$TMP/ren2.out" 2>/dev/null &

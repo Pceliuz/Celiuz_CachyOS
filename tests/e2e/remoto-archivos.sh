@@ -223,6 +223,71 @@ else
         "$(http_de "$(pedir GET "$B/v0/archivos/miniatura?ruta=.ssh/id_ed25519" "$TOKEN")")"
 fi
 
+titulo "8b. Vídeos que el celular no reproduce: la ficha y la conversión"
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+    _gris "  (se salta: sin ffmpeg no hay conversiones)"
+else
+    mkdir -p "$HOME/Videos"
+    ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=s=1280x720:r=60:d=2 -f lavfi -i sine=d=2 \
+        -c:v libx264 -c:a aac -shortest "$HOME/Videos/fondo 4k.mp4"
+    cp "$HOME/Videos/fondo 4k.mp4" "$HOME/Videos/otro.mp4"
+    V="$(q 'Videos/fondo 4k.mp4')"
+    igual "ficha sin pase: 423" "423" "$(http_de "$(pedir GET "$B/v0/archivos/video?ruta=$V" "$SINPASE")")"
+    igual "convertir sin permiso de archivos: 403" "403" \
+        "$(http_de "$(pedir POST "$B/v0/archivos/convertir" "$SINPERMISO" '{"ruta":"Videos/otro.mp4","lado":480,"fps":30}')")"
+    r="$(pedir GET "$B/v0/archivos/video?ruta=$V" "$TOKEN")"
+    igual "la ficha: códec, tamaño y fps de verdad" "video/avc 1280x720 60.0 audio/mp4a-latm" \
+        "$(campo "$r" '"%s %sx%s %s %s" % (d["cuerpo"]["video"]["mime"], d["cuerpo"]["video"]["ancho"], d["cuerpo"]["video"]["alto"], d["cuerpo"]["video"]["fps"], d["cuerpo"]["audio"]["mime"])')"
+    igual "la ficha de algo que no es vídeo: 404" "404" "$(http_de "$(pedir GET "$B/v0/archivos/video?ruta=Documentos/nota.txt" "$TOKEN")")"
+    igual "convertir algo de .ssh: 403" "403" \
+        "$(http_de "$(pedir POST "$B/v0/archivos/convertir" "$TOKEN" '{"ruta":".ssh/id_ed25519","lado":480,"fps":30}')")"
+    igual "un lado que no está en la lista: 400" "400" \
+        "$(http_de "$(pedir POST "$B/v0/archivos/convertir" "$TOKEN" '{"ruta":"Videos/otro.mp4","lado":999,"fps":30}')")"
+    igual "unos fps raros: 400" "400" \
+        "$(http_de "$(pedir POST "$B/v0/archivos/convertir" "$TOKEN" '{"ruta":"Videos/otro.mp4","lado":480,"fps":"60"}')")"
+    r="$(pedir POST "$B/v0/archivos/convertir" "$TOKEN" '{"ruta":"Videos/fondo 4k.mp4","lado":480,"fps":30}')"
+    ID="$(campo "$r" 'd["cuerpo"]["id"]')"
+    igual "convertir: 200, con el nombre que lo distingue" "200 fondo 4k (480p 30).mp4" \
+        "$(campo "$r" '"%s %s" % (d["http"], d["cuerpo"]["nombre"])')"
+    esta_lista() { test "$(campo "$(pedir GET "$B/v0/archivos/convertir/$ID" "$TOKEN")" 'd["cuerpo"]["estado"]')" = listo; }
+    esperar_a 30 esta_lista
+    afirmar "  y termina" esta_lista
+    # El cuerpo es binario y grande: solo el código y la cabecera
+    r="$(python3 - "$B/v0/archivos/descargar?ruta=$V&conversion=$ID" "$TOKEN" <<'FINPY'
+import sys, urllib.request
+p = urllib.request.Request(sys.argv[1], headers={"Authorization": "Bearer " + sys.argv[2]})
+with urllib.request.urlopen(p, timeout=30) as r:
+    print(r.status, len(r.read()), urllib.request.unquote(r.headers.get("Content-Disposition", "")))
+FINPY
+)"
+    igual "bajar lo convertido: 200, con el nombre que lo distingue" "200 fondo 4k (480p 30).mp4" \
+        "$(printf '%s' "$r" | sed -n "s/^\([0-9]*\) .*''\(.*\)$/\1 \2/p")"
+    CONV="$(find "$XDG_CACHE_HOME/celiuz/remoto/convertidos" -name '*.mp4' ! -name '*.nuevo.*' | head -1)"
+    igual "  y es lo pedido: 854x480 a 30 en H.264, con sonido" "h264 854 480 30/1 aac" \
+        "$(ffprobe -v error -select_streams v -show_entries stream=codec_name,width,height,r_frame_rate -of csv=p=0 "$CONV" | tr ',' ' ') $(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$CONV")"
+    igual "el id no vale para bajar OTRO archivo: 404" "404" \
+        "$(http_de "$(pedir GET "$B/v0/archivos/descargar?ruta=Videos/otro.mp4&conversion=$ID" "$TOKEN")")"
+    igual "uno que no existe: 404" "404" \
+        "$(http_de "$(pedir GET "$B/v0/archivos/descargar?ruta=$V&conversion=nada" "$TOKEN")")"
+    r="$(pedir POST "$B/v0/archivos/convertir" "$TOKEN" '{"ruta":"Videos/fondo 4k.mp4","lado":480,"fps":30}')"
+    igual "pedirla otra vez sale lista de la caché, con el mismo id" "listo $ID" \
+        "$(campo "$r" '"%s %s" % (d["cuerpo"]["estado"], d["cuerpo"]["id"])')"
+    igual "  sin convertir otra vez" "1" "$(find "$XDG_CACHE_HOME/celiuz/remoto/convertidos" -name '*.mp4' | wc -l)"
+    r="$(pedir POST "$B/v0/archivos/convertir" "$TOKEN" '{"ruta":"Videos/otro.mp4","lado":720,"fps":60}')"
+    ID2="$(campo "$r" 'd["cuerpo"]["id"]')"
+    igual "cancelar una: DELETE" "cancelado" \
+        "$(campo "$(pedir DELETE "$B/v0/archivos/convertir/$ID2" "$TOKEN")" 'd["cuerpo"]["estado"]')"
+    sin_ffmpeg_hijo() { ! pgrep -f "convertidos/$ID2" >/dev/null; }
+    esperar_a 5 sin_ffmpeg_hijo
+    afirmar "  y su ffmpeg ya no corre" sin_ffmpeg_hijo
+    sin_temporal() { ! find "$XDG_CACHE_HOME/celiuz/remoto/convertidos" -name '*.nuevo.*' | grep -q .; }
+    esperar_a 5 sin_temporal
+    afirmar "  ni deja temporales a medias" sin_temporal
+    igual "bajar una cancelada: 409" "409" \
+        "$(http_de "$(pedir GET "$B/v0/archivos/descargar?ruta=Videos/otro.mp4&conversion=$ID2" "$TOKEN")")"
+    afirmar "queda apuntado en el registro" grep -q '"accion": "conversion"' "$XDG_STATE_HOME/celiuz/remoto/registro.jsonl"
+fi
+
 titulo "9. Subir a la PC (fase 8): solo a Descargas/Celiuz Remoto, sin pisar nada"
 SUB="$HOME/Descargas/Celiuz Remoto"
 subir() {   # <token> <nombre> <fichero> -> {"http", "cuerpo"}

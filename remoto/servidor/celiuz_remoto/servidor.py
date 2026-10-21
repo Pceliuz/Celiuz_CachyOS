@@ -28,7 +28,7 @@ import urllib.parse
 from aiohttp import WSCloseCode, web
 
 from . import VERSION_PROTOCOLO, ajustes, archivos, dispositivos as dsp, escritorio, historial, inicio, pase, red, registro, rutas
-from . import despertar as wol, invitacion as inv, pantalla as vnc, terminal as term
+from . import conversion, despertar as wol, invitacion as inv, pantalla as vnc, terminal as term
 from .energia import ACCIONES, Energia
 from .vigilancia import CADA as VIGILANCIA_CADA, Vigilancia
 from .sesion import FIRMA_MALA, Rechazo, Sesiones, caducado, firma_buena, texto_firmado
@@ -130,6 +130,7 @@ class Servicio:
         self._tareas = set()
         self._pendiente = None     # (runner, plazo) del canal USB que se esta soltando
         self._miniaturas = asyncio.Semaphore(2)   # ffmpeg de dos en dos, no de cien en cien
+        self.conversiones = conversion.Conversiones()   # vídeos para el celular, de uno en uno
         self.terminales = term.Terminales()
         self.billetes_pantalla = {}     # billete -> Billete (terminal.py)
         self.pantalla_abierta = None    # (Vnc, dispositivo) mientras alguien mira
@@ -350,6 +351,16 @@ class Servicio:
     async def v0_descargar(self, peticion):
         disp = self._de_archivos(peticion)
         absoluta, relativa, st = await self._en_hilo(archivos.archivo, peticion.query.get("ruta", ""))
+        servir, nombre = absoluta, os.path.basename(relativa)
+        if "conversion" in peticion.query:
+            # Lo convertido para el celular: solo el de ESA ruta (el id no abre
+            # nada por si solo) y solo terminado.
+            t = self.conversiones.ver(peticion.query["conversion"])
+            if t is None or t.relativa != relativa:
+                raise _rechazo(404, "no_existe", "Esa conversión ya no está: pídela otra vez.")
+            if t.estado != "listo":
+                raise _rechazo(409, "estado", "La conversión no ha terminado.")
+            servir, nombre = t.destino, t.ficha()["nombre"]
         # Solo cuenta como «bajado» la peticion que empieza por el principio: un
         # Range que reanuda a medias es la misma descarga, no otra.
         try:
@@ -359,8 +370,8 @@ class Servicio:
         if not desde:
             await self._en_hilo(historial.apuntar_descarga, relativa, st, disp["id"])
             registro.apuntar("descarga", disp["id"], ruta=relativa, tamano=st.st_size)
-        nombre = urllib.parse.quote(os.path.basename(relativa))
-        return web.FileResponse(absoluta, chunk_size=256 * 1024, headers={
+        nombre = urllib.parse.quote(nombre)
+        return web.FileResponse(servir, chunk_size=256 * 1024, headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{nombre}",
             "Cache-Control": "no-store"})
 
@@ -373,6 +384,51 @@ class Servicio:
         async with self._miniaturas:
             destino = await self._en_hilo(archivos.miniatura, peticion.query.get("ruta", ""), lado)
         return web.FileResponse(destino, headers={"Cache-Control": "private, max-age=86400"})
+
+    # --- vídeos que el celular no puede reproducir (conversion.py) ---
+
+    async def v0_video(self, peticion):
+        """La ficha del vídeo (ffprobe), para que el celular decida si su
+        decodificador puede con él."""
+        self._de_archivos(peticion)
+        absoluta, _, _ = await self._en_hilo(archivos.archivo, peticion.query.get("ruta", ""))
+        if archivos.tipo_miniatura(absoluta) != "video":
+            raise _rechazo(404, "no_existe", "No es un vídeo.")
+        try:
+            return web.json_response(await asyncio.get_running_loop().run_in_executor(
+                None, conversion.info, absoluta))
+        except conversion.NoEsVideo as e:
+            raise _rechazo(404, "no_existe", f"No puedo leer ese vídeo: {e}.") from None
+
+    async def v0_convertir(self, peticion):
+        """POST {ruta, lado, fps}: empieza (o retoma) la conversión. GET y
+        DELETE /{id}: cómo va, y cancelarla."""
+        disp = self._de_archivos(peticion)
+        if peticion.method == "POST":
+            d = await _cuerpo(peticion, "ruta")
+            lado, fps = d.get("lado"), d.get("fps")
+            if lado not in conversion.LADOS:
+                raise _rechazo(400, "peticion", f"«lado» es uno de {list(conversion.LADOS)}.")
+            if not isinstance(fps, (int, float)) or isinstance(fps, bool) or not 1 <= fps <= 120:
+                raise _rechazo(400, "peticion", "«fps» va de 1 a 120.")
+            absoluta, relativa, st = await self._en_hilo(archivos.archivo, d["ruta"])
+            if archivos.tipo_miniatura(absoluta) != "video":
+                raise _rechazo(404, "no_existe", "No es un vídeo.")
+            try:
+                ficha = await asyncio.get_running_loop().run_in_executor(None, conversion.info, absoluta)
+            except conversion.NoEsVideo as e:
+                raise _rechazo(404, "no_existe", f"No puedo leer ese vídeo: {e}.") from None
+            if not shutil.which("ffmpeg"):
+                raise _rechazo(409, "estado", "La PC no tiene ffmpeg para convertirlo.")
+            t = self.conversiones.pedir(absoluta, relativa, st, lado, float(fps), ficha)
+            registro.apuntar("conversion", disp["id"], ruta=relativa, lado=lado, fps=fps)
+            return web.json_response(t.ficha())
+        t = self.conversiones.ver(peticion.match_info["id"])
+        if t is None:
+            raise _rechazo(404, "no_existe", "Esa conversión no está.")
+        if peticion.method == "DELETE":
+            self.conversiones.cancelar(t.id)
+        return web.json_response(t.ficha())
 
     async def v0_subir(self, peticion):
         """Del celular a la PC (fase 8). El cuerpo es el archivo tal cual; va a
@@ -971,6 +1027,10 @@ class Servicio:
             web.get("/v0/archivos/buscar", self.v0_buscar),
             web.get("/v0/archivos/descargar", self.v0_descargar),
             web.get("/v0/archivos/miniatura", self.v0_miniatura),
+            web.get("/v0/archivos/video", self.v0_video),
+            web.post("/v0/archivos/convertir", self.v0_convertir),
+            web.get("/v0/archivos/convertir/{id}", self.v0_convertir),
+            web.delete("/v0/archivos/convertir/{id}", self.v0_convertir),
             web.post("/v0/archivos/subir", self.v0_subir),
             web.get("/v0/recientes", self.v0_recientes),
             web.delete("/v0/recientes", self.v0_recientes),
@@ -1028,6 +1088,7 @@ class Servicio:
         for tarea in list(self._tareas):
             tarea.cancel()
         await self.terminales.cerrar_todas()
+        await self.conversiones.parar()
         if self.pantalla_abierta is not None:
             await self.pantalla_abierta[0].cerrar()
         self.energia.cancelar(silencio=True)

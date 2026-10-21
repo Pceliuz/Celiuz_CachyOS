@@ -167,6 +167,34 @@ function cuentasDeArchivos() {
   comprobar('   ayer', a.grupo('2026-10-19T23:59:00-05:00', ahora) === 'Ayer');
   comprobar('   esta semana y antes', a.grupo('2026-10-16T10:00:00-05:00', ahora) === 'Esta semana'
             && a.grupo('2026-09-01T10:00:00-05:00', ahora) === 'Antes');
+
+  // Vídeos que el celular no reproduce (2026-10-21): un decodificador como el
+  // del Redmi de pruebas (H.264 por hardware hasta 4K a 30, sin HEVC).
+  const ficha = (codec: string, mime: string, ancho: number, alto: number, fps: number,
+                 contenedor = 'mov,mp4,m4a,3gp,3g2,mj2', audio: string | null = 'aac') => ({
+    contenedor, duracion: 20, video: { codec, mime, perfil: 'High', ancho, alto, fps, rotacion: 0 },
+    audio: audio === null ? null : { codec: audio, mime: audio === 'aac' ? 'audio/mp4a-latm' : 'audio/ac3' } });
+  const redmi = (m: string, w: number, hh: number, r: number) =>
+    m === 'video/avc' && Math.max(w, hh) <= 4096 && Math.min(w, hh) <= 2176 && w * hh * r <= 3840 * 2160 * 30;
+  const flojo = (m: string, w: number, hh: number, r: number) =>
+    m === 'video/avc' && Math.max(w, hh) <= 1920 && Math.min(w, hh) <= 1088 && r <= 30;
+  const aac = (m: string) => m === 'audio/mp4a-latm';
+  const dv = (fi: ReturnType<typeof ficha>, p = redmi) => a.decidirVideo(fi, p, aac);
+  comprobar('vídeo: un 1080p 30 en H.264 se baja tal cual', !dv(ficha('h264', 'video/avc', 1920, 1080, 29.97)).convertir);
+  comprobar('   uno vertical del celular (1080x1920 a 60) también', !dv(ficha('h264', 'video/avc', 1080, 1920, 60)).convertir);
+  const d4k = dv(ficha('h264', 'video/avc', 3840, 2160, 60));
+  comprobar('   4K 60 (el fondo de moewalls): a 1440p 60, sin perder los fps', d4k.convertir && d4k.lado === 1440 && d4k.fps === 60
+            && d4k.objetivo === '1440p 60' && d4k.original === '4K 60', d4k);
+  const hevc = dv(ficha('hevc', 'video/hevc', 3840, 2160, 30));
+  comprobar('   4K 30 en HEVC, sin decodificador de HEVC: a H.264 1440p 30', hevc.convertir && hevc.lado === 1440 && hevc.fps === 30
+            && /HEVC/.test(hevc.convertir ? hevc.motivo : ''), hevc);
+  const debil = dv(ficha('h264', 'video/avc', 3840, 2160, 60), flojo);
+  comprobar('   con un decodificador flojo baja hasta lo que aguanta (1080p 30)', debil.convertir && debil.lado === 1080 && debil.fps === 30, debil);
+  const avi = dv(ficha('h264', 'video/avc', 1280, 720, 25, 'avi'));
+  comprobar('   un .avi se convierte por el formato, sin agrandarlo', avi.convertir && avi.lado === 720 && avi.fps === 25
+            && /avi/.test(avi.convertir ? avi.motivo : ''), avi);
+  const ac3 = dv(ficha('h264', 'video/avc', 1920, 1080, 24, 'matroska,webm', 'ac3'));
+  comprobar('   y uno con el sonido en AC3, por el sonido', ac3.convertir && /ac3/.test(ac3.convertir ? ac3.motivo : ''), ac3);
 }
 
 async function explorar() {
@@ -194,6 +222,23 @@ async function explorar() {
   const otra = await con.archivos('');
   comprobar('   y el listado lo marca', otra.entradas.find((e) => e.nombre === 'Documentos')?.favorito === true);
   comprobar('soltar()', (await con.soltar('Documentos')).length === 0);
+  const video = (await con.archivos('Videos')).entradas.find((e) => e.nombre === 'fondo.mp4');
+  if (video) {
+    const f = await con.fichaVideo('Videos/fondo.mp4');
+    comprobar('fichaVideo(): el códec y el tamaño de verdad (ffprobe)', f.video.mime === 'video/avc' && f.video.ancho === 640
+              && f.video.alto === 360 && f.video.fps === 60, f);
+    let cv = await con.convertir('Videos/fondo.mp4', 480, 30);
+    for (let i = 0; i < 100 && cv.estado !== 'listo' && cv.estado !== 'error'; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      cv = await con.conversion(cv.id);
+    }
+    comprobar('convertir() + conversion(): termina, con su nombre', cv.estado === 'listo' && cv.nombre === 'fondo (480p 30).mp4', cv);
+    const rc = await fetch(con.urlDescarga('Videos/fondo.mp4', cv.id), { headers: con.cabeceras() });
+    const cuerpo = new Uint8Array(await rc.arrayBuffer());
+    comprobar('   urlDescarga(ruta, id) baja lo convertido', rc.status === 200 && cuerpo.length === cv.tamano
+              && /480p/.test(rc.headers.get('content-disposition') ?? ''), { http: rc.status, n: cuerpo.length, t: cv.tamano });
+    await con.olvidarReciente('Videos/fondo.mp4');
+  }
   await con.olvidarReciente('Documentos/nota.txt');
   comprobar('olvidarReciente()', (await con.recientes()).length === 0);
 }

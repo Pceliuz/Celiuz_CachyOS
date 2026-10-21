@@ -1,7 +1,7 @@
 // Las cuentas del explorador (fase 6), sin React Native: se prueban con Node
 // (tests/lib/app_remoto.ts). Lo que pinta, en pantallas/Archivos.tsx y
 // pantallas/Recientes.tsx; lo que baja, en descargas.ts.
-import type { Reciente } from './api/protocolo.ts';
+import type { FichaVideo, Reciente } from './api/protocolo.ts';
 import { decimal } from './formato.ts';
 
 // «48 KB», «1,2 MB», «8,4 GB». En base 1024, como Dolphin.
@@ -114,3 +114,68 @@ export const TEXTO_ESTADO: Record<Reciente['estado'], string> = {
   nueva_version: 'Hay versión nueva en la PC',
   no_esta: 'Ya no está en la PC',
 };
+
+// --- vídeos que el celular no puede reproducir --------------------------------
+//
+// El usuario, 2026-10-21: los fondos 4K de moewalls se bajaban y salían en la
+// galería, pero en negro (4K 60 H.264, 4K 30 HEVC); un 1080p 30 se veía. Es
+// el decodificador del celular. Con la ficha de la PC (conversion.py) y lo
+// que dice el decodificador (módulo nativo: puedeVideo/puedeAudio) se decide
+// aquí, sin React Native, para poder probarlo con Node.
+
+// Los lados cortos que la PC sabe hacer (conversion.LADOS).
+export const LADOS = [2160, 1440, 1080, 720, 480] as const;
+// Contenedores que Android abre (MediaExtractor). avi, flv, wmv no.
+const CONTENEDORES_OK = ['mov', 'mp4', 'matroska', 'webm', '3gp', 'mpegts', 'ogg'];
+
+export type DecisionVideo =
+  | { convertir: false }
+  | { convertir: true; lado: number; fps: number; original: string; objetivo: string; motivo: string };
+
+export function etiquetaVideo(ancho: number, alto: number, fps: number): string {
+  const corto = Math.min(ancho, alto);
+  const nombre = corto >= 2000 ? '4K' : `${corto}p`;
+  return `${nombre} ${Math.round(fps)}`;
+}
+
+type PuedeVideo = (mime: string, ancho: number, alto: number, fps: number) => boolean;
+
+export function decidirVideo(f: FichaVideo, puedeVideo: PuedeVideo, puedeAudio: (mime: string) => boolean): DecisionVideo {
+  const v = f.video;
+  const fps = v.fps > 0 ? v.fps : 30;
+  const original = etiquetaVideo(v.ancho, v.alto, fps);
+  const contenedor = f.contenedor.split(',').some((c) => CONTENEDORES_OK.includes(c));
+  const audio = f.audio === null || (f.audio.mime !== '' && puedeAudio(f.audio.mime));
+  const video = v.mime !== '' && puedeVideo(v.mime, v.ancho, v.alto, fps);
+  if (contenedor && audio && video) return { convertir: false };
+
+  const motivo = !video ? `Es ${original} en ${v.codec.toUpperCase()} y este celular no lo reproduce.`
+    : !audio ? `El sonido va en ${f.audio!.codec} y este celular no lo reproduce.`
+    : `Es un .${f.contenedor.split(',')[0]} y el celular no abre ese formato.`;
+
+  // A qué: H.264, lo más grande y fluido que el decodificador aguante. Nunca
+  // por encima de 1440p (en un celular no se distingue y pesa el doble), y se
+  // guardan los fps antes que la resolución mientras no baje de 1080p: un
+  // fondo animado a 30 se nota más que uno a 1080p.
+  const corto = Math.min(v.ancho, v.alto);
+  const largo = Math.max(v.ancho, v.alto);
+  const fluido = Math.min(Math.round(fps), 60);
+  const lados = LADOS.filter((l) => l <= 1440 && (l <= corto || l === 480));
+  const velocidades = fluido > 30 ? [fluido, 30] : [fluido];
+  const intentos: [number, number][] = [];
+  for (const l of lados.filter((l) => l >= 1080)) intentos.push([l, velocidades[0]]);
+  for (const r of velocidades.slice(1)) for (const l of lados.filter((l) => l >= 1080)) intentos.push([l, r]);
+  for (const l of lados.filter((l) => l < 1080)) for (const r of velocidades) intentos.push([l, r]);
+
+  // Si ya es pequeño y el problema era otro (el formato, el sonido), se queda
+  // con su tamaño: lado = el escalón que no lo reduce.
+  for (const [lado, r] of intentos) {
+    const c = Math.min(lado, corto);
+    const l = Math.round((largo * c) / corto / 2) * 2;
+    if (puedeVideo('video/avc', l, c, r)) {
+      return { convertir: true, lado, fps: r, original, objetivo: etiquetaVideo(l, c, r), motivo };
+    }
+  }
+  // Ni 480p 30: algo raro pasa con el decodificador. Lo más pequeño, igual.
+  return { convertir: true, lado: 480, fps: 30, original, objetivo: etiquetaVideo(Math.round((largo * Math.min(480, corto)) / corto), Math.min(480, corto), 30), motivo };
+}

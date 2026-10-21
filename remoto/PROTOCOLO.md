@@ -181,6 +181,23 @@ navegadores y lo propio de Celiuz Remoto (la lista, `NUNCA` en
 - `GET /v0/archivos/miniatura?ruta=...&lado=256` → JPEG (lado entre 64 y 1024)
   de una imagen o un vídeo, hecho con ffmpeg y guardado en
   `~/.cache/celiuz/remoto/miniaturas`. De lo demás, `404`.
+- `GET /v0/archivos/video?ruta=...` → la ficha de un vídeo (ffprobe):
+  `{"contenedor": "mov,mp4,...", "duracion", "video": {"codec", "mime", "perfil", "ancho", "alto", "fps", "rotacion"}, "audio": {"codec", "mime"} | null}`.
+  `mime` es el nombre de Android (`video/avc`, `video/hevc`...), `""` si no
+  hay. De lo que no es vídeo, `404`. Con ella el CELULAR decide si su
+  decodificador puede (módulo nativo `puedeVideo`/`puedeAudio`); la PC no
+  adivina nada del celular.
+- `POST /v0/archivos/convertir` `{"ruta", "lado": 480|720|1080|1440|2160, "fps": 1..120}`
+  → `{"id", "estado": "en_cola"|"convirtiendo"|"listo"|"error"|"cancelado", "progreso": 0..1, "nombre": "fondo (1080p 60).mp4", "tamano"?, "mensaje"?}`.
+  A H.264 + AAC estéreo en MP4; el lado CORTO baja a `lado` (nunca sube).
+  Una conversión a la vez; la misma petición otra vez devuelve la misma (y si
+  ya acabó, sale `listo` de la caché, `~/.cache/celiuz/remoto/convertidos`,
+  que se vacía a los dos días). `GET /v0/archivos/convertir/<id>` dice cómo
+  va y **es lo que la mantiene viva**: a los 90 s sin preguntas, la PC la
+  para. `DELETE` la cancela. Sin ffmpeg, `409 estado`.
+- `GET /v0/archivos/descargar?ruta=...&conversion=<id>` → lo convertido, con
+  su `nombre` en `Content-Disposition`. El id solo vale con SU ruta (`404` con
+  otra) y solo terminado (`409`).
 - `GET /v0/recientes` → `{"recientes": [{"ruta", "nombre", "carpeta", "bajado", "tamano", "dispositivo", "estado": "igual"|"nueva_version"|"no_esta"}]}`.
   El estado compara el tamaño y la fecha que tenía al bajarlo con lo que hay
   ahora. `DELETE /v0/recientes?ruta=...` lo quita de la lista (sin `ruta`, todos).

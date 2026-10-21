@@ -5,26 +5,87 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-10-20/21** (toda la noche), en la **PC**.
+Última sesión: **2026-10-21** (mañana), en la **PC**.
 
 ---
+
+## 2026-10-21 (PC, mañana): Celiuz Remoto — vídeos que el celular no reproduce
+
+Lo encontró el usuario en el HONOR: los vídeos se bajaban, salían en la
+galería y no se reproducían. Medido: es el **decodificador**, no la descarga
+(md5 igual). 1080p 30 bien; 1440p 24 a 12 Mb/s a medias (el reproductor que
+abrió la app dijo que no, la galería sí); 4K 60 H.264 y 4K 30 HEVC en negro.
+
+- **PC** (`conversion.py`): `GET /v0/archivos/video` (ficha de ffprobe),
+  `POST/GET/DELETE /v0/archivos/convertir` (H.264 + AAC con libx264 CRF 20,
+  de una en una, con progreso, se para sola si el celular deja de preguntar,
+  caché de dos días) y `descargar?conversion=<id>`.
+- **Celular**: `puedeVideo`/`puedeAudio` en el módulo nativo (decodificador
+  por HARDWARE, con los performance points del fabricante), y
+  `decidirVideo()` en `archivos.ts`: hasta 1440p, conservando los fps antes
+  que la resolución mientras no baje de 1080p. Antes de bajar un vídeo que no
+  va, pregunta: «Convertir a 1440p 60» / «Bajar el original» / «Cancelar».
+- Pruebas: sección 8b de `e2e/remoto-archivos` y `decidirVideo` + la
+  conversión de verdad en `e2e/remoto-app`. APK recompilado, servicio
+  reiniciado.
+- **Probado por el usuario en el HONOR** con el APK nuevo (2026-10-21): bien.
 
 ## 2026-10-20/21 (PC, de noche): arreglo de la fase 6, y fases 7 y 8 — Celiuz Remoto TERMINADO
 
 **Sin commitear**: el usuario pidió hacer todo sin parar y subirlo él al final.
 Él durmió; todo se probó en su HONOR manejándolo por adb.
 
+**2026-10-21, al despertar**: el usuario volvió a emparejar el HONOR (ya no
+lleva la contraseña temporal), hizo el commit, instaló wayvnc y probó APAGAR
+desde el celular: funcionó. Reiniciar y suspender por botón, sin probar.
+
+**El internet de la PC llega por USB desde un Redmi Note 10S** (anclaje,
+`enp48s0f3u2`; el Redmi es otro celular, no el HONOR de la app). Al reiniciar,
+el celular apaga el anclaje y la pantalla de inicio se queda sin internet ni
+Tailscale. Arreglo, hecho y medido en vivo: `celiuz_remoto/anclaje.py` +
+`celiuz-remoto-anclaje.service` (lo enciende instalar.sh), que le vuelve a
+pedir el anclaje por adb (`svc usb setFunctions rndis`: la ruta volvió en 3 s).
+Linger ya está puesto (`loginctl enable-linger`, 2026-10-21) y android-udev
+también (el usuario, en `adbusers`) — sin este último, en SDDM el USB es del usuario `sddm` y adb no puede. Luego
+reiniciar por el botón de la app y mirar `journalctl --user -u
+celiuz-remoto-anclaje` («pedido»).
+
+**HECHO (2026-10-21 ~05:45): el usuario reinició la PC con el BOTÓN de la
+app y siguió usándola desde el celular: a prueba de reinicios.** Antes de reiniciar ya estaba todo: android-udev instalado y él en
+`adbusers`, linger puesto, el servicio del anclaje corriendo y la wifi
+conectada («REPETIDOR FAMILIA RAMOS2-5G», perfil de sistema: sin permissions,
+autoconnect, psk-flags 0). Al retomar, preguntarle cómo fue y mirar:
+`journalctl --user -b -u celiuz-remoto-anclaje` (con la wifi arriba lo normal
+es que NO pida nada: hay ruta por defecto), `nmcli -t -f NAME,DEVICE
+connection show --active` (¿entró la wifi en SDDM?), y el registro de
+Celiuz Remoto (`celiuz-remoto registro`). Cambios SIN COMMITEAR: anclaje.py,
+su unidad, su prueba, instalar.sh, remoto-escritorio.sh, CLAUDE.md y esto.
+Pendientes de esta tanda: probar suspender por botón, `./instalar.sh
+--remoto-sistema` y «Entrar» desde SDDM, revisar «Invitar a alguien».
+
+**La wifi de la PC** (RTL8192EE, driver `rtl8192ee` del kernel) solo estaba
+apagada en NetworkManager: `nmcli radio wifi on`. Las redes que se guardan
+desde el panel de wifi son de sistema, así que conectan en la pantalla de
+inicio sin entrar; con la wifi de la casa el anclaje deja de hacer falta y el
+demonio no toca al celular (solo actúa sin ruta por defecto).
+
+**Wake-on-LAN** está en la BIOS, pero `enp34s0` sigue SIN cable: por el
+anclaje USB ni por wifi se puede despertar a la PC. Hace falta cable de red al
+router en `enp34s0` y `sudo nmcli connection modify "Conexión cableada 1"
+802-3-ethernet.wake-on-lan magic` (persistente; `ethtool -s` se pierde al
+reiniciar).
+
 **LO QUE TIENE QUE HACER EL USUARIO** (no se podía sin él):
-1. **El HONOR está emparejado con una contraseña TEMPORAL**: `prueba-noche-2026`
+1. ~~**El HONOR está emparejado con una contraseña TEMPORAL**~~ (hecho): `prueba-noche-2026`
    (registro `316a993b…`, con todos los permisos, para poder probar). Su
    emparejamiento de antes (`c0615dcf`) estaba roto desde la fase 4. Lo suyo:
    emparejar otra vez desde la ventana con SU contraseña y los permisos que
    quiera (se sustituye solo, por la serie USB).
-2. **Commit** de todo (la lista de ficheros nuevos, abajo).
+2. ~~**Commit** de todo~~ (hecho) (la lista de ficheros nuevos, abajo).
 3. **Fase 5 sin probar todavía**: `./instalar.sh --remoto-sistema`, apagar y
    encender el servicio en la ventana (linger), reiniciar y «Entrar» desde el
    celular. Receta en la entrada de la fase 5, más abajo.
-4. **Para ver la pantalla**: `sudo pacman -S wayvnc` (se probó con uno bajado
+4. ~~**Para ver la pantalla**: `sudo pacman -S wayvnc`~~ (hecho) (se probó con uno bajado
    a una carpeta temporal, sin instalar, y ya se quitó del servicio).
 5. **Para despertar a la PC desde la laptop**: activar Wake-on-LAN en la BIOS
    y en `enp34s0` (`celiuz-remoto despertar` dice cómo), con la PC por cable.

@@ -4,6 +4,9 @@
 // no todo celular tiene una app para un .md. Los errores del servidor con
 // salida propia (pase vencido, sesión caducada) se los pasa a quien llama.
 //
+// Un vídeo que el celular no puede reproducir (4K 60, HEVC...) se convierte
+// antes en la PC, preguntando primero (descargas.revisarVideo/convertir).
+//
 // Devuelve también `visor`, el elemento del visor de texto: la pantalla lo
 // pinta donde quiera (una vez).
 import { useCallback, useState } from 'react';
@@ -32,6 +35,8 @@ function porQue(e: unknown): 'pase' | 'sesion' | string {
 export function useDescargas(conexion: Conexion, { alVerPase, alCaducar }: Errores) {
   // ruta -> fracción bajada (0..1), o -1 si no se sabe el total
   const [progreso, setProgreso] = useState<Record<string, number>>({});
+  // ruta -> lo que se está haciendo, mientras no sea bajar a secas
+  const [fase, setFase] = useState<Record<string, string>>({});
   const [texto, setTexto] = useState<{ copia: d.Copia; texto: string } | null>(null);
   // Para que las pantallas se vuelvan a pintar al guardar (tieneCopia cambia).
   const [, setVersion] = useState(0);
@@ -80,10 +85,35 @@ export function useDescargas(conexion: Conexion, { alVerPase, alCaducar }: Error
 
   const bajar = useCallback(async (ruta: string, avisar = true) => {
     if (progreso[ruta] !== undefined) return null;
-    setProgreso((p) => ({ ...p, [ruta]: 0 }));
+    setProgreso((p) => ({ ...p, [ruta]: -1 }));
+    const ponerFase = (texto: string | null) => setFase((f) => {
+      const { [ruta]: _, ...resto } = f;
+      return texto === null ? resto : { ...resto, [ruta]: texto };
+    });
     try {
+      let convertido: d.Convertido | undefined;
+      ponerFase('Mirando si el celular puede reproducirlo…');
+      const decision = await d.revisarVideo(conexion, ruta);
+      if (decision?.convertir) {
+        const eleccion = await new Promise<'convertir' | 'original' | 'no'>((listo) =>
+          Alert.alert('Este vídeo no se va a ver', `${decision.motivo} La PC puede convertirlo a ${decision.objetivo}, que sí: tarda un poco y pesa mucho menos.`, [
+            { text: 'Cancelar', style: 'cancel', onPress: () => listo('no') },
+            { text: 'Bajar el original', onPress: () => listo('original') },
+            { text: `Convertir a ${decision.objetivo}`, onPress: () => listo('convertir') },
+          ], { cancelable: true, onDismiss: () => listo('no') }));
+        if (eleccion === 'no') return null;
+        if (eleccion === 'convertir') {
+          ponerFase(`Convirtiendo en la PC a ${decision.objetivo}…`);
+          convertido = await d.convertir(conexion, ruta, decision.lado, decision.fps, (x) => {
+            setProgreso((p) => ({ ...p, [ruta]: x }));
+            ponerFase(`Convirtiendo en la PC a ${decision.objetivo}… ${Math.round(x * 100)} %`);
+          });
+        }
+      }
+      ponerFase(null);
+      setProgreso((p) => ({ ...p, [ruta]: 0 }));
       const c = await d.bajar(conexion, ruta, ({ bajado, total }) =>
-        setProgreso((p) => ({ ...p, [ruta]: total > 0 ? bajado / total : -1 })));
+        setProgreso((p) => ({ ...p, [ruta]: total > 0 ? bajado / total : -1 })), undefined, convertido);
       setVersion((v) => v + 1);
       if (avisar) ofrecer(c);
       return c;
@@ -91,6 +121,7 @@ export function useDescargas(conexion: Conexion, { alVerPase, alCaducar }: Error
       fallo(e, 'No se pudo bajar');
       return null;
     } finally {
+      ponerFase(null);
       setProgreso((p) => {
         const { [ruta]: _, ...resto } = p;
         return resto;
@@ -112,5 +143,5 @@ export function useDescargas(conexion: Conexion, { alVerPase, alCaducar }: Error
                 alCompartir={() => texto && compartir(texto.copia)} />
   );
 
-  return { progreso, bajar, abrirCopia, tieneCopia: (ruta: string) => d.tieneCopia(conexion, ruta), fallo, visor };
+  return { progreso, fase, bajar, abrirCopia, tieneCopia: (ruta: string) => d.tieneCopia(conexion, ruta), fallo, visor };
 }

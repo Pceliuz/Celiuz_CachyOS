@@ -160,6 +160,24 @@ export interface Reciente {
   estado: 'igual' | 'nueva_version' | 'no_esta'; // contra lo que hay AHORA en la PC
 }
 
+// La ficha de un vídeo (GET /v0/archivos/video, conversion.py): con ella el
+// celular decide si su decodificador puede, o pide una conversión.
+export interface FichaVideo {
+  contenedor: string; // el format_name de ffprobe: «mov,mp4,m4a,3gp,3g2,mj2», «matroska,webm», «avi»
+  duracion: number;
+  video: { codec: string; mime: string; perfil: string; ancho: number; alto: number; fps: number; rotacion: number };
+  audio: { codec: string; mime: string } | null;
+}
+
+export interface Conversion {
+  id: string;
+  estado: 'en_cola' | 'convirtiendo' | 'listo' | 'error' | 'cancelado';
+  progreso: number; // 0..1
+  nombre: string; // «fondo (1080p 60).mp4»
+  tamano?: number; // al estar lista
+  mensaje?: string;
+}
+
 export interface Favorito {
   ruta: string;
   nombre: string;

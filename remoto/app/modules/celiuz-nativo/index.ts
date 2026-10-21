@@ -13,6 +13,10 @@ export interface Guardado {
 interface Nativo {
   guardarPublico(origen: string, nombre: string, mime: string, sustituir: string | null): Promise<Guardado>;
   existe(uri: string): boolean;
+  // ¿Lo decodifica el celular por hardware a esa velocidad? (mime de Android:
+  // «video/avc», «video/hevc»...)
+  puedeVideo(mime: string, ancho: number, alto: number, fps: number): boolean;
+  puedeAudio(mime: string): boolean;
   abrir(uri: string, mime: string): Promise<boolean>;
   compartir(uri: string, mime: string, titulo: string): Promise<void>;
   borrar(uri: string): Promise<boolean>;
