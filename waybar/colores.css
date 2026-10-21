@@ -8,18 +8,22 @@
  * deriva solo, con alpha(@amatista, 0.35).
  */
 
-@define-color negro       #000000;
-@define-color abismo      #0d0418;
-@define-color superficie  #1a0830;
-@define-color apagado     #2d1b4e;
-@define-color violeta     #6a00f4;
-@define-color amatista    #b16cff;
-@define-color neon        #c77dff;
-@define-color luz         #e4c7ff;
-@define-color tenue       #8a7aa8;
-@define-color alerta      #eb6f92;            /* rojo  — algo va mal, mirame ya */
-@define-color atencion    #f6c177;            /* ambar — en marcha, espera */
-@define-color exito       #7dffb0;            /* verde — hecho, en linea */
-@define-color glow_activo rgba(199, 125, 255, 0.8);
-@define-color halo        rgba(106, 0, 244, 0.667);
-@define-color sombra      rgba(0, 0, 0, 0.8);
+@define-color negro          #000000;
+@define-color abismo         #0d0418;
+@define-color superficie     #1a0830;
+@define-color apagado        #2d1b4e;
+@define-color violeta        #6a00f4;
+@define-color amatista       #b16cff;
+@define-color neon           #c77dff;
+@define-color luz            #e4c7ff;
+@define-color tenue          #8a7aa8;
+@define-color alerta         #eb6f92;         /* rojo  — algo va mal, mirame ya */
+@define-color atencion       #f6c177;         /* ambar — en marcha, espera */
+@define-color exito          #7dffb0;         /* verde — hecho, en linea */
+@define-color rojo_neon      #ff1f4b;
+@define-color azul_electrico #2f6bff;
+@define-color azul_neon      #00e5ff;
+@define-color verde_neon     #39ff14;
+@define-color glow_activo    rgba(199, 125, 255, 0.8);
+@define-color halo           rgba(106, 0, 244, 0.667);
+@define-color sombra         rgba(0, 0, 0, 0.8);

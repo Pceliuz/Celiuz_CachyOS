@@ -25,6 +25,18 @@
 #   celiuz-saludo --carpeta   dice de que carpeta las coge
 #   celiuz-saludo --preparar  adapta ya todas (la primera vez de cada una, si
 #                             no, tarda un poco mas en abrir esa terminal)
+#   celiuz-saludo --medidas FILAS COLUMNAS   las cuentas de abajo, sin dibujar
+#
+# EL TAMAÑO Y EL SITIO (2026-10-21; antes era fijo, 22x11 celdas pegado arriba
+# a la izquierda, y en una terminal grande se quedaba chico y de lado). Se mide
+# la terminal al abrirse (`medidas`):
+#   - la imagen crece con la terminal hasta el alto del cuadro de datos (unas
+#     ALTO_DATOS filas), y si es mas baja se centra en vertical contra el;
+#   - imagen y datos van centrados en horizontal;
+#   - si al lado no caben (una terminal partida en mosaico), la imagen va
+#     ENCIMA de los datos, mas pequeña, en vez de pisarlos.
+# Una celda de kitty es el doble de alta que de ancha: una caja de 2N x N
+# celdas es cuadrada, y la imagen se ajusta dentro sin deformarse.
 
 # La raiz se saca del propio script atravesando el enlace de ~/.local/bin
 # (la regla del CLAUDE.md: nada de ~/dotfiles cableado).
@@ -78,6 +90,61 @@ al_azar() {
 
 LIB="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/celiuz/saludo"
+# Lo que ocupa el cuadro de datos de fastfetch/plantilla.jsonc: 14 datos, dos
+# saltos y los puntos (uno menos sin GPU dedicada o sin bateria), y de ancho el
+# icono, el separador y el dato mas largo («75.55 GiB / 927.51 GiB (8%) - btrfs»).
+ALTO_DATOS=16
+ANCHO_DATOS=46
+
+# medidas FILAS COLUMNAS → «ancho alto izquierda arriba posicion» de la imagen,
+# en celdas; posicion es left (al lado) o top (encima). Ancho 0: sin imagen.
+medidas() {
+    local filas="$1" cols="$2" alto ancho izq arriba
+    # Algo que no sea un numero (stty sin terminal, LINES vacia): 24x80.
+    [[ "$filas" =~ ^[0-9]+$ ]] || filas=24
+    [[ "$cols" =~ ^[0-9]+$ ]] || cols=80
+    alto=$(( filas / 2 ))
+    [ "$alto" -le "$ALTO_DATOS" ] || alto=$ALTO_DATOS
+    [ "$alto" -ge 8 ] || alto=8
+    ancho=$(( alto * 2 ))
+    # Si al lado no cabe entera, mas pequeña pero al lado, mientras se vea.
+    if [ $(( ancho + 6 + ANCHO_DATOS )) -gt "$cols" ]; then
+        ancho=$(( cols - 6 - ANCHO_DATOS ))
+        alto=$(( ancho / 2 ))
+    fi
+    if [ "$ancho" -ge 16 ]; then
+        # Al lado. Centrado: lo que sobra, a partes iguales a cada lado.
+        izq=$(( (cols - ancho - 4 - ANCHO_DATOS) / 2 ))
+        [ "$izq" -ge 2 ] || izq=2
+        arriba=$(( 1 + (ALTO_DATOS - alto) / 2 ))
+        echo "$ancho $alto $izq $arriba left"
+        return
+    fi
+    # No cabe al lado: encima, y mas pequeña (que se vean los datos sin
+    # desplazar la terminal).
+    alto=$(( filas / 2 ))
+    [ "$alto" -le 10 ] || alto=10
+    ancho=$(( alto * 2 ))
+    [ "$ancho" -le $(( cols - 4 )) ] || { ancho=$(( cols - 4 )); alto=$(( ancho / 2 )); }
+    if [ "$alto" -lt 4 ]; then
+        echo "0 0 0 0 none"
+        return
+    fi
+    izq=$(( (cols - ancho) / 2 ))
+    [ "$izq" -ge 1 ] || izq=1
+    echo "$ancho $alto $izq 1 top"
+}
+
+# tamano_terminal → «FILAS COLUMNAS» de la terminal donde se abre el saludo.
+tamano_terminal() {
+    local t
+    # Solo si se pinta en una terminal de verdad (en una prueba, con la
+    # salida a un fichero, valen LINES y COLUMNS).
+    if [ -t 1 ]; then
+        t="$(stty size 2>/dev/null </dev/tty)" && [ -n "$t" ] && { echo "$t"; return; }
+    fi
+    echo "${LINES:-24} ${COLUMNS:-80}"
+}
 
 # copia_de RUTA → donde va (o esta) la copia adaptada de esa imagen. La clave
 # lleva tamaño y fecha: si cambias el fichero, se rehace.
@@ -103,6 +170,7 @@ adaptada() {
 
 case "$1" in
     --carpeta) carpeta; exit 0 ;;
+    --medidas) medidas "$2" "$3"; exit 0 ;;
     --preparar)
         pares=(); n=0
         shopt -s nullglob nocaseglob
@@ -125,8 +193,16 @@ imagen="$1"
 
 if [ -n "$imagen" ] && [ -f "$imagen" ] && sabe_imagenes; then
     imagen="$(adaptada "$imagen")"
-    # Ancho y alto en CELDAS de texto; se respeta la proporcion de la imagen.
-    exec fastfetch --logo-type kitty --logo "$imagen" \
-        --logo-width 22 --logo-height 11 --logo-preserve-aspect-ratio true
+    read -r filas cols <<< "$(tamano_terminal)"
+    read -r ancho alto izq arriba posicion <<< "$(medidas "$filas" "$cols")"
+    if [ "$ancho" -gt 0 ]; then
+        # Ancho y alto en CELDAS de texto; se respeta la proporcion de la imagen.
+        exec fastfetch --logo-type kitty --logo "$imagen" --logo-position "$posicion" \
+            --logo-width "$ancho" --logo-height "$alto" --logo-preserve-aspect-ratio true \
+            --logo-padding-left "$izq" --logo-padding-top "$arriba" --logo-padding-right 4
+    fi
+    # Tan pequeña que no cabe ni encima: solo los datos, sin el logo de la
+    # distro (que es mas grande todavia que la imagen).
+    exec fastfetch --logo-type none
 fi
 exec fastfetch

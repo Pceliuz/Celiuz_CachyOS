@@ -92,6 +92,43 @@ else
     _gris "  (sin fastfetch en el equipo: se salta)"
 fi
 
+titulo "5b. La imagen sigue al tamaño de la terminal (2026-10-21)"
+medidas() { bash "$SCRIPT" --medidas "$1" "$2"; }
+afirmar_igual "32 16 24 1 left" "$(medidas 36 130)" "la laptop a pantalla completa: grande, al lado y centrada"
+afirmar_igual "24 12 3 3 left" "$(medidas 24 80)" "una de 80x24: mas chica, centrada en vertical contra los datos"
+afirmar_igual "32 16 74 1 left" "$(medidas 60 230)" "una enorme: hasta el alto del cuadro, no mas"
+afirmar_igual "left" "$(medidas 38 82 | cut -d' ' -f5)" "si al lado no cabe entera, mas chica pero al lado"
+afirmar_igual "top" "$(medidas 20 60 | cut -d' ' -f5)" "una partida en mosaico: la imagen ENCIMA, no pisando los datos"
+afirmar_igual "24 12 3 3 left" "$(medidas x '')" "algo que no es un numero: como 80x24, sin reventar"
+: > "$REGISTRO/fastfetch.log"
+KITTY_WINDOW_ID=1 LINES=36 COLUMNS=130 "$SCRIPT" > /dev/null
+afirmar "se lo pasa a fastfetch (ancho, alto, sitio)" grep -q -- \
+    "--logo-position left --logo-width 32 --logo-height 16 .*--logo-padding-left 24 --logo-padding-top 1" \
+    "$REGISTRO/fastfetch.log"
+: > "$REGISTRO/fastfetch.log"
+KITTY_WINDOW_ID=1 LINES=6 COLUMNS=30 "$SCRIPT" > /dev/null
+afirmar "tan pequeña que no cabe: solo los datos, sin el logo de la distro" \
+    grep -qx -- "--logo-type none" "$REGISTRO/fastfetch.log"
+
+titulo "5c. Los colores salen de la paleta, y los iconos siguen ahi"
+afirmar "config.jsonc esta al dia con la plantilla y la paleta" \
+    "$REPO/hypr/scripts/gen-colores.py" --check
+afirmar "   sin un solo @nombre@ sin cambiar" sh -c "! grep -q '@[a-z_]*@' '$REPO/fastfetch/config.jsonc'"
+afirmar "cada color del cuadro es uno de colores.conf" python3 - "$REPO" <<'FINPY'
+import re, sys
+raiz = sys.argv[1]
+paleta = {h[:6].lower() for h in re.findall(r"rgba\(([0-9a-fA-F]{8})\)", open(f"{raiz}/hypr/conf/colores.conf").read())}
+usados = {"%02x%02x%02x" % tuple(map(int, m)) for m in
+          re.findall(r"38;2;(\d+);(\d+);(\d+)", open(f"{raiz}/fastfetch/config.jsonc").read())}
+assert usados and usados <= paleta, usados - paleta
+FINPY
+# Los iconos son de Nerd Font (zona de uso privado de Unicode): no se ven en
+# casi ningun editor, y se pierden sin avisar al copiar o reescribir el fichero.
+afirmar_igual "14" "$(python3 -c "
+import re; t = open('$REPO/fastfetch/plantilla.jsonc', encoding='utf-8').read()
+print(sum(1 for k in re.findall(r'\"key\": \"([^\"]*)\"', t) if len(k) == 1 and 0xE000 <= ord(k) <= 0xF8FF))")" \
+    "los 14 iconos de la plantilla siguen ahi"
+
 titulo "6. instalar.sh engancha fish una vez y respeta lo tuyo"
 conf="$XDG_CONFIG_HOME/fish/config.fish"
 mkdir -p "$(dirname "$conf")"

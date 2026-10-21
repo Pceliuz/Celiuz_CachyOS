@@ -8,7 +8,7 @@ CSS de GTK, mako no tiene variables y el tema de SDDM es QML. Sin esto, el
 violeta estaria escrito a mano en cuatro sitios y tarde o temprano dejarian de
 coincidir.
 
-Cinco destinos, una sola fuente:
+Seis destinos, una sola fuente:
 
     waybar/colores.css    un `@define-color` por variable, que style.css importa
     mako/colores          los colores ya resueltos, que mako incluye al final
@@ -16,6 +16,7 @@ Cinco destinos, una sola fuente:
     hypr/conf/colores-pango.conf  la misma paleta en #RRGGBB, para el marcado
                           Pango de hyprlock (ver render_pango)
     remoto/app/src/colores.json   la app del celular de Celiuz Remoto
+    fastfetch/config.jsonc   el saludo de la terminal, desde fastfetch/plantilla.jsonc
 
 Los alfas NO se generan para waybar: el CSS de GTK sabe derivarlos solo con
 `alpha(@amatista, 0.35)`. QML tambien, con Qt.alpha().
@@ -35,6 +36,8 @@ DESTINO_MAKO = RAIZ / "mako" / "colores"
 DESTINO_SDDM = RAIZ / "sddm" / "celiuz" / "Colores.qml"
 DESTINO_PANGO = RAIZ / "hypr" / "conf" / "colores-pango.conf"
 DESTINO_APP = RAIZ / "remoto" / "app" / "src" / "colores.json"
+PLANTILLA_FASTFETCH = RAIZ / "fastfetch" / "plantilla.jsonc"
+DESTINO_FASTFETCH = RAIZ / "fastfetch" / "config.jsonc"
 
 # Que tono le toca a cada parte de una notificacion.
 #
@@ -280,6 +283,27 @@ def render_app(paleta) -> str:
     return json.dumps(datos, ensure_ascii=False, indent=2) + "\n"
 
 
+def render_fastfetch(paleta, plantilla: str) -> str:
+    """El saludo de la terminal: la plantilla con cada @nombre@ cambiado por
+    ese color en el formato de fastfetch, «38;2;R;G;B». Se probo: fastfetch
+    acepta «#RRGGBB» en `keyColor` pero NO dentro de un formato ({#ff1f4b}:
+    «invalid color code»), y los 24 bits valen en los dos sitios. El alfa no
+    se usa: una terminal no lo tiene."""
+    colores = {nombre: hexa for nombre, _, hexa, _ in paleta}
+
+    def color(m):
+        nombre = m.group(1)
+        if nombre not in colores:
+            raise SystemExit(f"fastfetch/plantilla.jsonc pide @{nombre}@, que no esta en colores.conf")
+        h = colores[nombre]
+        return "38;2;%d;%d;%d" % tuple(int(h[j:j + 2], 16) for j in (0, 2, 4))
+
+    cuerpo = re.sub(r"@(\w+)@", color, plantilla)
+    return ("// GENERADO por hypr/scripts/gen-colores.py desde fastfetch/plantilla.jsonc\n"
+            "// y hypr/conf/colores.conf — NO EDITAR A MANO: se edita la plantilla.\n"
+            + cuerpo)
+
+
 def main() -> int:
     if not ORIGEN.exists():
         print(f"no encuentro la paleta: {ORIGEN}", file=sys.stderr)
@@ -295,6 +319,9 @@ def main() -> int:
                (DESTINO_SDDM, render_sddm(paleta)),
                (DESTINO_PANGO, render_pango(paleta)),
                (DESTINO_APP, render_app(paleta))]
+    if PLANTILLA_FASTFETCH.exists():
+        salidas.append((DESTINO_FASTFETCH,
+                        render_fastfetch(paleta, PLANTILLA_FASTFETCH.read_text(encoding="utf-8"))))
 
     if "--check" in sys.argv:
         viejos = [d for d, nuevo in salidas

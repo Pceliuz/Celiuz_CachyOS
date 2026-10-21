@@ -1,0 +1,56 @@
+// fastfetch/plantilla.jsonc — el cuadro con los datos del equipo al abrir una
+// terminal. ESTE es el que se edita: hypr/scripts/gen-colores.py lo convierte
+// en fastfetch/config.jsonc cambiando cada nombre entre arrobas por ese color de la paleta
+// (hypr/conf/colores.conf), en el formato de fastfetch («38;2;R;G;B»). Un
+// nombre que no este en la paleta para el generador con un error.
+//
+// instalar.sh enlaza la carpeta a ~/.config/fastfetch, asi que un `fastfetch`
+// a secas tambien lo usa (con el logo de la distro). La imagen, su tamaño y
+// donde va los pone hypr/scripts/saludo.sh (`celiuz-saludo`), que mide la
+// terminal cada vez.
+//
+// Los colores (lo pidio el usuario, 2026-10-21): cada icono de un color, en
+// rueda — rojo, violeta, azul electrico, azul neon, el violeta de la config
+// (amatista) y verde neon — y el texto en $luz. Los puntos de abajo son esos
+// seis colores y no los ANSI del tema de kitty, que eran distintos en cada
+// equipo. Los iconos son de Nerd Font.
+{
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "padding": { "top": 1, "left": 2, "right": 4 }
+    },
+    "display": {
+        "separator": "   ",
+        "color": { "output": "@luz@" },
+        "percent": { "color": { "green": "@verde_neon@", "yellow": "@atencion@", "red": "@rojo_neon@" } },
+        "size": { "binaryPrefix": "iec" }
+    },
+    "modules": [
+        "break",
+        { "type": "os",       "key": "", "keyColor": "@rojo_neon@" },
+        { "type": "kernel",   "key": "", "keyColor": "@violeta@" },
+        { "type": "packages", "key": "", "keyColor": "@azul_electrico@" },
+        { "type": "shell",    "key": "", "keyColor": "@azul_neon@" },
+        { "type": "terminal", "key": "", "keyColor": "@amatista@" },
+        { "type": "wm",       "key": "", "keyColor": "@verde_neon@" },
+        { "type": "display",  "key": "", "keyColor": "@rojo_neon@", "compactType": "original-with-refresh-rate" },
+        { "type": "cpu",      "key": "", "keyColor": "@violeta@", "format": "{name}" },
+        { "type": "gpu",      "key": "", "keyColor": "@azul_electrico@", "format": "{name}", "hideType": "integrated" },
+        { "type": "memory",   "key": "", "keyColor": "@azul_neon@" },
+        { "type": "disk",     "key": "", "keyColor": "@amatista@", "folders": "/" },
+        { "type": "battery",  "key": "", "keyColor": "@verde_neon@" },
+        { "type": "uptime",   "key": "", "keyColor": "@rojo_neon@" },
+        // Los dias desde que se instalo el sistema (la fecha de creacion de /).
+        {
+            "type": "command",
+            "key": "",
+            "keyColor": "@violeta@",
+            "text": "n=$(stat -c %W /); [ \"$n\" -gt 0 ] && echo \"$(( ($(date +%s) - n) / 86400 )) días\""
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "{#@rojo_neon@}●  {#@violeta@}●  {#@azul_electrico@}●  {#@azul_neon@}●  {#@amatista@}●  {#@verde_neon@}●{#}"
+        }
+    ]
+}

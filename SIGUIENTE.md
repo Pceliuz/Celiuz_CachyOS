@@ -10,6 +10,27 @@ terminal de Celiuz Remoto (la PC en SDDM, el usuario en el trabajo).
 
 ---
 
+## 2026-10-21 (tarde, desde la laptop): el saludo de la terminal
+
+Lo pidió el usuario con capturas de la laptop. Hecho y con pruebas, **sin
+verlo en pantalla** (la sesión corría en la PC, que estaba en SDDM):
+- **Colores**: neones nuevos en la paleta (`$rojo_neon`, `$azul_electrico`,
+  `$azul_neon`, `$verde_neon`, en su sección «solo para el saludo»). El cuadro
+  se edita en `fastfetch/plantilla.jsonc` y `gen-colores.py` hace
+  `fastfetch/config.jsonc` (GENERADO). Iconos en rueda de 6 colores, texto en
+  `$luz`, porcentajes y puntos de la paleta (antes, ANSI del tema de kitty).
+- **Imagen**: `saludo.sh medidas` según la terminal al abrirse: crece hasta el
+  alto del cuadro (16 filas), centrada; si no cabe al lado, encima; si no
+  cabe ni encima, sin imagen y sin el logo de la distro.
+- **Pendiente, en la laptop**: (1) las terminales nuevas salen ENCIMA de la
+  otra en vez de partir la pantalla; no se ve la causa en el repo, se le
+  pidieron datos (`hyprctl clients`, `getoption misc:on_focus_under_fullscreen`,
+  ¿modo gaming a medias?). (2) Los iconos chicos: kitty los pinta con su
+  «Symbols Nerd Font Mono» de serie, de una celda; para que ocupen dos hace
+  falta una fuente de símbolos ancha (`symbol_map` en kitty.conf, que no es del
+  repo). (3) Las imágenes «se bugean» al redimensionar: las de kitty no se
+  recolocan con el texto; mirar los marcadores Unicode de `kitten icat`.
+
 ## 2026-10-21 (PC, desde el celular): GPU «—», vigilancia a 1 h y modo gaming
 
 **SIN COMMITEAR** y **sin reiniciar el servicio**: la sesión de Claude corría

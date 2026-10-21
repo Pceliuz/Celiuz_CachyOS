@@ -13,6 +13,10 @@
     "alerta": "#eb6f92",
     "atencion": "#f6c177",
     "exito": "#7dffb0",
+    "rojo_neon": "#ff1f4b",
+    "azul_electrico": "#2f6bff",
+    "azul_neon": "#00e5ff",
+    "verde_neon": "#39ff14",
     "glow_activo": "rgba(199, 125, 255, 0.8)",
     "halo": "rgba(106, 0, 244, 0.667)",
     "sombra": "rgba(0, 0, 0, 0.8)"
