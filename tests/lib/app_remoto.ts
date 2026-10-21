@@ -126,6 +126,10 @@ async function controlar() {
   await new Promise((r) => setTimeout(r, 1300));
   cerrar();
   comprobar('   y el estado en vivo trae la cuenta atrás', estados.some((x) => x.energia?.accion === 'apagar'), estados[0]?.energia);
+  comprobar('   y dice que la sesión está abierta (fase 5)', estados.some((x) => x.escritorio?.sesion === 'abierta'),
+            estados[0]?.escritorio);
+  const ab = await error(con.entrarEscritorio());
+  comprobar('entrarEscritorio() con la sesión abierta: «estado»', ab?.codigo === 'estado', ab?.codigo);
   comprobar('cancelarEnergia() la para', (await con.cancelarEnergia()) === true);
   comprobar('   y no queda nada que cancelar', (await con.cancelarEnergia()) === false);
   const vs = await con.ventanas();
@@ -142,6 +146,8 @@ async function sinPase() {
   const con = await c.entrar(h, equipo, clave, contrasena);
   const e = await error(con.cerrarVentana('0xaaa'));
   comprobar('sin pase, cerrar apps da «pase_vencido» (y la app enseña cómo renovarlo)', e?.codigo === 'pase_vencido', e?.codigo);
+  const en = await error(con.entrarEscritorio());
+  comprobar('sin pase, entrar desde la pantalla de inicio da «pase_vencido»', en?.codigo === 'pase_vencido', en?.codigo);
   comprobar('   pero apagar sí funciona sin pase', (await con.energia('suspender')).accion === 'suspender');
   await con.cancelarEnergia();
 }

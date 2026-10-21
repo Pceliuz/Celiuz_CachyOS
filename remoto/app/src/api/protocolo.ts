@@ -72,6 +72,15 @@ export interface Estado {
   pase_hasta: string | null;
   vigilancia: 'desarmada' | 'sin_telefonos' | 'armada' | 'avisando' | 'apagando';
   energia: EstadoEnergia | null; // una cuenta atras en marcha
+  escritorio?: Escritorio; // desde la fase 5 (un servidor viejo no lo manda)
+}
+
+// ¿Hay sesion abierta, o la PC esta en la pantalla de inicio (tras reiniciar)?
+// «no_lo_se» no es «pantalla_inicio»: con eso no se ofrece entrar.
+export interface Escritorio {
+  sesion: 'abierta' | 'pantalla_inicio' | 'no_lo_se';
+  puede_entrar: boolean; // en la pantalla de inicio y con lo de root instalado
+  motivo: string; // lo que se enseña si no se puede
 }
 
 export interface EstadoEnergia {

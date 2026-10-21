@@ -9,11 +9,62 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-10-20 (PC): Celiuz Remoto, fase 5 — tras un reinicio (SDDM)
+
+**Sin commitear** (el usuario lo sube él). Escrita y con pruebas; **falta la
+prueba de verdad**, que necesita su sudo y salir a la pantalla de inicio (eso
+cierra la sesión donde corre Claude, así que la hace él).
+
+- **Arrancar con el equipo = linger**, no una unidad de sistema: el diseño
+  pedía «siempre activo, corre como el usuario» y eso es `loginctl
+  enable-linger` (sin contraseña). Así lo que escucha por la red nunca nace de
+  root. La ventana lo enciende con el servicio y lo apaga solo si lo encendió
+  ella (`linger-nuestro`). Como el servicio ya estaba encendido de antes, en la
+  PC hay que **apagarlo y encenderlo** desde la ventana para que ponga el
+  linger.
+- **Medido**: sin sesión, polkit pide contraseña para apagar
+  (`auth_admin_keep`; con sesión, `pkcheck` desde el servicio da 0). O sea que
+  en SDDM la vigilancia no podría apagar. Por eso la regla de polkit.
+- **Lo de root** (`remoto/sistema/`, lo instala `./instalar.sh
+  --remoto-sistema`, se quita con `--remoto-sistema-quitar`): regla de polkit
+  (apagar/reiniciar/suspender sin sesión + arrancar SOLO
+  `celiuz-remoto-entrar@<usuario>.service`), esa unidad, su programa
+  (`entrar.py`, COPIADO a `/usr/local/lib/celiuz-remoto/entrar`) y un tmpfiles
+  que borra el autologin al arrancar. `entrar.py` se niega si hay una sesión en
+  seat0 (reiniciar SDDM la cerraría) o si no sabe; escribe
+  `/etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf` (User=, sin Session=),
+  reinicia SDDM, espera la sesión y lo borra. `instalar.sh` normal avisa si la
+  copia de root se queda vieja.
+- **Bloqueada al arrancar**: el servicio deja
+  `$XDG_RUNTIME_DIR/celiuz-remoto/entrar-bloqueada`; lo PRIMERO de
+  `lua/autostart.lua` es `celiuz-remoto al-entrar && lock.sh` (56 ms). Una
+  marca de más de 3 min no cuenta.
+- **Servidor**: `inicio.py`, `GET /v0/escritorio`, `POST
+  /v0/escritorio/entrar` (energía + pase + confirmar; `409 estado` si no
+  toca), `escritorio` en `/v0/vivo` y en `/control/estado` (con `linger` y
+  `sistema`). CLI: `inicio`, `entrar`, `al-entrar`; `revisar` dice lo de tras
+  reiniciar.
+- **App**: tarjeta «En la pantalla de inicio» → «Entrar» (con confirmación;
+  sin pase, lleva a renovarlo). Recompilada e instalada en el HONOR.
+- **Pruebas**: `unidad/remoto-inicio` (74: la guardia de root falla 4 si se
+  quita; la regla de polkit evaluada con Node), `e2e/remoto-inicio` (25), y
+  rondas nuevas en `e2e/remoto-app`.
+- **La prueba de verdad, en este orden**:
+  1. `./instalar.sh --remoto-sistema` (pide sudo).
+  2. En la ventana: apagar y encender el servicio (pone el linger);
+     `celiuz-remoto revisar` debe decir «sí» en las dos líneas de «Tras
+     reiniciar».
+  3. Reiniciar la PC y NO entrar. En el celular: la tarjeta «En la pantalla de
+     inicio» → Entrar. La PC tiene que abrir la sesión **ya bloqueada**, y
+     `/etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf` no tiene que existir
+     después. Si algo falla: `journalctl -u celiuz-remoto-entrar@$USER` y
+     `journalctl --user -u celiuz-remoto`.
+  4. Con la PC en SDDM, apagar desde el celular (lo que hace posible polkit).
+  5. Si SDDM se quedara con autologin: Ctrl+Alt+F2 y borrar ese fichero.
+
 ## 2026-10-20 (PC): Celiuz Remoto, fase 4 — control y vigilancia
 
-**Sin commitear** (el usuario lo sube él). Ojo: el cambio de
-`hypr/scripts/gen-colores.py` de la fase 1 nunca se subió (no estaba en los
-`git add` que se le dieron); va con este commit.
+Subida en `2aaef74`.
 
 - **Servidor**: `escritorio.py` (Hyprland vivo en caliente, ventanas, cerrar
   pidiéndolo, presencia en tres salidas), `energia.py` (cuenta atrás,
@@ -53,8 +104,7 @@ el fichero llegó a 1238 líneas).
 - **Falta de la fase 4**: el «me están apagando» del lado de Android (módulo
   nativo con `ACTION_SHUTDOWN`); el servidor ya lo acepta. Va a la fase 8 o
   cuando toque.
-- **Lo siguiente: fase 5** — tras un reinicio (servicio de sistema y autologin
-  de un solo uso).
+- **Lo siguiente: fase 5** — hecha arriba.
 
 ## 2026-10-20 (PC): Celiuz Remoto, fase 3 — la app del celular
 

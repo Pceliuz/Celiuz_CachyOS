@@ -3,7 +3,9 @@
 // sensor no hay temperatura, sin GPU dedicada no hay VRAM, sin bateria no sale.
 //
 // Apagar/reiniciar/suspender abren la hoja de confirmar (HojaEnergia); con una
-// cuenta atras en marcha, sale arriba con «Cancelar». Archivos y Terminal
+// cuenta atras en marcha, sale arriba con «Cancelar». Con la PC en la pantalla
+// de inicio (tras reiniciar), una tarjeta ofrece «Entrar»: la sesion arranca
+// bloqueada (remoto/DISEÑO.md, «Tras reiniciar»). Archivos y Terminal
 // llegan en las fases 6 y 7: en la barra de abajo, con «pronto».
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
@@ -76,6 +78,22 @@ export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase,
       Alert.alert('No se pudo cancelar', (e as ErrorRemoto).message);
     }
   }
+  const [entrando, setEntrando] = useState(false);
+
+  function entrarEscritorio() {
+    Alert.alert('¿Abrir la sesión?',
+      'La PC entra en tu sesión y la deja bloqueada: delante de ella seguirá haciendo falta tu contraseña de Linux.',
+      [{ text: 'Cancelar', style: 'cancel' },
+       { text: 'Entrar', onPress: async () => {
+         setEntrando(true);
+         try {
+           await conexion.entrarEscritorio();
+         } catch (e) {
+           setEntrando(false);
+           Alert.alert('No se pudo entrar', (e as ErrorRemoto).message);
+         }
+       } }]);
+  }
   const [estado, setEstado] = useState<Estado | null>(null);
   const [ultimo, setUltimo] = useState(0);
   const [ahora, setAhora] = useState(() => new Date());
@@ -96,6 +114,18 @@ export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase,
   }, [ultimo]);
 
   const pase = f.pase(estado?.pase_hasta ?? conexion.sesion.pase_hasta, ahora);
+  const escritorio = estado?.escritorio;
+  // «Entrando…» hasta que la sesion se abra (o, si falla, vuelva a poder entrar).
+  useEffect(() => {
+    if (escritorio?.sesion === 'abierta') setEntrando(false);
+  }, [escritorio?.sesion]);
+  // Si la PC no llega a abrirla (SDDM tardó, o el ayudante de root dijo que no:
+  // queda en su diario), a los 2 min se vuelve a ofrecer.
+  useEffect(() => {
+    if (!entrando) return;
+    const t = setTimeout(() => setEntrando(false), 120000);
+    return () => clearTimeout(t);
+  }, [entrando]);
   const gpu = estado?.gpu?.[0];
 
   return (
@@ -123,6 +153,25 @@ export default function Inicio({ conexion, datos, alSalir, alCaducar, alVerPase,
               {estado.energia.origen === 'pc' ? 'Lo pidió la vigilancia de la PC.' : `Lo pidió «${estado.energia.origen}».`}
             </Texto>
             {puedeEnergia ? <Boton texto="Cancelar" tipo="borde" alto={48} alPulsar={cancelarEnergia} /> : null}
+          </Tarjeta>
+        ) : null}
+        {escritorio?.sesion === 'pantalla_inicio' || entrando ? (
+          <Tarjeta estilo={{ gap: 10, borderColor: colores.amatista }}>
+            <Texto tipo="grande">{entrando ? 'Entrando…' : 'En la pantalla de inicio'}</Texto>
+            <Texto tipo="chico">
+              {entrando
+                ? 'La PC está abriendo tu sesión. Arranca bloqueada.'
+                : 'Nadie ha entrado desde que arrancó. Puedes abrir la sesión desde aquí: queda bloqueada.'}
+            </Texto>
+            {entrando ? null : !puedeEnergia ? (
+              <Texto tipo="chico" color={colores.tenue}>Este celular no tiene permiso de energía (se da desde la PC).</Texto>
+            ) : !escritorio?.puede_entrar ? (
+              <Texto tipo="chico" color={colores.atencion}>{escritorio?.motivo}</Texto>
+            ) : !pase.vigente ? (
+              <Boton texto="Entrar necesita el pase" tipo="borde" alto={48} alPulsar={alVerPase} />
+            ) : (
+              <Boton texto="Entrar" alto={48} alPulsar={entrarEscritorio} />
+            )}
           </Tarjeta>
         ) : null}
         <Pressable accessibilityRole="button" onPress={pase.vigente ? undefined : alVerPase}>

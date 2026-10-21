@@ -185,6 +185,15 @@ export class Conexion {
     return r.cancelada;
   }
 
+  // Con la PC en la pantalla de inicio (tras reiniciar): la PC se abre sola
+  // con un autologin de un solo uso y la sesion arranca BLOQUEADA. Pide el
+  // pase y el permiso de energia; sin pase, ErrorRemoto «pase_vencido».
+  async entrarEscritorio(): Promise<string> {
+    const r = await pedir<{ mensaje: string }>(this.h, 'POST', `${this.base}/v0/escritorio/entrar`,
+      { confirmado: true }, this.sesion.token);
+    return r.mensaje;
+  }
+
   async ventanas(): Promise<Ventana[]> {
     const r = await pedir<{ ventanas: Ventana[] }>(this.h, 'GET', `${this.base}/v0/ventanas`,
       undefined, this.sesion.token);

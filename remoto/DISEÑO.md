@@ -131,14 +131,38 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
 - El usuario quiere que el servicio **arranque solo tras un reinicio** y poder
   «entrar» a la PC desde la app aunque esté en la pantalla de inicio de sesión.
 - Por eso el servicio acaba siendo **de sistema** (siempre activo, corre como
-  el usuario), no de la sesión gráfica.
+  el usuario), no de la sesión gráfica. **Cómo se hizo (fase 5)**: con *linger*
+  (`loginctl enable-linger`), que hace arrancar el systemd del usuario con el
+  equipo. Es «siempre activo y corre como el usuario» sin una unidad de root:
+  lo que escucha por la red **nunca nace de root**. La ventana lo enciende con
+  el servicio, sin contraseña (polkit deja a cada uno su linger), y al apagar
+  el servicio lo apaga solo si lo encendió ella.
 - Con la PC en SDDM, la app ofrece «Entrar»: contraseña **de la app** + pase →
   la PC escribe un **autologin de un solo uso** (un drop-in que se borra al
   entrar) y la sesión arranca **ya bloqueada**. La contraseña de Linux nunca
   viaja.
 - Lo que se pierde: gnome-keyring / kwallet quedan cerrados hasta que alguien
   escriba la contraseña de Linux delante de la PC.
-- Hasta la fase 5 el servicio es de la sesión (`systemd --user`).
+- **Lo que pide root, y nada más** (`./instalar.sh --remoto-sistema`, aparte,
+  como el tema de SDDM; está en `sistema/`):
+  - Una **regla de polkit** con el usuario: apagar, reiniciar y suspender sin
+    sesión abierta (medido el 2026-10-20: sin sesión la regla de fábrica es
+    `auth_admin_keep`, y la vigilancia no podría apagar una PC en SDDM), y
+    arrancar **una** unidad: `celiuz-remoto-entrar@<usuario>.service`, solo
+    `start`.
+  - Esa unidad y su programa (`sistema/entrar.py`), **copiados** y de root. El
+    programa vuelve a mirar que **nadie tiene sesión en el asiento** (reiniciar
+    SDDM la cerraría), que SDDM está en su pantalla, escribe el autologin
+    (`/etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf`), reinicia SDDM, espera a
+    que aparezca la sesión y lo borra. Lo borran también la unidad al acabar y
+    tmpfiles al arrancar: un autologin olvidado sería una PC que se abre sola.
+  - La sesión arranca bloqueada porque el servicio deja una marca en
+    `$XDG_RUNTIME_DIR` y lo primero de `lua/autostart.lua` es mirarla
+    (`celiuz-remoto al-entrar`) y llamar a `lock.sh`. Una marca de más de 3 min
+    no cuenta (la entrada falló).
+- «Entrar» pide permiso de **energía** (es encender la sesión) y el **pase**.
+- En la pantalla de inicio, la presencia es «nadie» (no hay sesión): la
+  vigilancia puede apagar.
 
 ### La vigilancia escucha a Tailscale, no a la app
 - Para saber si el celular sigue vivo se mira Tailscale, no latidos de la app:
@@ -201,8 +225,10 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
    apps, y la vigilancia (con el icono de la barra: ¿activo?, ¿hay un celular?).
    Falta el «me están apagando» del lado de Android (módulo nativo,
    `ACTION_SHUTDOWN`): el servidor ya lo acepta (`/v0/latido`).
-5. **Tras un reinicio (SDDM)**: servicio de sistema y entrada de un solo uso
-   (ver «Tras reiniciar» arriba).
+5. **Tras un reinicio (SDDM)** ✅ (con pruebas; falta probarlo en la PC de
+   verdad): linger, la parte de root (`sistema/`, `instalar.sh
+   --remoto-sistema`), `/v0/escritorio` y la tarjeta «Entrar» de la app (ver
+   «Tras reiniciar» arriba).
 6. **Archivos**: explorador, descargas, recientes, favoritos.
 7. **Terminal**.
 8. **Extras**: subir archivos a la PC, escritorio remoto (`wayvnc`), encender a
@@ -220,6 +246,9 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
 | `~/.local/state/celiuz/remoto/dispositivos.json` (0600) | teléfonos: hash de su clave, hash de su contraseña, permisos, pase, último latido |
 | `~/.local/state/celiuz/remoto/historial.json` | recientes y favoritos |
 | `~/.local/state/celiuz/remoto/registro.jsonl` | qué hizo cada teléfono y cuándo |
+| `~/.local/state/celiuz/remoto/linger-nuestro` | que el linger lo encendió la ventana (y por eso lo puede apagar) |
+| `$XDG_RUNTIME_DIR/celiuz-remoto/entrar-bloqueada` | la marca de «esta sesión la abrió el celular: bloquéala» |
+| `/etc/polkit-1/rules.d/50-celiuz-remoto.rules`, `/etc/systemd/system/celiuz-remoto-entrar@.service`, `/usr/local/lib/celiuz-remoto/entrar`, `/etc/tmpfiles.d/celiuz-remoto.conf` | lo de root, copiado por `instalar.sh --remoto-sistema` |
 | `remoto/app/node_modules`, `android/`, `.expo/`, los `.apk` | lo que genera la compilación |
 
 ## Lo que necesita cada equipo
@@ -236,5 +265,5 @@ empezar la siguiente (acordado con el usuario el 2026-10-20).
 
 ## Preguntas abiertas
 
-- Cómo escribe el servicio de sistema el autologin de un solo uso en
-  `/etc/sddm.conf.d/` sin darle root al servicio entero (fase 5).
+- ~~Cómo escribe el servicio el autologin sin darle root entero~~: resuelto en
+  la fase 5 con polkit y una unidad de root de una sola cosa (arriba).

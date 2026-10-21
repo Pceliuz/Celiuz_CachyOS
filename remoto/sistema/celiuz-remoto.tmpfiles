@@ -1,0 +1,7 @@
+# remoto/sistema/celiuz-remoto.tmpfiles — va a /etc/tmpfiles.d/celiuz-remoto.conf.
+#
+# Al arrancar el equipo (systemd-tmpfiles --boot --remove, antes que SDDM) se
+# borra el autologin de un solo uso si se quedo ahi: un corte de luz justo
+# mientras se entraba lo dejaria puesto, y la PC se abriria sola en cada
+# arranque. Lo normal es que no exista y esta linea no haga nada.
+r /etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf

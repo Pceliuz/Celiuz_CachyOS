@@ -72,6 +72,7 @@ Las firmas van en base64 (64 bytes).
 | 403 | `sin_permiso` | ese teléfono no tiene activado ese módulo |
 | 404 | `no_existe` | ruta o recurso que no hay |
 | 409 | `confirmar` | acción peligrosa sin `"confirmado": true` |
+| 409 | `estado` | no toca ahora (entrar con la sesión ya abierta, o sin lo de root instalado); el `mensaje` dice por qué |
 | 423 | `pase_vencido` | lo pedido necesita el pase |
 
 Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
@@ -98,7 +99,8 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
   {"cpu": {"uso": 23, "temp": 52}, "gpu": [{"nombre": "RTX 3050", "uso": 31, "temp": 48, "vram": [1.2, 6]}],
    "ram": [8.4, 31.2], "disco": [508, 544], "red": {"bajada": 2400000, "subida": 140000},
    "bateria": null, "encendida_desde": "...", "pase_hasta": "..." | null,
-   "vigilancia": "desarmada"|"sin_telefonos"|"armada"|"avisando"|"apagando", "energia": null | {...}}
+   "vigilancia": "desarmada"|"sin_telefonos"|"armada"|"avisando"|"apagando", "energia": null | {...},
+   "escritorio": {"sesion": "abierta"|"pantalla_inicio"|"no_lo_se", "puede_entrar": false, "motivo": "..."}}
   ```
   Solo van los campos que el equipo tiene: sin sensor no hay `temp`, sin GPU
   dedicada no hay `vram`, sin batería `bateria` es `null`. Una GPU dormida (la
@@ -124,6 +126,20 @@ Un `dispositivo` desconocido (o revocado) contesta lo mismo que una firma mala
 - `DELETE /v0/energia` → `{"cancelada": true|false}`.
 - La cuenta atrás va también en cada mensaje de `/v0/vivo` (`energia`), y la
   duración se cambia en `remoto.conf` (`cuenta_atras`).
+
+### Tras reiniciar: la pantalla de inicio — permiso `energia` + **pase**
+- `GET /v0/escritorio` (permiso `estado`) → `{"sesion", "puede_entrar", "motivo"}`, lo mismo
+  que va en cada `/v0/vivo`. `abierta`: hay un Hyprland vivo. `pantalla_inicio`:
+  SDDM esperando y nadie dentro. `no_lo_se`: cualquier otra cosa (una consola,
+  una sesión que no es Hyprland, logind sin contestar), y con eso **no** se
+  ofrece entrar. `puede_entrar` es `pantalla_inicio` y con la parte de root
+  instalada en la PC (`./instalar.sh --remoto-sistema`).
+- `POST /v0/escritorio/entrar` `{"confirmado": true}` → `{"pedido": true, "mensaje"}`.
+  La PC escribe un autologin de un solo uso, reinicia SDDM, y la sesión
+  **arranca bloqueada**: delante de la PC hace falta la contraseña de Linux
+  igual. No espera a que entre (tarda lo que tarde SDDM): el celular ve el
+  cambio en `escritorio` por `/v0/vivo`. Sin pase `423`, sin confirmar `409
+  confirmar`, si no toca `409 estado`.
 
 ### Ventanas — permiso `ventanas`
 - `GET /v0/ventanas` → `{"ventanas": [{"id": "0x55d...", "app": "Brave", "titulo": "...", "escritorio": "2"}], "sesion": true}`
@@ -185,7 +201,7 @@ de la PC; nadie de fuera llega aquí.
 - `GET /control/ventana?espera=<s>` → espera a que se cierre y dice cómo:
   `{"estado": "abierta"|"hecho"|"caducada"|"cancelada", "dispositivo": "..."}`.
 - `DELETE /control/ventana` → cerrarla ya.
-- `GET /control/estado` → `{"red": "100.x.y.z:47110", "sesiones": 1, "ventana": null|"emparejar", "energia", "vigilancia"}`.
+- `GET /control/estado` → `{"red": "100.x.y.z:47110", "sesiones": 1, "ventana": null|"emparejar", "energia", "vigilancia", "escritorio", "linger": bool, "sistema": bool}`.
 - `DELETE /control/energia` → cancelar un apagado desde la PC.
 - `GET /control/vigilancia`, `POST /control/vigilancia` `{"armada": true}` →
   `{"armada", "estado", "presencia", "presencia_motivo", "telefonos": [...]}`.

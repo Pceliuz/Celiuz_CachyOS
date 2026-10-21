@@ -1,0 +1,21 @@
+# remoto/sistema/celiuz-remoto-entrar@.service — entrar como %i desde la pantalla de inicio, una vez.
+#
+# Unidad de SISTEMA (corre como root). La COPIA `./instalar.sh --remoto-sistema`
+# en /etc/systemd/system, junto con el programa (/usr/local/lib/celiuz-remoto/
+# entrar, otra copia, de root) y la regla de polkit que deja al usuario %i
+# arrancar ESTA instancia y ninguna otra. No se habilita: solo se arranca cuando
+# el celular pulsa «Entrar».
+#
+# El porque de cada paso esta en la cabecera de entrar.py.
+[Unit]
+Description=Celiuz Remoto: entrar como %i desde la pantalla de inicio (un solo uso)
+# Freno: un programa del usuario no puede reiniciar SDDM en bucle.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/celiuz-remoto/entrar %i
+# Pase lo que pase con entrar.py, el autologin de un solo uso no se queda.
+ExecStopPost=/usr/bin/rm -f /etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf
+TimeoutStartSec=150

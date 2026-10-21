@@ -68,6 +68,14 @@ def vigilancia():
     return os.path.join(estado(), "vigilancia.json")
 
 
+def entrar_bloqueada():
+    """La marca de «esta sesion la abrio el celular: bloqueala al arrancar»
+    (inicio.py la pone, lua/autostart.lua la gasta). En $XDG_RUNTIME_DIR, que
+    con linger existe desde el arranque y solo puede escribir el usuario."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    return os.path.join(runtime, "celiuz-remoto", "entrar-bloqueada")
+
+
 def control():
     """El socket de control (la CLI y la app de la PC le hablan al servicio).
 
@@ -88,4 +96,5 @@ def todas():
         "control": control(),
         "presencia": presencia(),
         "vigilancia": vigilancia(),
+        "entrar_bloqueada": entrar_bloqueada(),
     }

@@ -1,9 +1,10 @@
 # Celiuz Remoto
 
-> **En construcción.** Fases 1, 2 y 3 de 8 hechas (2026-10-20): el servidor,
-> la ventana de la PC («Celiuz Remoto» en el lanzador) y la app del celular,
-> que ya empareja, entra y enseña el estado. Falta controlar (apagar, apps),
-> los archivos y la terminal. Las fases, en [`DISEÑO.md`](DISEÑO.md#fases).
+> **En construcción.** Fases 1 a 5 de 8 hechas (2026-10-20): el servidor, la
+> ventana de la PC («Celiuz Remoto» en el lanzador), la app del celular (empareja,
+> entra, enseña el estado, apaga y cierra apps), la vigilancia, y entrar tras un
+> reinicio desde la pantalla de inicio. Faltan los archivos y la terminal. Las
+> fases, en [`DISEÑO.md`](DISEÑO.md#fases).
 
 ## Para empezar
 
@@ -11,6 +12,9 @@
 2. Abre «Celiuz Remoto» en la PC, enciende el servicio, conecta el celular por
    cable (con la «Depuración USB») e instala la app desde ahí.
 3. Crea la contraseña, elige qué puede hacer y pulsa «Emparejar».
+4. Opcional, para apagarla y entrar con la PC en la pantalla de inicio (tras un
+   reinicio): `./instalar.sh --remoto-sistema` (pide sudo; se quita con
+   `--remoto-sistema-quitar`).
 
 Una app Android para manejar tu PC o tu laptop desde cualquier sitio: ver su
 estado en tiempo real, apagarla, ver y cerrar sus apps, sacar archivos y abrir
@@ -30,6 +34,7 @@ PC, porque abrir un botón de «apagar» hacia fuera es decisión de cada uno.
 | `servidor/` | el servicio de la PC (Python) |
 | `escritorio/` | la app de la PC para emparejar, dar permisos y revocar (GTK) |
 | `app/` | la app del celular (React Native + Expo) |
+| `sistema/` | lo único que corre como root: entrar desde SDDM y la regla de polkit (se COPIA, no se ejecuta desde aquí) |
 
 ## Para desarrollar
 

@@ -9,6 +9,8 @@
 #   ./instalar.sh --dock          solo rehace el dock de esta maquina
 #   ./instalar.sh --sddm          pantalla de inicio de sesion (PIDE SUDO)
 #   ./instalar.sh --sddm-quitar   la quita y deja la de antes
+#   ./instalar.sh --remoto-sistema         Celiuz Remoto tras reiniciar (PIDE SUDO)
+#   ./instalar.sh --remoto-sistema-quitar  lo quita
 #
 # POR QUE HACE FALTA UN INSTALADOR Y NO VALEN CUATRO `ln`
 # ------------------------------------------------------
@@ -33,13 +35,17 @@ SOLO_REVISAR=0
 SOLO_DOCK=0
 SOLO_SDDM=0
 QUITAR_SDDM=0
+SOLO_REMOTO_SISTEMA=0
+QUITAR_REMOTO_SISTEMA=0
 for arg in "$@"; do
     case "$arg" in
         --revisar|-n)  SOLO_REVISAR=1 ;;
         --dock)        SOLO_DOCK=1 ;;
         --sddm)        SOLO_SDDM=1 ;;
         --sddm-quitar) QUITAR_SDDM=1 ;;
-        -h|--help)     sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+        --remoto-sistema)        SOLO_REMOTO_SISTEMA=1 ;;
+        --remoto-sistema-quitar) QUITAR_REMOTO_SISTEMA=1 ;;
+        -h|--help)     sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
         *) echo "instalar: no entiendo «$arg». Prueba --help" >&2; exit 2 ;;
     esac
 done
@@ -973,8 +979,86 @@ remoto() {
         echo "  apagado (es opcional: se enciende desde la app Celiuz Remoto)"
         [ -n "$faltan" ] && gris "    para usarlo haria falta: sudo pacman -S $faltan"
     fi
+    remoto_sistema_estado
     hacer update-desktop-database "$DATOS/applications" 2>/dev/null
     hacer gtk-update-icon-cache -f -t "$DATOS/icons/hicolor" 2>/dev/null
+}
+
+# --- 9b. Celiuz Remoto tras reiniciar (PIDE SUDO, aparte) --------------------
+#
+# Con la PC en la pantalla de inicio (tras un reinicio) el servicio, que es del
+# usuario y nunca root, no puede dos cosas: apagarla (sin sesion, polkit pide
+# contraseña) y entrar (escribir un autologin de un solo uso en
+# /etc/sddm.conf.d y reiniciar SDDM). Esto deja lo minimo para las dos, y nada
+# mas (remoto/DISEÑO.md, «Tras reiniciar»):
+#   - la regla de polkit, con TU usuario: apagar/reiniciar/suspender, y arrancar
+#     UNA unidad, celiuz-remoto-entrar@<tu usuario>.service;
+#   - esa unidad y su programa, COPIADOS y de root: si la unidad apuntara al
+#     repo, cualquier programa tuyo podria editar lo que ejecuta root;
+#   - una linea de tmpfiles que borra el autologin al arrancar, por si un corte
+#     de luz lo dejo puesto.
+# Como el tema de SDDM: opcional, y lo unico (con --sddm) que pide contraseña.
+
+RS_RAIZ="${CELIUZ_REMOTO_RAIZ_SISTEMA:-}"
+RS_PROGRAMA="$RS_RAIZ/usr/local/lib/celiuz-remoto/entrar"
+RS_UNIDAD="$RS_RAIZ/etc/systemd/system/celiuz-remoto-entrar@.service"
+RS_TMPFILES="$RS_RAIZ/etc/tmpfiles.d/celiuz-remoto.conf"
+RS_POLKIT="$RS_RAIZ/etc/polkit-1/rules.d/50-celiuz-remoto.rules"
+
+remoto_sistema_instalar() {
+    titulo "Celiuz Remoto tras reiniciar (apagar y entrar desde la pantalla de inicio)"
+    if [ "$(id -u)" -eq 0 ]; then
+        # La regla lleva TU usuario: con sudo delante, $USER seria root.
+        aviso "pásalo como tu usuario, sin sudo delante (ya lo pide él)"
+        return
+    fi
+    if ! command -v sddm >/dev/null 2>&1; then
+        aviso "SDDM no esta instalado: apagar sin sesion funcionara, entrar no"
+    fi
+    local f
+    for f in entrar.py celiuz-remoto-entrar@.service celiuz-remoto.tmpfiles celiuz-remoto.rules.in; do
+        if [ ! -f "$REPO/remoto/sistema/$f" ]; then
+            aviso "falta remoto/sistema/$f en el repo"
+            return
+        fi
+    done
+    local regla
+    regla="$(mktemp)"
+    sed "s/@USUARIO@/$USER/g" "$REPO/remoto/sistema/celiuz-remoto.rules.in" > "$regla"
+    raiz install -D -m 755 -o root -g root "$REPO/remoto/sistema/entrar.py" "$RS_PROGRAMA"
+    raiz install -D -m 644 -o root -g root "$REPO/remoto/sistema/celiuz-remoto-entrar@.service" "$RS_UNIDAD"
+    raiz install -D -m 644 -o root -g root "$REPO/remoto/sistema/celiuz-remoto.tmpfiles" "$RS_TMPFILES"
+    raiz install -D -m 644 -o root -g root "$regla" "$RS_POLKIT"
+    rm -f "$regla"
+    raiz systemctl daemon-reload
+    hecho "  puesto: polkit para $USER, la unidad celiuz-remoto-entrar@$USER y su programa"
+    gris "    se quita con: ./instalar.sh --remoto-sistema-quitar"
+    gris "    para que arranque sin entrar: enciende el servicio desde la ventana (linger)"
+}
+
+remoto_sistema_quitar() {
+    titulo "Quitar Celiuz Remoto tras reiniciar"
+    raiz rm -f "$RS_POLKIT" "$RS_UNIDAD" "$RS_TMPFILES" "$RS_PROGRAMA" \
+               "$RS_RAIZ/etc/sddm.conf.d/zz-celiuz-remoto-entrar.conf"
+    raiz rmdir "$(dirname "$RS_PROGRAMA")" 2>/dev/null
+    raiz systemctl daemon-reload
+    hecho "  quitado: sin sesion abierta ya no se puede apagar ni entrar desde el celular"
+}
+
+# En la instalacion normal: solo se dice como esta, y si la copia de root se
+# quedo vieja respecto al repo (una copia que se separa no avisa sola).
+remoto_sistema_estado() {
+    if [ ! -f "$RS_UNIDAD" ]; then
+        gris "    tras reiniciar, apagar y entrar desde SDDM: ./instalar.sh --remoto-sistema (pide sudo)"
+        return
+    fi
+    if ! cmp -s "$REPO/remoto/sistema/entrar.py" "$RS_PROGRAMA" || \
+       ! cmp -s "$REPO/remoto/sistema/celiuz-remoto-entrar@.service" "$RS_UNIDAD" || \
+       ! cmp -s "$REPO/remoto/sistema/celiuz-remoto.tmpfiles" "$RS_TMPFILES"; then
+        aviso "la parte de root de Celiuz Remoto está vieja: ./instalar.sh --remoto-sistema"
+    else
+        gris "    tras reiniciar: apagar y entrar desde SDDM, puesto"
+    fi
 }
 
 # --- Adelante ----------------------------------------------------------------
@@ -983,7 +1067,11 @@ if [ "$SOLO_REVISAR" -eq 1 ]; then
     printf '\033[1mREVISION — no se va a tocar nada\033[0m\n'
 fi
 
-if [ "$QUITAR_SDDM" -eq 1 ]; then
+if [ "$QUITAR_REMOTO_SISTEMA" -eq 1 ]; then
+    remoto_sistema_quitar
+elif [ "$SOLO_REMOTO_SISTEMA" -eq 1 ]; then
+    remoto_sistema_instalar
+elif [ "$QUITAR_SDDM" -eq 1 ]; then
     sddm_quitar
 elif [ "$SOLO_SDDM" -eq 1 ]; then
     sddm_instalar

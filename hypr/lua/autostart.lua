@@ -11,6 +11,14 @@
 local S = "$HOME/.config/hypr/scripts/"
 
 hl.on("hyprland.start", function()
+    -- LO PRIMERO: si esta sesion la abrio el celular desde la pantalla de
+    -- inicio (Celiuz Remoto, «Entrar»), se bloquea ya. Nadie tecleo la
+    -- contraseña de Linux delante de la PC, asi que no puede quedarse abierta
+    -- (remoto/DISEÑO.md, «Tras reiniciar»). La marca la deja el servicio en
+    -- $XDG_RUNTIME_DIR, se gasta al mirarla y una de mas de 3 min no cuenta.
+    -- Sin Celiuz Remoto instalado la orden no existe y no pasa nada.
+    hl.exec_cmd("$HOME/.local/bin/celiuz-remoto al-entrar 2>/dev/null && " .. S .. "lock.sh")
+
     -- Barra de estado y dock. Config en waybar/ (enlazado a ~/.config/waybar).
     -- No se lanza waybar directamente: el demonio arranca las cuatro instancias
     -- (la barra de arriba y el dock de abajo, cada una con su linea-tirador) y

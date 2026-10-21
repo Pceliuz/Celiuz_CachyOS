@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (52 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (54 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -101,7 +101,10 @@ Una app Android para manejar la PC y la laptop desde fuera (estado, apagar,
 apps, archivos, terminal). **Va por fases (8, en `remoto/DISEÑO.md`), y cada
 una se cierra probada antes de empezar la siguiente**: lo pidió el usuario.
 Hechas la 1, la 2, la 3 y la 4 (2026-10-20; la 4 trae apagar con cuenta
-atrás, ver y cerrar apps, la vigilancia y el icono de la barra): el servidor empareja por el canal USB,
+atrás, ver y cerrar apps, la vigilancia y el icono de la barra), y la 5
+escrita y con pruebas pero **sin probar en la PC de verdad** (tras reiniciar:
+linger, y lo de root en `remoto/sistema/`; la receta de la prueba está en
+`SIGUIENTE.md`): el servidor empareja por el canal USB,
 deja entrar (firma Ed25519 + contraseña scrypt, 5 intentos) y manda el estado
 en vivo; la ventana de la PC (`celiuz-remoto-config`, pantalla 9 de las
 maquetas) guía el cable, empareja, renueva, revoca y enciende el servicio; y
@@ -115,7 +118,10 @@ Native y se prueba con Node contra el servidor de verdad
 `remoto/DISEÑO.md` y el contrato con la app en `remoto/PROTOCOLO.md`: léelos
 antes de escribir nada ahí. Dos cosas que no se
 negocian: **viene apagado** (se activa a mano desde la PC) y **escucha solo por
-Tailscale**. La app se compila en la PC (nunca en la nube de Expo) y su
+Tailscale**. Y una tercera desde la fase 5: **lo que escucha por la red nunca
+corre como root**; lo poco que necesita root (`remoto/sistema/`) se COPIA a
+`/usr/local` con `./instalar.sh --remoto-sistema`, nunca se ejecuta desde el
+repo (cualquier programa tuyo podría editarlo). La app se compila en la PC (nunca en la nube de Expo) y su
 `node_modules` no se versiona.
 
 ---
@@ -174,6 +180,7 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
 | `~/.config/celiuz/remoto*` y `~/.local/state/celiuz/remoto/` | Celiuz Remoto: ajustes, clave de firma del APK, teléfonos emparejados (hashes), historial y registro |
+| `/etc/polkit-1/rules.d/50-celiuz-remoto.rules` y compañía | Celiuz Remoto tras reiniciar, con TU usuario dentro: lo copia `instalar.sh --remoto-sistema` (lista entera en `remoto/DISEÑO.md`) |
 
 **No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio
 fichero: `BASH_SOURCE` en bash, `__file__` en Python. Lo destapó una prueba: con
@@ -1290,6 +1297,15 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   todo lleva `-s <serie>`. Y el nombre de un celular no está en una sola
   propiedad: un HONOR contesta «[ ]» a `settings get global device_name` y
   tiene el suyo en `ro.config.marketing_name` (`remoto/servidor/celiuz_remoto/adb.py`).
+- **Sin sesión abierta, polkit NO deja apagar** (`auth_admin_keep`), aunque
+  con sesión sí, y desde un servicio de `systemd --user` también: polkit cae a
+  la sesión gráfica del usuario si el proceso no está en ninguna. Se mide sin
+  apagar nada con `pkcheck --action-id org.freedesktop.login1.power-off
+  --process <pid>` lanzado con `systemd-run --user`. En la pantalla de inicio
+  no hay esa sesión, y por eso Celiuz Remoto lleva su regla de polkit.
+- **Reiniciar SDDM cierra todas las sesiones que arrancó.** Lo que lo haga
+  (`remoto/sistema/entrar.py`) mira antes, como root, que no hay ninguna
+  sesión `user*` en `seat0` — y «logind no contesta» cuenta como que sí.
 - **`afirmar_contiene` usa `grep -E`**: un base64 (con `+`) o cualquier texto
   con metacaracteres no casa consigo mismo. Para buscar algo literal,
   `afirmar "..." grep -qF -- "$texto" fichero`.

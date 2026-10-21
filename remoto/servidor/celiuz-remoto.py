@@ -19,6 +19,9 @@ remoto/servidor/celiuz-remoto.py — el servicio de Celiuz Remoto.
     celiuz-remoto.py vigilancia [si|no] arma o desarma la vigilancia, o dice como esta
     celiuz-remoto.py presencia [ausente|presente]   lo apunta hypridle; sin nada, lo dice
     celiuz-remoto.py barra              el icono de waybar (JSON; vacio con el servicio apagado)
+    celiuz-remoto.py inicio             ¿sesion abierta o pantalla de inicio? ¿se puede entrar?
+    celiuz-remoto.py entrar             con la PC en SDDM: entra y la sesion arranca bloqueada
+    celiuz-remoto.py al-entrar          lo pregunta lua/autostart.lua: sale 0 si hay que bloquear
 
 Un <id> vale entero, por su principio o por el nombre del telefono. El diseño,
 en remoto/DISEÑO.md; lo que se dicen la app y el servidor, en PROTOCOLO.md.
@@ -63,10 +66,19 @@ def revisar():
     return filas, faltan
 
 
+def arranque():
+    """Lo de la fase 5, que no son paquetes: ¿arranca con el equipo? ¿se puede
+    entrar desde la pantalla de inicio? (remoto/DISEÑO.md, «Tras reiniciar»)."""
+    from celiuz_remoto import inicio
+    return {"linger": inicio.linger(), "sistema": inicio.sistema_instalado()}
+
+
 def cmd_revisar(args):
     filas, faltan = revisar()
+    tras = arranque()
     if args.json:
-        print(json.dumps({"necesidades": filas, "faltan": faltan}, ensure_ascii=False, indent=2))
+        print(json.dumps({"necesidades": filas, "faltan": faltan, "arranque": tras},
+                         ensure_ascii=False, indent=2))
     else:
         for f in filas:
             marca = "ok   " if f["hay"] else "FALTA"
@@ -75,6 +87,11 @@ def cmd_revisar(args):
             print(f"\n  Para instalarlo: sudo pacman -S {' '.join(faltan)}")
         else:
             print("\n  No falta nada.")
+        print("\n  Tras reiniciar:")
+        print("    arranca con el equipo       " + (
+            "sí (linger)" if tras["linger"] else "no: se enciende con el servicio, desde la ventana"))
+        print("    entrar desde SDDM           " + (
+            "sí" if tras["sistema"] else "no: ./instalar.sh --remoto-sistema (pide sudo)"))
     # Que falte algo no es un error de este programa: es la respuesta.
     return 0
 
@@ -412,6 +429,33 @@ def cmd_barra(args):
     return 0
 
 
+def cmd_inicio(args):
+    from celiuz_remoto import inicio
+    e = inicio.estado(fresco=True)
+    if args.json:
+        print(json.dumps(e, ensure_ascii=False, indent=2))
+    else:
+        print(f"  {e['sesion']} — {e['motivo']}")
+        print(f"  entrar desde el celular: {'sí' if e['puede_entrar'] else 'no'}")
+    return 0
+
+
+def cmd_entrar(args):
+    from celiuz_remoto import inicio, registro
+    ok, mensaje = inicio.entrar()
+    print(f"  {mensaje}", file=sys.stdout if ok else sys.stderr)
+    if ok:
+        registro.apuntar("entrar_escritorio", que="cli")
+    return 0 if ok else 1
+
+
+def cmd_al_entrar(args):
+    """0 = esta sesion la abrio el celular: bloquear. 1 = no. Barato a proposito
+    (corre al arrancar CADA sesion): solo rutas e inicio, sin red."""
+    from celiuz_remoto import inicio
+    return 0 if inicio.al_entrar() else 1
+
+
 def cmd_registro(args):
     from celiuz_remoto import registro
     for linea in registro.ultimas(args.n):
@@ -489,6 +533,16 @@ def main(argv=None):
     s = sub.add_parser("presencia", help="lo apunta hypridle")
     s.add_argument("estado", nargs="?", choices=["ausente", "presente"])
     s.set_defaults(func=cmd_presencia)
+
+    s = sub.add_parser("inicio", help="¿sesion abierta o pantalla de inicio?")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_inicio)
+
+    s = sub.add_parser("entrar", help="con la PC en SDDM: entra, y la sesion arranca bloqueada")
+    s.set_defaults(func=cmd_entrar)
+
+    s = sub.add_parser("al-entrar", help="lo pregunta el arranque de la sesion")
+    s.set_defaults(func=cmd_al_entrar)
 
     s = sub.add_parser("registro", help="lo ultimo que paso")
     s.add_argument("-n", type=int, default=30)

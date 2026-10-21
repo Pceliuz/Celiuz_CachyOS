@@ -77,6 +77,16 @@ def senal_telefono(f):
 MOTIVOS = {"contrasena": "contraseña incorrecta", "bloqueado": "bloqueado por intentos"}
 
 
+def tras_reiniciar(linger, sistema):
+    """Una linea para la tarjeta del servicio: que pasa si la PC se reinicia
+    (fase 5, remoto/DISEÑO.md «Tras reiniciar»)."""
+    if not linger:
+        return "Tras reiniciar no arranca hasta que entres (apágalo y enciéndelo para arreglarlo)."
+    if not sistema:
+        return "Arranca con el equipo. Entrar desde la pantalla de inicio: falta ./instalar.sh --remoto-sistema."
+    return "Arranca con el equipo, y se puede entrar desde la pantalla de inicio."
+
+
 def leer_fecha(texto):
     if not texto:
         return None

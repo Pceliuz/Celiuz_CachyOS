@@ -1,0 +1,43 @@
+// remoto/sistema/celiuz-remoto.rules.in — lo que polkit le deja hacer a Celiuz Remoto.
+//
+// `./instalar.sh --remoto-sistema` cambia @USUARIO@ por tu usuario y lo deja en
+// /etc/polkit-1/rules.d/50-celiuz-remoto.rules. El servicio de Celiuz Remoto es
+// del usuario (systemd --user con linger, NUNCA root: es lo que escucha por la
+// red) y hay dos cosas que sin sesion abierta no puede hacer:
+//
+// 1. APAGAR, REINICIAR Y SUSPENDER. Con una sesion activa polkit lo deja sin
+//    preguntar; en la pantalla de inicio (tras reiniciar) no hay sesion, la
+//    regla de fabrica es auth_admin_keep y systemctl falla sin decir nada al
+//    celular. Y justo ahi es cuando la vigilancia tiene que poder apagar.
+//    Medido el 2026-10-20 con pkcheck desde el servicio. Los -multiple-sessions
+//    hacen falta porque el greeter de SDDM es otra sesion (la del usuario sddm).
+//    Los inhibidores se siguen respetando (no va -ignore-inhibit).
+//
+// 2. ARRANCAR celiuz-remoto-entrar@@USUARIO@.service, y solo esa: ni otra
+//    instancia (entrar como otro), ni otro verbo (stop, enable...). Es la que
+//    escribe el autologin de un solo uso (remoto/sistema/entrar.py).
+//
+// Se quita con:  ./instalar.sh --remoto-sistema-quitar
+
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "@USUARIO@") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var energia = [
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.suspend",
+        "org.freedesktop.login1.suspend-multiple-sessions"
+    ];
+    if (energia.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+    if (action.id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "celiuz-remoto-entrar@@USUARIO@.service" &&
+        action.lookup("verb") === "start") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

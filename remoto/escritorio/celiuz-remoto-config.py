@@ -36,7 +36,7 @@ sys.path.insert(0, AQUI)
 sys.path.insert(0, os.path.join(REMOTO, "servidor"))
 
 import celiuz_remoto  # noqa: E402  (pone hypr/scripts/lib en el path)
-from celiuz_remoto import adb, ajustes, cable, control, dispositivos, pase, registro, rutas  # noqa: E402
+from celiuz_remoto import adb, ajustes, cable, control, dispositivos, inicio, pase, registro, rutas  # noqa: E402
 
 import estilo  # noqa: E402
 import textos  # noqa: E402
@@ -79,7 +79,7 @@ def estado_servicio(con_vigilancia=False):
             pass
     detalle = props.get("SubState", "")
     return {"instalado": instalado, "activo": activo, "red": red,
-            "energia": energia,
+            "energia": energia, "linger": inicio.linger(), "sistema": inicio.sistema_instalado(),
             **({"vigilancia": vigilancia} if con_vigilancia or not activo else {}),
             "reintentando": props.get("ActiveState") == "activating" or detalle == "auto-restart"}
 
@@ -681,7 +681,7 @@ class Ventana(Gtk.Window):
         elif s["activo"] and s["red"]:
             self.servicio_txt.set_text("Activo · solo Tailscale")
             ctx.add_class("ok")
-            self.servicio_det.set_text(s["red"])
+            self.servicio_det.set_text(f"{s['red']}\n{textos.tras_reiniciar(s['linger'], s['sistema'])}")
             self.servicio_btn.set_label("Apagar el servicio")
             self.servicio_btn.get_style_context().add_class("peligro")
             self.servicio_btn.set_sensitive(True)
@@ -727,6 +727,12 @@ class Ventana(Gtk.Window):
 
         def hilo():
             codigo, salida = _systemctl("enable" if encender else "disable", "--now", UNIDAD)
+            if codigo == 0:
+                # Con linger arranca con el equipo, sin esperar a que entres
+                # (fase 5: «Tras reiniciar»). Si falla, el servicio va igual.
+                ok, por_que = inicio.poner_linger(encender)
+                if not ok:
+                    GLib.idle_add(self.op, f"No arrancará solo tras reiniciar: {por_que}", "error")
             GLib.idle_add(fin, codigo, salida)
 
         def fin(codigo, salida):

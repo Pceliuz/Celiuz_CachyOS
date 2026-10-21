@@ -25,7 +25,7 @@ import time
 
 from aiohttp import WSCloseCode, web
 
-from . import VERSION_PROTOCOLO, ajustes, dispositivos as dsp, escritorio, pase, red, registro, rutas
+from . import VERSION_PROTOCOLO, ajustes, dispositivos as dsp, escritorio, inicio, pase, red, registro, rutas
 from .energia import ACCIONES, Energia
 from .vigilancia import CADA as VIGILANCIA_CADA, Vigilancia
 from .sesion import FIRMA_MALA, Rechazo, Sesiones, firma_buena, texto_firmado
@@ -196,6 +196,7 @@ class Servicio:
         ws = web.WebSocketResponse(heartbeat=30)
         await ws.prepare(peticion)
         lector = asyncio.ensure_future(ws.receive())   # para enterarse de que cierra
+        loop = asyncio.get_running_loop()
         try:
             while not ws.closed:
                 disp = self.sesiones.quien(token)
@@ -205,7 +206,8 @@ class Servicio:
                 muestra = dict(self._muestrear(),
                                pase_hasta=disp["pase_hasta"] if pase.vigente(disp) else None,
                                vigilancia=self.vigilancia.estado,
-                               energia=self.energia.estado())
+                               energia=self.energia.estado(),
+                               escritorio=await loop.run_in_executor(None, inicio.estado))
                 await ws.send_json(muestra)
                 hecho, _ = await asyncio.wait({lector}, timeout=VIVO_CADA)
                 if hecho:
@@ -253,6 +255,29 @@ class Servicio:
             raise _rechazo(404, "no_existe", "Esa ventana ya no está abierta.")
         registro.apuntar("ventana_cerrada", disp["id"], ventana=ident)
         return web.json_response({"pedido": True})
+
+    # --- tras un reinicio: la pantalla de inicio (fase 5) ---
+
+    async def v0_escritorio(self, peticion):
+        self._telefono(peticion, "estado")
+        return web.json_response(await asyncio.get_running_loop().run_in_executor(
+            None, inicio.estado))
+
+    async def v0_entrar_escritorio(self, peticion):
+        """Con la PC en SDDM: autologin de un solo uso y la sesion arranca
+        bloqueada. Permiso de energia (es encender la sesion, como encender la
+        PC) y con PASE: es lo que mas se parece a sentarse delante."""
+        _, disp = self._telefono(peticion, "energia")
+        self._pase(disp)
+        d = await _cuerpo(peticion)
+        if d.get("confirmado") is not True:
+            raise _rechazo(409, "confirmar", "Falta confirmarlo.")
+        ok, mensaje = await asyncio.get_running_loop().run_in_executor(None, inicio.entrar)
+        if not ok:
+            registro.apuntar("entrar_escritorio_mal", disp["id"], motivo=mensaje)
+            raise _rechazo(409, "estado", f"No puedo entrar: {mensaje}.")
+        registro.apuntar("entrar_escritorio", disp["id"])
+        return web.json_response({"pedido": True, "mensaje": mensaje})
 
     async def v0_latido(self, peticion):
         """«Me estan apagando» (y de paso, una señal). Sin sesion: lo manda un
@@ -464,6 +489,9 @@ class Servicio:
             "equipo": self.equipo(),
             "energia": self.energia.estado(),
             "vigilancia": self.vigilancia.estado,
+            "escritorio": inicio.estado(),
+            "linger": inicio.linger(),
+            "sistema": inicio.sistema_instalado(),
         })
 
     def _apagar_desde_hilo(self):
@@ -494,6 +522,8 @@ class Servicio:
             web.get("/v0/ventanas", self.v0_ventanas),
             web.post("/v0/ventanas/{id}/cerrar", self.v0_cerrar_ventana),
             web.post("/v0/latido", self.v0_latido),
+            web.get("/v0/escritorio", self.v0_escritorio),
+            web.post("/v0/escritorio/entrar", self.v0_entrar_escritorio),
         ])
         return app
 
