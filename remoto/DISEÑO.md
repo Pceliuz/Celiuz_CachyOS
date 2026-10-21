@@ -123,9 +123,10 @@ notificación con **cuenta atrás de 60 s** que se puede cancelar desde ella.
   - **si la PC está en el modo gaming, tampoco se apaga** (lo pidió el
     usuario, 2026-10-21): jugando no mira el celular ni las notificaciones, y
     apagarle la PC a media partida es peor que el riesgo. Solo avisa («tu
-    celular dejó de dar señales mientras jugabas»), y el aviso sale al salir
-    del modo, que tiene puesto el «no molestar». En el modo normal sigue la
-    regla de la persona delante;
+    celular dejó de dar señales mientras jugabas»): se ve aunque el modo tenga
+    puesto el «no molestar», sin sonido, y se va solo a los 8 s (la categoría
+    `de-paso` de mako/config; lo pidió así el usuario). En el modo normal
+    sigue la regla de la persona delante;
   - si no hay nadie, **se apaga**. Una descarga o un render en marcha NO cuentan
     como persona: si te roban el celular, la PC no debe quedarse encendida
     porque estaba bajando algo.

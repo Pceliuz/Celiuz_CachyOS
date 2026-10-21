@@ -135,3 +135,15 @@ on-notify=none
 # secciones de arriba: en mako gana la ultima que casa.
 [mode=no-molestar category=osd]
 invisible=0
+
+# Avisos «de paso» (categoria `de-paso`): se ven, no suenan y se van solos a
+# los 8 s, TAMBIEN en «no molestar». Los usa Celiuz Remoto cuando el celular
+# deja de dar señales en pleno modo gaming (que pone «no molestar»): el
+# usuario pidió que aparezca y se vaya, sin sonido, sin pararle la partida.
+# No llevan urgencia critica, que aqui arriba se queda hasta cerrarla.
+[category=de-paso]
+default-timeout=8000
+on-notify=none
+
+[mode=no-molestar category=de-paso]
+invisible=0

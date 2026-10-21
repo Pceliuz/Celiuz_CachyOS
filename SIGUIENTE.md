@@ -27,8 +27,9 @@ para que valga lo de abajo.
 - **Vigilancia en el modo gaming: avisa y NO apaga** (estado `jugando`), le
   quita el pase igual. `escritorio.modo_gaming()` pregunta a
   `modo-gaming.py estado` (no copia la ruta; la prueba usa el script de
-  verdad). Ojo: el modo gaming pone mako en «no molestar», así que el aviso
-  sale al SALIR del modo. Preguntado al usuario si lo quiere visible jugando.
+  verdad). El aviso va con la categoría `de-paso` de mako: se ve aunque el
+  modo gaming tenga «no molestar», sin sonido, y se va a los 8 s (lo eligió
+  el usuario). Hace falta recargar mako (`makoctl reload`) para verlo.
 - **RAM, medido**: el servidor son ~80 MB; el 1,5 GB que da systemd es caché
   de disco (~1 GB, se reclama) más la propia sesión de Claude y sus MCP. En el
   arranque anterior los picos fueron: kitty-2776 9,8 GB (compilar el APK /

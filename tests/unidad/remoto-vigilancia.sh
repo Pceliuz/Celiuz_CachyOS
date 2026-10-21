@@ -78,9 +78,10 @@ apagados, avisos = [], []
 estado_red = {"aparatos": en_linea}
 quien = {"v": ("nadie", "nadie delante")}
 jugando = {"v": False}
+avisos_de_paso = []
 v = vg.Vigilancia(alm, lambda: apagados.append(1), lambda t, c: avisos.append(c),
                   aparatos=lambda: estado_red["aparatos"], presencia=lambda: quien["v"], reloj=reloj,
-                  jugando=lambda: jugando["v"])
+                  jugando=lambda: jugando["v"], avisar_jugando=lambda t, c: avisos_de_paso.append(c))
 comprobar("viene desarmada", v.vuelta() == "desarmada" and not apagados)
 v.armar(True)
 comprobar("armada y el celular en línea: vigila", v.estado == "armada")
@@ -103,7 +104,9 @@ quien["v"] = ("nadie", "sin teclado ni ratón")
 jugando["v"] = True
 comprobar("en el MODO GAMING, aunque hypridle diga «nadie» (se juega con mando): no apaga, avisa",
           v.vuelta() == "jugando" and not apagados, (v.estado, apagados))
-comprobar("   el aviso dice que es por el modo gaming", "modo gaming" in avisos[-1], avisos[-1])
+comprobar("   el aviso dice que es por el modo gaming, y va por el aviso «de paso» (se ve y se va)",
+          avisos_de_paso and "modo gaming" in avisos_de_paso[-1] and not any("modo gaming" in a for a in avisos),
+          (avisos_de_paso, avisos))
 comprobar("   y le quita el pase igual", not pase.vigente(alm.uno(d["id"])))
 alm.cambiar(d["id"], pase_hasta=pase.renovado(), ultima_senal=reloj.t - H - 60)
 jugando["v"] = None
@@ -204,6 +207,24 @@ afirmar_contiene "$REPO/hypr/hypridle.conf" "on-resume = \\\$HOME/.local/bin/cel
     "   y la vuelta"
 afirmar_igual "300" "$(grep -B2 'presencia ausente' "$REPO/hypr/hypridle.conf" | sed -n 's/.*timeout = \([0-9]*\).*/\1/p')" \
     "   a los 300 s, el mismo número que PRESENCIA_S"
+
+titulo "3. Jugando, el aviso se ve, no suena y se va (mako/config)"
+MAKO="$REPO/mako/config"
+linea() { grep -nxF -- "$1" "$MAKO" | head -1 | cut -d: -f1; }
+NM="$(linea "[mode=no-molestar]")"; DP="$(linea "[mode=no-molestar category=de-paso]")"
+afirmar "la sección «de paso» en «no molestar» existe y va DESPUÉS (en mako gana la última)" \
+    test -n "$NM" -a -n "$DP" -a "${DP:-0}" -gt "${NM:-0}"
+afirmar "   y la hace visible" sh -c "sed -n '$((DP+1))p' '$MAKO' | grep -qx 'invisible=0'"
+afirmar "«de paso» no suena y se va sola" sh -c \
+    "sed -n '/^\[category=de-paso\]/,/^\[/p' '$MAKO' | grep -qx 'on-notify=none' &&
+     sed -n '/^\[category=de-paso\]/,/^\[/p' '$MAKO' | grep -qE '^default-timeout=[1-9]'"
+afirmar "el servidor lo manda con esa categoría y sin urgencia crítica" python3 - "$SERV" <<'FINPY'
+import inspect, sys
+sys.path.insert(0, sys.argv[1])
+from celiuz_remoto import servidor
+f = inspect.getsource(servidor.avisar_de_paso_en_la_pc)
+assert '"-c", "de-paso"' in f and "critical" not in f, f
+FINPY
 
 afirmar_intacta_la_casa_real
 resumen

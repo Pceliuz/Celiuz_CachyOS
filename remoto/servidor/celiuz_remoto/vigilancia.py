@@ -128,7 +128,7 @@ def decidir(telefonos, aparatos, ahora):
 class Vigilancia:
     def __init__(self, almacen, apagar, avisar, aparatos=preguntar_tailscale,
                  presencia=escritorio.presencia, reloj=time.time, sondear=sondear_tailscale,
-                 jugando=escritorio.modo_gaming):
+                 jugando=escritorio.modo_gaming, avisar_jugando=None):
         """`apagar()` empieza la cuenta atras de apagado. La vuelta corre en un
         hilo (llama a tailscale), y la cuenta es una tarea de asyncio: quien la
         da se encarga de pasarla al bucle (call_soon_threadsafe)."""
@@ -140,6 +140,9 @@ class Vigilancia:
         self.reloj = reloj
         self.sondear = sondear
         self.jugando = jugando
+        # Jugando, el aviso se ve aunque haya «no molestar», sin sonido, y se
+        # va solo (lo pidió el usuario): no el critico, que se queda.
+        self.avisar_jugando = avisar_jugando or avisar
         self._sondeado = {}       # ip -> cuando se le pregunto por ultima vez
         self.estado = "desarmada"
         self.ultima_vuelta = None
@@ -192,8 +195,8 @@ class Vigilancia:
             lista = ", ".join(nombres[i] for i in callados)
             if self.jugando():
                 registro.apuntar("vigilancia_avisa", quien="jugando", motivo="modo gaming")
-                self.avisar("Celiuz Remoto: tu celular no da señales",
-                            f"{lista} lleva más de {TEXTO_MARGEN} sin dar señales mientras "
+                self.avisar_jugando("Celiuz Remoto: tu celular no da señales",
+                                    f"{lista} lleva más de {TEXTO_MARGEN} sin dar señales mientras "
                             "jugabas. No apago la PC porque estás en el modo gaming. Le "
                             "quité el pase: dale una revisada cuando puedas.")
                 self.estado = "jugando"

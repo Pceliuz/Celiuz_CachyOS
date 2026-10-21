@@ -59,6 +59,17 @@ def avisar_normal_en_la_pc(titulo, cuerpo):
                              stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def avisar_de_paso_en_la_pc(titulo, cuerpo):
+    """Un aviso que se ve aunque haya «no molestar», sin sonido, y que se va
+    solo (la categoria `de-paso` de mako/config). Para el modo gaming."""
+    print(f"celiuz-remoto: {titulo}: {cuerpo}", file=sys.stderr)
+    if shutil.which("notify-send"):
+        with contextlib.suppress(OSError):
+            subprocess.Popen(["notify-send", "-a", "Celiuz Remoto", "-c", "de-paso", titulo, cuerpo],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+
+
 def _rechazo(http, error, mensaje, **extra):
     return Rechazo(http, error, mensaje, **extra)
 
@@ -126,7 +137,8 @@ class Servicio:
         self.avisar = avisar
         self.sesiones = Sesiones(self.almacen, avisar=avisar, caducidad=self.valores["sesion"])
         self.energia = Energia(self.valores["cuenta_atras"], avisar)
-        self.vigilancia = Vigilancia(self.almacen, self._apagar_desde_hilo, avisar)
+        self.vigilancia = Vigilancia(self.almacen, self._apagar_desde_hilo, avisar,
+                                     avisar_jugando=avisar_de_paso_en_la_pc)
         self._bucle = None
         self.muestreador = muestreador
         self._muestra = (0.0, None)
