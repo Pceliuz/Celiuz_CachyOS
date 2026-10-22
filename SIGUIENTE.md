@@ -52,6 +52,15 @@ recolocaban; y las imágenes del saludo salían montadas sobre el texto.
   reservaba 46 columnas a los datos y a media pantalla hay 67 (medido). Ahora
   42 (lo más ancho son 40) y márgenes de 1 y 3: imagen 21x10 al lado. El
   usuario aprobó 1, 3-4, 5-8 y 9+ terminales tal como quedaron.
+- **Wifi y Bluetooth sin cortes, en el repo** (`sistema/radio/`, `./instalar.sh
+  --radio`, pide sudo): los arreglos de la laptop (rtw88 sin ahorro, del
+  2026-10-21; btusb sin suspensión automática, de hoy) eran ficheros sueltos en
+  `/etc` y a quien usa el repo le pasa lo mismo. Se instala solo lo que el
+  equipo tiene (rtw88 → PCI con controlador `rtw88_*`; btusb → interfaz USB
+  atada a `btusb`), y la instalación normal avisa si falta. **La laptop tenía
+  además `/etc/udev/rules.d/50-bt-sin-ahorro.rules`** (de 0bda:c024, hecha a
+  mano hoy): sobra con `--radio` y se puede borrar. Pendiente: confirmar con
+  los auriculares que ya no se cortan; si siguen, el wifi a 40 MHz en 2,4 GHz.
 - **9 escritorios** (eran 7): `lua/keybinds.lua`, `persistent-workspaces` de
   waybar y `ATAJOS_ESCRITORIO` de `modo-gaming.py`. Los `.conf` del puente siguen
   con 7 (congelados), y `tests/herramientas/comparar.py` también: al comparar

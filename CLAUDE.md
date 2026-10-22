@@ -180,6 +180,7 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
 | `~/.config/celiuz/remoto*` y `~/.local/state/celiuz/remoto/` | Celiuz Remoto: ajustes, clave de firma del APK, teléfonos emparejados (hashes), historial y registro |
+| `/etc/modprobe.d/{rtw88,btusb}-sin-ahorro.conf` y `/etc/NetworkManager/conf.d/wifi-sin-ahorro.conf` | wifi rtw88 y Bluetooth USB sin ahorro de energía (cortes): los COPIA `instalar.sh --radio` desde `sistema/radio/`, solo lo que el equipo tiene; la instalación normal avisa si falta (`tests/unidad/radio.sh`) |
 | `/etc/polkit-1/rules.d/50-celiuz-remoto.rules` y compañía | Celiuz Remoto tras reiniciar, con TU usuario dentro: lo copia `instalar.sh --remoto-sistema` (lista entera en `remoto/DISEÑO.md`) |
 
 **No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio

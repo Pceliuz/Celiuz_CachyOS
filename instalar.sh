@@ -12,6 +12,8 @@
 #   ./instalar.sh --remoto-sistema         Celiuz Remoto tras reiniciar (PIDE SUDO)
 #   ./instalar.sh --remoto-sistema-quitar  lo quita
 #   ./instalar.sh --remoto-todo   TODO lo de Celiuz Remoto de una vez (PIDE SUDO)
+#   ./instalar.sh --radio         wifi y Bluetooth sin cortes, si tu equipo lo necesita (PIDE SUDO)
+#   ./instalar.sh --radio-quitar  lo quita
 #
 # POR QUE HACE FALTA UN INSTALADOR Y NO VALEN CUATRO `ln`
 # ------------------------------------------------------
@@ -39,6 +41,8 @@ QUITAR_SDDM=0
 SOLO_REMOTO_SISTEMA=0
 QUITAR_REMOTO_SISTEMA=0
 SOLO_REMOTO_TODO=0
+SOLO_RADIO=0
+QUITAR_RADIO=0
 for arg in "$@"; do
     case "$arg" in
         --revisar|-n)  SOLO_REVISAR=1 ;;
@@ -48,7 +52,9 @@ for arg in "$@"; do
         --remoto-sistema)        SOLO_REMOTO_SISTEMA=1 ;;
         --remoto-sistema-quitar) QUITAR_REMOTO_SISTEMA=1 ;;
         --remoto-todo)           SOLO_REMOTO_TODO=1 ;;
-        -h|--help)     sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+        --radio)                 SOLO_RADIO=1 ;;
+        --radio-quitar)          QUITAR_RADIO=1 ;;
+        -h|--help)     sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
         *) echo "instalar: no entiendo «$arg». Prueba --help" >&2; exit 2 ;;
     esac
 done
@@ -1206,13 +1212,123 @@ remoto_todo() {
     echo "  2. abre «Celiuz Remoto», enciende el servicio y conecta el celular por cable"
 }
 
+# --- 9d. Wifi y Bluetooth sin cortes (PIDE SUDO, aparte) --------------------
+#
+# Dos arreglos de ahorro de energia que no son de este repo sino del HARDWARE,
+# y por eso viven en /etc y se COPIAN (los de sistema/radio/):
+#   - wifi Realtek de controlador rtw88 (RTL8821CE y familia): se atascaba al
+#     salir del ahorro de energia, con cortes de segundos (2026-10-21);
+#   - Bluetooth USB: con la suspension automatica, unos auriculares se cortaban
+#     a ratos (2026-10-22). En esa laptop el Bluetooth es el mismo chip.
+# Solo se instala lo que el equipo tiene: el ahorro del wifi apagado no le
+# hace falta a una tarjeta que no se atasca, y en un portatil gasta bateria.
+# Lo que se mira (en caliente, cada vez):
+#   rtw88 → algun dispositivo PCI con un controlador rtw88_*
+#   btusb → alguna interfaz USB atada al controlador btusb
+# Un equipo sin nada de eso: no se instala nada y no se avisa.
+RADIO_RAIZ="${CELIUZ_RADIO_RAIZ:-}"            # para las pruebas: /etc de mentira
+RADIO_SYS="${CELIUZ_RADIO_SYS:-/sys}"          # y un /sys de mentira
+RADIO_DIR="$REPO/sistema/radio"
+# fichero del repo → donde va
+radio_destinos() {
+    local que="$1"
+    case "$que" in
+        rtw88) printf '%s\n' \
+            "rtw88-sin-ahorro.conf $RADIO_RAIZ/etc/modprobe.d/rtw88-sin-ahorro.conf" \
+            "wifi-sin-ahorro.conf $RADIO_RAIZ/etc/NetworkManager/conf.d/wifi-sin-ahorro.conf" ;;
+        btusb) printf '%s\n' \
+            "btusb-sin-ahorro.conf $RADIO_RAIZ/etc/modprobe.d/btusb-sin-ahorro.conf" ;;
+    esac
+}
+
+# radio_necesita → «rtw88», «btusb», las dos (una por linea) o nada.
+radio_necesita() {
+    local d
+    for d in "$RADIO_SYS"/bus/pci/drivers/rtw88_*/; do
+        compgen -G "${d}0000:*" >/dev/null && { echo rtw88; break; }
+    done
+    compgen -G "$RADIO_SYS/bus/usb/drivers/btusb/*:*" >/dev/null && echo btusb
+    return 0
+}
+
+radio_instalar() {
+    titulo "Wifi y Bluetooth sin cortes"
+    local que lineas origen destino alguno=0
+    for que in $(radio_necesita); do
+        alguno=1
+        while read -r origen destino; do
+            raiz install -D -m 644 -o root -g root "$RADIO_DIR/$origen" "$destino"
+            hecho "  puesto: $destino"
+        done < <(radio_destinos "$que")
+        case "$que" in
+            rtw88)
+                # El ahorro de NetworkManager vale desde la siguiente conexion;
+                # el del controlador, al reiniciar (no se recarga el modulo: te
+                # quedarias sin red a media instalacion).
+                raiz nmcli general reload conf 2>/dev/null
+                gris "    wifi: el del controlador hace efecto al reiniciar" ;;
+            btusb)
+                # El modulo ya cargado lo lee al reiniciar; mientras, se despierta
+                # a mano cada adaptador (lo que la opcion hara sola despues).
+                local intf disp
+                for intf in "$RADIO_SYS"/bus/usb/drivers/btusb/*:*; do
+                    disp="$(dirname "$(readlink -f "$intf")")"
+                    [ -e "$disp/power/control" ] && echo on | raiz tee "$disp/power/control" >/dev/null
+                done
+                gris "    Bluetooth: despierto ya, y asi seguira al reiniciar" ;;
+        esac
+    done
+    [ "$alguno" -eq 1 ] || gris "  este equipo no tiene ni wifi rtw88 ni Bluetooth USB: nada que poner"
+    gris "    se quita con: ./instalar.sh --radio-quitar"
+}
+
+radio_quitar() {
+    titulo "Quitar los arreglos del wifi y el Bluetooth"
+    local que origen destino
+    for que in rtw88 btusb; do
+        while read -r origen destino; do
+            [ -e "$destino" ] && raiz rm -f "$destino" && hecho "  quitado: $destino"
+        done < <(radio_destinos "$que")
+    done
+    gris "    vuelve el ahorro de energia al reiniciar"
+}
+
+# En la instalacion normal: solo se dice como esta. Un fichero de /etc que no
+# es igual al del repo cuenta como no puesto (una copia que se separa no avisa).
+radio_estado() {
+    titulo "9b. Wifi y Bluetooth"
+    local que origen destino falta
+    local hay
+    hay="$(radio_necesita)"
+    if [ -z "$hay" ]; then
+        gris "  ni wifi rtw88 ni Bluetooth USB: nada que arreglar"
+        return
+    fi
+    for que in $hay; do
+        falta=0
+        while read -r origen destino; do
+            cmp -s "$RADIO_DIR/$origen" "$destino" || falta=1
+        done < <(radio_destinos "$que")
+        case "$que" in
+            rtw88) [ "$falta" -eq 0 ] && gris "  wifi rtw88: sin ahorro de energia, puesto" \
+                   || aviso "el wifi (rtw88) se corta con el ahorro de energia: ./instalar.sh --radio (pide sudo)" ;;
+            btusb) [ "$falta" -eq 0 ] && gris "  Bluetooth USB: sin suspension automatica, puesto" \
+                   || aviso "el Bluetooth corta los auriculares con la suspension automatica: ./instalar.sh --radio (pide sudo)" ;;
+        esac
+    done
+}
+
 # --- Adelante ----------------------------------------------------------------
 
 if [ "$SOLO_REVISAR" -eq 1 ]; then
     printf '\033[1mREVISION — no se va a tocar nada\033[0m\n'
 fi
 
-if [ "$SOLO_REMOTO_TODO" -eq 1 ]; then
+if [ "$SOLO_RADIO" -eq 1 ]; then
+    radio_instalar
+elif [ "$QUITAR_RADIO" -eq 1 ]; then
+    radio_quitar
+elif [ "$SOLO_REMOTO_TODO" -eq 1 ]; then
     remoto_todo
 elif [ "$QUITAR_REMOTO_SISTEMA" -eq 1 ]; then
     remoto_sistema_quitar
@@ -1236,6 +1352,7 @@ else
     pantalla
     sddm_estado
     remoto
+    radio_estado
     recargar_sesion
 fi
 

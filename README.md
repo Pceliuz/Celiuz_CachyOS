@@ -178,7 +178,16 @@ git clone https://github.com/Pceliuz/Celiuz_CachyOS.git ~/dotfiles
 cd ~/dotfiles
 ./instalar.sh
 ./instalar.sh --remoto-todo   # solo si vas a usar Celiuz Remoto (pide sudo)
+./instalar.sh --radio         # si el instalador te avisa de cortes de wifi o Bluetooth (pide sudo)
 ```
+
+> **Wifi y Bluetooth que se cortan**: algunos equipos los cortan por el ahorro
+> de energía —el wifi Realtek de controlador `rtw88` (RTL8821CE y familia), y
+> los Bluetooth USB, que dejan a los auriculares cortándose a ratos—. El
+> `./instalar.sh` de siempre mira qué tiene tu equipo y te avisa;
+> `./instalar.sh --radio` pone en `/etc` solo lo que tu equipo necesita (los
+> ficheros, en `sistema/radio/`), y `--radio-quitar` lo quita. Hace efecto del
+> todo al reiniciar.
 
 > **Celiuz Remoto (manejar el equipo desde el celular)**: el `./instalar.sh` de
 > siempre lo deja puesto pero sin sus dependencias. Antes de abrir la app,
@@ -2057,6 +2066,7 @@ No se editan a mano; los escribe un script y llevan cabecera avisándolo:
 | `hypr/conf/colores-pango.conf` | `hypr/scripts/gen-colores.py` |
 | `/var/lib/sddm-celiuz/fondo.{mp4,jpg}` | `hypr/scripts/sddm-fondo.sh`, solo, al cambiar de fondo |
 | `/etc/sddm.conf.d/10-celiuz.conf` | `instalar.sh --sddm` |
+| `/etc/modprobe.d/{rtw88,btusb}-sin-ahorro.conf`, `/etc/NetworkManager/conf.d/wifi-sin-ahorro.conf` | `instalar.sh --radio` (copias de `sistema/radio/`, solo lo que el equipo tiene) |
 | `~/.cache/celiuzpaper/lock-fondo.conf` | `hypr/scripts/lock.sh` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` (desde `lib/pantalla.py`) |
 | `hypr/lua/local.lua` | `instalar.sh` |
