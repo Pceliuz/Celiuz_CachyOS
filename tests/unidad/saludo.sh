@@ -94,21 +94,105 @@ fi
 
 titulo "5b. La imagen sigue al tamaño de la terminal (2026-10-21)"
 medidas() { bash "$SCRIPT" --medidas "$1" "$2"; }
-afirmar_igual "32 16 24 1 left" "$(medidas 36 130)" "la laptop a pantalla completa: grande, al lado y centrada"
-afirmar_igual "24 12 3 3 left" "$(medidas 24 80)" "una de 80x24: mas chica, centrada en vertical contra los datos"
-afirmar_igual "32 16 74 1 left" "$(medidas 60 230)" "una enorme: hasta el alto del cuadro, no mas"
+afirmar_igual "32 16 26 1 left" "$(medidas 36 130)" "la laptop a pantalla completa: grande, al lado y centrada"
+afirmar_igual "24 12 5 3 left" "$(medidas 24 80)" "una de 80x24: mas chica, centrada en vertical contra los datos"
+afirmar_igual "32 16 76 1 left" "$(medidas 60 230)" "una enorme: hasta el alto del cuadro, no mas"
 afirmar_igual "left" "$(medidas 38 82 | cut -d' ' -f5)" "si al lado no cabe entera, mas chica pero al lado"
-afirmar_igual "top" "$(medidas 20 60 | cut -d' ' -f5)" "una partida en mosaico: la imagen ENCIMA, no pisando los datos"
-afirmar_igual "24 12 3 3 left" "$(medidas x '')" "algo que no es un numero: como 80x24, sin reventar"
+afirmar_igual "top" "$(medidas 40 60 | cut -d' ' -f5)" "estrecha pero alta: la imagen ENCIMA, no pisando los datos"
+# 2026-10-22: con los datos partidos en dos lineas el saludo crecia el doble y
+# se llevaba la imagen por arriba. Si no caben imagen, datos y prompt: la
+# imagen sola, y que quepa entera con el prompt debajo.
+afirmar_igual "28 14 4 1 solo" "$(medidas 18 36)" "tres terminales en fila en la laptop: la imagen sola, centrada"
+afirmar_igual "solo" "$(medidas 18 60 | cut -d' ' -f5)" "estrecha y baja: la imagen sola, no encima de unos datos que no caben"
+afirmar_igual "solo" "$(medidas 12 100 | cut -d' ' -f5)" "ancha pero muy baja: tampoco al lado"
+afirmar_igual "left" "$(medidas 18 74 | cut -d' ' -f5)" "media pantalla de la laptop (18 filas): al lado, como antes"
+# Dos terminales lado a lado en la laptop: 34x67 (medido). Con el cuadro de
+# datos reservando 46 columnas la imagen iba encima; el usuario la queria al
+# lado, como con una sola (2026-10-22).
+afirmar_igual "21 10 1 4 left" "$(medidas 34 67)" "dos terminales lado a lado en la laptop: la imagen al lado"
+afirmar_igual "solo" "$(medidas 15 67 | cut -d' ' -f5)" "cuatro (15 filas): la imagen sola, como se aprobo"
+for t in "18 36" "12 100" "25 40" "18 60" "30 50"; do
+    read -r ancho alto izq arriba pos <<< "$(medidas $t)"
+    read -r f c <<< "$t"
+    afirmar "$t: la imagen sola cabe entera, a lo ancho y con el prompt debajo" \
+        test "$pos" != solo -o \( $(( arriba + alto + 2 )) -le "$f" -a $(( izq + ancho )) -le "$c" \)
+done
+afirmar_igual "24 12 5 3 left" "$(medidas x '')" "algo que no es un numero: como 80x24, sin reventar"
 : > "$REGISTRO/fastfetch.log"
 KITTY_WINDOW_ID=1 LINES=36 COLUMNS=130 "$SCRIPT" > /dev/null
 afirmar "se lo pasa a fastfetch (ancho, alto, sitio)" grep -q -- \
-    "--logo-position left --logo-width 32 --logo-height 16 .*--logo-padding-left 24 --logo-padding-top 1" \
+    "--logo-position left --logo-width 32 --logo-height 16 .*--logo-padding-left 26 --logo-padding-top 1" \
     "$REGISTRO/fastfetch.log"
 : > "$REGISTRO/fastfetch.log"
-KITTY_WINDOW_ID=1 LINES=6 COLUMNS=30 "$SCRIPT" > /dev/null
-afirmar "tan pequeña que no cabe: solo los datos, sin el logo de la distro" \
+KITTY_WINDOW_ID=1 LINES=6 COLUMNS=60 "$SCRIPT" > /dev/null
+afirmar "tan pequeña que no cabe la imagen: solo los datos, sin el logo de la distro" \
     grep -qx -- "--logo-type none" "$REGISTRO/fastfetch.log"
+: > "$REGISTRO/fastfetch.log"
+KITTY_WINDOW_ID=1 LINES=5 COLUMNS=30 "$SCRIPT" > /dev/null
+afirmar_igual "" "$(ultima)" "y si tampoco caben los datos a lo ancho: nada"
+: > "$REGISTRO/fastfetch.log"
+KITTY_WINDOW_ID=1 LINES=18 COLUMNS=36 "$SCRIPT" > /dev/null
+afirmar "la imagen sola: fastfetch sin datos, con tantas lineas vacias como alto" \
+    grep -q -- "--logo-position left .*-s break\(:break\)\{14\}$" "$REGISTRO/fastfetch.log"
+
+titulo "5c2. El cuadro de datos de verdad cabe en lo que se le reserva"
+# ANCHO_DATOS de saludo.sh es una reserva escrita a mano; si un dato crece (un
+# disco en TiB, una CPU de nombre largo) y no cabe, las lineas se parten y la
+# imagen se descoloca. Se mide el fastfetch de ESTE equipo con la config del
+# repo: el icono cuenta dos celdas (kitty/celiuz-iconos.py).
+if command -v fastfetch >/dev/null 2>&1 && [ -x /usr/bin/fastfetch ]; then
+    reserva="$(sed -n 's/^ANCHO_DATOS=//p' "$REPO/hypr/scripts/saludo.sh")"
+    ancho="$(/usr/bin/fastfetch -c "$REPO/fastfetch/config.jsonc" --pipe -l none 2>/dev/null \
+        | awk '{ n = length($0) + 1; if (n > m) m = n } END { print m + 0 }')"
+    afirmar "el dato mas ancho de este equipo ($ancho columnas) cabe en la reserva ($reserva)" \
+        test "$ancho" -gt 0 -a "$ancho" -le "$reserva"
+else
+    _gris "  (sin fastfetch en el equipo: se salta)"
+fi
+
+titulo "5d. Mide la terminal DE VERDAD, no 80x24 (2026-10-22)"
+# La medida iba dentro de un $(...), donde la salida es una tuberia: `[ -t 1 ]`
+# daba siempre falso y todo salia como en 80x24. Se pinta en un pty de verdad
+# (script) con un tamaño puesto, y SIN LINES ni COLUMNS que lo salven.
+if command -v script >/dev/null 2>&1; then
+    : > "$REGISTRO/fastfetch.log"
+    env -u LINES -u COLUMNS KITTY_WINDOW_ID=1 script -qec \
+        "stty rows 18 cols 36; '$SCRIPT'" /dev/null > /dev/null 2>&1
+    afirmar "en un pty de 18x36 sale la imagen sola, no el 24x80 de reserva" \
+        grep -q -- "--logo-width 28 --logo-height 14" "$REGISTRO/fastfetch.log"
+else
+    _gris "  (sin script de util-linux: se salta)"
+fi
+
+titulo "5e. En fish se redibuja al cambiar de tamaño, hasta el primer comando"
+# celiuz-saludo --fish deja en la shell la imagen elegida y un manejador; aqui
+# se ejecuta en un fish de verdad con un celiuz-saludo de mentira, y se mira
+# a quien llama y con que.
+if command -v fish >/dev/null 2>&1; then
+    rm -f "$IMAGENES"/*
+    python3 -c "open('$IMAGENES/it\'s ñ (1).png','wb').write(b'x')"
+    KITTY_WINDOW_ID=1 "$SCRIPT" --fish > "$TMP/saludo.fish"
+    binario_falso celiuz-saludo 0
+    binario_falso clear 0
+    salida="$(fish --no-config -c "
+        set -g COLUMNS 80; set -g LINES 24
+        source '$TMP/saludo.fish'
+        set COLUMNS 40          # la terminal se encoge: redibuja
+        set LINES 24            # mismo tamaño que ya pinto: nada
+        emit fish_preexec       # el primer comando
+        set COLUMNS 30          # desde aqui la pantalla es del usuario
+        functions -q __celiuz_saludo_ajustar; and echo sigue-el-manejador
+    " 2>&1 >/dev/null)"
+    # (commandline se queja fuera de una shell interactiva: es lo esperado aqui)
+    afirmar_igual "" "$(grep -v 'commandline' <<< "$salida")" "fish lo carga y lo corre sin un error"
+    imagen="$IMAGENES/it's ñ (1).png"
+    afirmar_igual "$imagen|$imagen" "$(paste -sd'|' "$REGISTRO/celiuz-saludo.log")" \
+        "dos dibujos, el de abrir y uno al encogerse, con la MISMA imagen (aunque lleve comilla y tilde)"
+    afirmar_igual "1" "$(veces_llamado clear)" "borra la pantalla solo al redibujar"
+    rm -f "$IMAGENES"/*
+else
+    _gris "  (sin fish en el equipo: se salta)"
+fi
 
 titulo "5c. Los colores salen de la paleta, y los iconos siguen ahi"
 afirmar "config.jsonc esta al dia con la plantilla y la paleta" \
@@ -142,10 +226,14 @@ cargar() {
 }
 binario_falso fish 0
 ( cargar; saludo_fish; saludo_fish )
-afirmar_igual "1" "$(grep -c '^function fish_greeting; celiuz-saludo; end$' "$conf")" \
+afirmar_igual "1" "$(grep -c '^function fish_greeting; celiuz-saludo --fish | source; end$' "$conf")" \
     "dos pasadas dejan UNA linea"
 afirmar_igual "source /usr/share/cachyos-fish-config/cachyos-config.fish" "$(head -n1 "$conf")" \
     "lo que habia sigue delante"
+printf 'source x\n# celiuz-saludo (lo puso instalar.sh; borra estas dos lineas para quitarlo)\nfunction fish_greeting; celiuz-saludo; end\nset -g y 1\n' > "$conf"
+( cargar; saludo_fish )
+afirmar_igual "source x|# celiuz-saludo (lo puso instalar.sh; borra estas dos lineas para quitarlo)|function fish_greeting; celiuz-saludo --fish | source; end|set -g y 1" \
+    "$(paste -sd'|' "$conf")" "la linea vieja se pone al dia en su sitio, sin tocar lo demas"
 printf 'function fish_greeting\n    echo hola\nend\n' > "$conf"
 ( cargar; saludo_fish )
 afirmar_igual "0" "$(grep -c celiuz-saludo "$conf")" "un fish_greeting propio no se toca"

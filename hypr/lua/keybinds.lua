@@ -254,10 +254,12 @@ exec("", "XF86AudioPrev", "playerctl previous", bloqueada)
 exec("", "XF86AudioStop", "playerctl stop", bloqueada)
 
 -- --- Workspaces ---
--- Cambiar de workspace (1-7), y SHIFT para mover alli la ventana activa. Son los
--- mismos 7 que la barra dibuja siempre (persistent-workspaces en
--- waybar/config.jsonc): si cambias uno, cambia el otro.
-for i = 1, 7 do
+-- Cambiar de workspace (1-9), y SHIFT para mover alli la ventana activa. Son los
+-- mismos 9 que la barra dibuja siempre (persistent-workspaces en
+-- waybar/config.jsonc): si cambias uno, cambia el otro. Y tambien
+-- ATAJOS_ESCRITORIO de scripts/modo-gaming.py, que los reescribe en el modo.
+-- (Eran 7 hasta el 2026-10-22: el usuario necesito mas.)
+for i = 1, 9 do
     accion(mainMod, tostring(i), hl.dsp.focus({ workspace = i }), "ir al escritorio " .. i)
     accion(mainMod .. " SHIFT", tostring(i), hl.dsp.window.move({ workspace = i }),
            "mover la ventana al escritorio " .. i)
@@ -268,7 +270,7 @@ end
 -- abajo te dice cuales hay. El escritorio cambia de verdad a cada salto (es una
 -- previsualizacion como la de CeliuzPaper con los fondos), y al soltar SUPER te
 -- quedas donde estabas mirando. Escape te devuelve al de partida.
---   SUPER+1..7  — "quiero abrir algo ahi". Saltas a ciegas, y esta bien asi.
+--   SUPER+1..9  — "quiero abrir algo ahi". Saltas a ciegas, y esta bien asi.
 --   SUPER+TAB   — "quiero volver a lo que tengo abierto", pero no te acuerdas
 --                 de en cual escritorio lo dejaste. Lo ves y lo eliges.
 --

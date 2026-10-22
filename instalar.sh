@@ -265,6 +265,8 @@ desplegar() {
 # porque fish lo lee ANTES que config.fish). Si el usuario ya tiene su propio
 # fish_greeting escrito ahi, no se toca. Bash y zsh: README.
 SALUDO_MARCA="# celiuz-saludo (lo puso instalar.sh; borra estas dos lineas para quitarlo)"
+SALUDO_LINEA="function fish_greeting; celiuz-saludo --fish | source; end"
+SALUDO_VIEJA="function fish_greeting; celiuz-saludo; end"
 saludo_fish() {
     titulo "2b. El saludo de la terminal"
     local fotos
@@ -276,7 +278,17 @@ saludo_fish() {
     fi
     command -v fish >/dev/null 2>&1 || { gris "  sin fish: nada que enganchar"; return 0; }
     local conf="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
-    if [ -f "$conf" ] && grep -qF "celiuz-saludo" "$conf"; then
+    # La linea de antes del 2026-10-22 llamaba a `celiuz-saludo` a secas; la de
+    # ahora deja ademas que fish lo redibuje al cambiar de tamaño la terminal
+    # (ver saludo.sh). Solo se cambia NUESTRA linea, tal cual la escribimos.
+    if [ -f "$conf" ] && grep -qx "$SALUDO_VIEJA" "$conf"; then
+        if [ "$SOLO_REVISAR" -eq 1 ]; then
+            gris "  (haria) poner al dia la linea del saludo en $conf"
+        else
+            sed -i "s/^${SALUDO_VIEJA}\$/${SALUDO_LINEA}/" "$conf"
+            hecho "  linea del saludo al dia en $conf"
+        fi
+    elif [ -f "$conf" ] && grep -qF "celiuz-saludo" "$conf"; then
         gris "  ya enganchado en $conf"
     elif [ -f "$conf" ] && grep -qE '^[[:space:]]*function[[:space:]]+fish_greeting' "$conf"; then
         gris "  tienes tu propio fish_greeting en $conf: no lo toco"
@@ -285,9 +297,39 @@ saludo_fish() {
             gris "  (haria) añadir el saludo al final de $conf"
         else
             mkdir -p "$(dirname "$conf")"
-            printf '\n%s\nfunction fish_greeting; celiuz-saludo; end\n' "$SALUDO_MARCA" >> "$conf"
+            printf '\n%s\n%s\n' "$SALUDO_MARCA" "$SALUDO_LINEA" >> "$conf"
             hecho "  enganchado en $conf"
         fi
+    fi
+}
+
+# kitty_iconos — los iconos de Nerd Font a su tamaño en kitty (2026-10-22).
+# Como config.fish, kitty.conf es del usuario: se enlaza el script al lado y
+# se le AÑADE una linea marcada, una vez. El script elige la fuente cada vez
+# que arranca kitty (ver kitty/celiuz-iconos.py).
+KITTY_MARCA="# celiuz-iconos (lo puso instalar.sh; borra estas dos lineas para quitarlo)"
+KITTY_LINEA="geninclude celiuz-iconos.py"
+kitty_iconos() {
+    titulo "2c. Los iconos de la terminal (kitty)"
+    command -v kitty >/dev/null 2>&1 || { gris "  sin kitty: nada que hacer"; return 0; }
+    local dir="${XDG_CONFIG_HOME:-$HOME/.config}/kitty"
+    local conf="$dir/kitty.conf" fuente
+    hacer mkdir -p "$dir"
+    enlazar "$REPO/kitty/celiuz-iconos.py" "$dir/celiuz-iconos.py"
+    if [ -f "$conf" ] && grep -qxF "$KITTY_LINEA" "$conf"; then
+        gris "  ya enganchado en $conf"
+    elif [ "$SOLO_REVISAR" -eq 1 ]; then
+        gris "  (haria) añadir los iconos al final de $conf"
+    else
+        printf '\n%s\n%s\n' "$KITTY_MARCA" "$KITTY_LINEA" >> "$conf"
+        hecho "  enganchado en $conf (las terminales nuevas)"
+    fi
+    fuente="$("$REPO/kitty/celiuz-iconos.py" | awk '{ $1 = $2 = ""; sub(/^ +/, ""); print }')"
+    if [ -n "$fuente" ]; then
+        gris "    los iconos, de: $fuente"
+    else
+        aviso "no hay una Nerd Font normal (no Mono): los iconos se quedan pequeños"
+        gris "    sudo pacman -S ttf-nerd-fonts-symbols"
     fi
 }
 
@@ -1186,6 +1228,7 @@ else
     comprobar_dependencias
     desplegar
     saludo_fish
+    kitty_iconos
     celiuzpaper
     dock
     maquina_local

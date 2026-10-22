@@ -5,10 +5,57 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-10-21** (mañana), en la **PC**, manejada desde la
-terminal de Celiuz Remoto (la PC en SDDM, el usuario en el trabajo).
+Última sesión: **2026-10-22**, en la **laptop**.
 
 ---
+
+## 2026-10-22 (laptop): ventanas que tapaban en vez de repartirse, y el saludo roto
+
+Lo que vio el usuario: abrir una app o una terminal con otra ya abierta las
+**superponía** en vez de partir el escritorio, y solo al cerrar alguna se
+recolocaban; y las imágenes del saludo salían montadas sobre el texto.
+
+- **Las ventanas**: no era Hyprland ni el repo, era **kitty 0.49** (llegó el
+  2026-10-06). Recuerda si su última ventana estaba maximizada
+  (`~/.cache/kitty/main.json`, `"window-state": "maximized"`) y lo PIDE en
+  cada terminal nueva; Hyprland le hace caso (`fullscreen: 1` en `hyprctl
+  clients`) y lo que se abre después queda debajo. Medido: kitty se maximizaba
+  sola en un escritorio vacío; alacritty y la calculadora, no. Arreglo:
+  `suppress_event = "maximize"` para todas las clases en `lua/windowrules.lua`
+  (la misma regla que trae la config de ejemplo de Hyprland). Se les quitó el
+  maximizado a mano a las terminales que ya lo tenían.
+  **El usuario habló de «SUPER+B» para elegir qué app va a pantalla completa:
+  en el repo no hay NINGÚN atajo de pantalla completa ni de maximizar**
+  (SUPER+B es fuzzel). Falta preguntarle si quiere uno.
+- **El saludo**: tres fallos juntos.
+  1. `tamano_terminal` miraba `[ -t 1 ]` dentro de un `$(...)` (una tubería),
+     así que **nunca midió la terminal**: todo salía como en 80x24 desde el
+     2026-10-21. Ahora rellena variables.
+  2. Se dibujaba una vez; al cambiar la terminal de tamaño (abrir otra al lado,
+     o kitty naciendo con el tamaño de su última ventana) el texto se
+     recolocaba y la imagen no. Ahora fish lo redibuja con la MISMA imagen
+     hasta el primer comando (`celiuz-saludo --fish | source`; `instalar.sh`
+     cambia la línea vieja de `config.fish`).
+  3. En una terminal estrecha (tres en fila: 36 columnas) el cuadro de datos
+     se partía en dos líneas y se llevaba la imagen. Ahora sale la imagen sola
+     si no caben imagen + datos + prompt.
+  Visto en anidado con 1, 2 y 3 terminales. **Falta verlo en la sesión real**
+  (con el `window_padding_width 25` y la opacidad del kitty.conf del usuario).
+- **Los iconos del saludo, más grandes** (lo pidió el usuario): salían de la
+  variante «Mono» de la Nerd Font, que los encoge a una celda. Ahora kitty los
+  coge de la normal (`symbol_map`), que los dibuja casi el doble, en dos
+  celdas. Lo pone `kitty/celiuz-iconos.py` vía `geninclude` en `kitty.conf`
+  (la fuente se elige al abrir cada kitty, ~60 ms); la línea la añade
+  `instalar.sh`. Más grandes ya no pueden ser sin ocupar dos filas cada uno.
+  Sin los separadores de powerline, para no descuadrar un prompt.
+- **Dos terminales lado a lado**: la imagen iba encima porque el saludo
+  reservaba 46 columnas a los datos y a media pantalla hay 67 (medido). Ahora
+  42 (lo más ancho son 40) y márgenes de 1 y 3: imagen 21x10 al lado. El
+  usuario aprobó 1, 3-4, 5-8 y 9+ terminales tal como quedaron.
+- **9 escritorios** (eran 7): `lua/keybinds.lua`, `persistent-workspaces` de
+  waybar y `ATAJOS_ESCRITORIO` de `modo-gaming.py`. Los `.conf` del puente siguen
+  con 7 (congelados), y `tests/herramientas/comparar.py` también: al comparar
+  conf contra lua saldrán SUPER+8/9 de diferencia, y es a propósito.
 
 ## 2026-10-21 (noche, PC): el «modo mando» de la pantalla remota
 

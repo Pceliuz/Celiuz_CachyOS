@@ -27,7 +27,7 @@ lo que vayas a escribir tú.
 | GPU | **NVIDIA RTX 3050 6 GB** (GA107) | — |
 | Pantalla | HDMI-A-1, 1920x1080 **@100 Hz**, escala 1 | + televisor a la derecha, escala 1.5 |
 | Teclado | `us,latam`, perfil «sin-altgr» (Ctrl derecho hace de AltGr) | el suyo |
-| Atajos | **62** (61 del repo + `SUPER+A` suyo, de `personal.lua`) | 66 |
+| Atajos | **66** (65 del repo + `SUPER+A` suyo, de `personal.lua`; 9 escritorios desde el 2026-10-22) | 70 |
 
 ## El estado, en cuatro frases
 
@@ -169,6 +169,7 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.local/state/celiuz/bluetooth.json` | cuándo se usó cada auricular y a cuáles bloqueó el cerrojo de `bluetooth.py` |
 | `~/.cache/celiuz/saludo/` | las copias adaptadas de esas imágenes (clave: tamaño + fecha + ruta) |
 | la línea `celiuz-saludo` al final de `~/.config/fish/config.fish` | el `fish_greeting`; `instalar.sh` la añade una vez y no toca un saludo propio |
+| la línea `geninclude celiuz-iconos.py` al final de `~/.config/kitty/kitty.conf` | los iconos de Nerd Font de la variante normal, no la Mono que los encoge (`kitty/celiuz-iconos.py`, que elige la fuente al abrir cada kitty) |
 | `~/.config/celiuz/clima.conf` | `ubicacion` (auto / zona / fija), `clima = no`, `signo` del panel del reloj |
 | `~/.cache/celiuz/ubicacion.json`, `clima.json` | la ÚLTIMA ciudad (redondeada, 0600, sin historial) y el tiempo de hace menos de 15 min |
 | `~/.config/celiuz/bluetooth.conf` | `cerrojo` y `auto` del demonio; lo escriben también los interruptores del panel (`Ajustes.guardar`, que respeta lo escrito a mano) |
@@ -1363,6 +1364,24 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
 - **`afirmar_contiene` usa `grep -E`**: un base64 (con `+`) o cualquier texto
   con metacaracteres no casa consigo mismo. Para buscar algo literal,
   `afirmar "..." grep -qF -- "$texto" fichero`.
+- **Una app puede PEDIR que la maximicen, y Hyprland le hace caso.** kitty
+  0.49 recuerda si su última ventana estaba maximizada y lo pide en cada
+  terminal nueva: la nueva tapaba todo (`fullscreen: 1`) y las siguientes
+  quedaban debajo, a medio mosaico. Por eso `lua/windowrules.lua` lleva
+  `suppress_event = "maximize"` para todas las clases; lo vigila
+  `unidad/config-lua`. Si una ventana «no se reparte», mira su `fullscreen`
+  en `hyprctl clients` antes de sospechar del layout.
+- **`[ -t 1 ]` dentro de un `$(...)` es SIEMPRE falso**: ahí la salida es una
+  tubería. El saludo medía así la terminal y estuvo un día entero dibujando
+  como en 80x24 con las pruebas en verde (le daban LINES/COLUMNS). Lo que
+  pregunte por la terminal, que no vaya en una sustitución; y la prueba, en un
+  pty de verdad (`script -qec "stty rows 18 cols 36; ..."`).
+- **`fastfetch -s ""` NO quita los datos**: lo ignora y saca la estructura de
+  siempre. Para la imagen sola, líneas vacías (`-s break:break:...`), tantas
+  como alto tenga, o el cursor acaba dentro de la imagen.
+- **Lo que un manejador de fish pinta delante del prompt**: al repintar, fish
+  sube desde el cursor las líneas del prompt menos una. Hay que dejarle ese
+  hueco o se come la última fila de lo pintado (`saludo.sh`, `--fish`).
 
 ## Las pruebas
 

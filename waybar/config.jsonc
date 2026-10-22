@@ -75,8 +75,8 @@
     // --- CENTRO --- (el bloque "clock" esta al final del archivo)
 
     "hyprland/workspaces": {
-        // Muestra siempre 1-7 aunque esten vacios (coinciden con tus binds SUPER+1..7).
-        "persistent-workspaces": { "*": 7 },
+        // Muestra siempre 1-9 aunque esten vacios (coinciden con tus binds SUPER+1..9).
+        "persistent-workspaces": { "*": 9 },
         // Sin numero: los workspaces son puntos, y el de encima una pastilla.
         // La etiqueta se deja VACIA a proposito y toda la forma la pone
         // style.css sobre el fondo del boton. Ojo, que el numero sigue

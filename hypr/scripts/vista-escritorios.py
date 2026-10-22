@@ -16,7 +16,7 @@ sentido al gesto.
 
 Los escritorios vacios no salen: para abrir algo nuevo en el 5 estan los
 SUPER+numero de siempre, que no cambian. Son dos gestos distintos:
-    SUPER+1..7  — "quiero ABRIR X ahi". Saltas a ciegas, y esta bien asi.
+    SUPER+1..9  — "quiero ABRIR X ahi". Saltas a ciegas, y esta bien asi.
     SUPER+TAB   — "quiero VOLVER a lo que tengo abierto", pero no te acuerdas de
                   en cual lo dejaste. Lo ves y lo eliges.
 

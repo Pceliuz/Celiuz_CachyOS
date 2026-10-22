@@ -7,6 +7,22 @@
 --     local r = hl.window_rule({ ... })   -- aqui
 --     r:set_enabled(false)                -- o guardar la referencia
 
+-- --- Ninguna app se maximiza sola ---
+-- Una app puede PEDIR que la maximicen al abrirse, y Hyprland le hace caso: la
+-- pone encima de todo el escritorio (en `hyprctl clients`, "fullscreen": 1) y
+-- las que se abren después quedan debajo, a medio mosaico y tapadas. Pasó con
+-- kitty 0.49 (2026-10-22): recuerda si su última ventana estaba maximizada
+-- (`~/.cache/kitty/main.json`, "window-state") y lo pide en cada terminal nueva,
+-- así que una sola vez maximizada bastaba para que ninguna volviera a repartirse
+-- el escritorio. Se ignora la petición de TODAS: es el mosaico el que decide.
+-- Hyprland trae esta misma regla en su config de ejemplo. Maximizar a mano
+-- (`hl.dsp.window.fullscreen`) no es una petición de la app y sigue funcionando.
+hl.window_rule({
+    name  = "sin-maximizar-solas",
+    match = { class = ".*" },
+    suppress_event = "maximize",
+})
+
 -- --- Terminales de consulta rapida (btop, nmtui) ---
 -- Flotantes y centradas: son ventanas para mirar un momento y cerrar. Si
 -- entraran en el mosaico le robarian la mitad de la pantalla a lo que estuvieras

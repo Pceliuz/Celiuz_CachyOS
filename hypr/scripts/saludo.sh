@@ -34,7 +34,10 @@
 #     ALTO_DATOS filas), y si es mas baja se centra en vertical contra el;
 #   - imagen y datos van centrados en horizontal;
 #   - si al lado no caben (una terminal partida en mosaico), la imagen va
-#     ENCIMA de los datos, mas pequeña, en vez de pisarlos.
+#     ENCIMA de los datos, mas pequeña, en vez de pisarlos;
+#   - y si tampoco caben imagen, datos y prompt sin desplazar la terminal, la
+#     imagen SOLA (2026-10-22).
+# En fish, ademas, se redibuja al cambiar de tamaño (ver fish_snippet).
 # Una celda de kitty es el doble de alta que de ancha: una caja de 2N x N
 # celdas es cuadrada, y la imagen se ajusta dentro sin deformarse.
 
@@ -93,8 +96,15 @@ CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/celiuz/saludo"
 # Lo que ocupa el cuadro de datos de fastfetch/plantilla.jsonc: 14 datos, dos
 # saltos y los puntos (uno menos sin GPU dedicada o sin bateria), y de ancho el
 # icono, el separador y el dato mas largo («75.55 GiB / 927.51 GiB (8%) - btrfs»).
+# Ese dato con su icono (dos celdas desde kitty/celiuz-iconos.py) y el
+# separador son 40 columnas; 42 deja margen para un dato algo mas largo en otro
+# equipo. Era 46, y por esas 4 de mas una terminal a media pantalla de la
+# laptop (67 columnas) ponia la imagen encima en vez de al lado (2026-10-22).
+# tests/unidad/saludo.sh mide el fastfetch de verdad contra este numero.
 ALTO_DATOS=16
-ANCHO_DATOS=46
+ANCHO_DATOS=42
+# El prompt de fish de CachyOS: la carpeta y la flecha.
+ALTO_PROMPT=2
 
 # medidas FILAS COLUMNAS → «ancho alto izquierda arriba posicion» de la imagen,
 # en celdas; posicion es left (al lado) o top (encima). Ancho 0: sin imagen.
@@ -108,42 +118,64 @@ medidas() {
     [ "$alto" -ge 8 ] || alto=8
     ancho=$(( alto * 2 ))
     # Si al lado no cabe entera, mas pequeña pero al lado, mientras se vea.
-    if [ $(( ancho + 6 + ANCHO_DATOS )) -gt "$cols" ]; then
-        ancho=$(( cols - 6 - ANCHO_DATOS ))
+    if [ $(( ancho + 4 + ANCHO_DATOS )) -gt "$cols" ]; then
+        ancho=$(( cols - 4 - ANCHO_DATOS ))
         alto=$(( ancho / 2 ))
     fi
-    if [ "$ancho" -ge 16 ]; then
+    # Y con alto para los datos: mas bajita, se desplazaria y se llevaria la
+    # imagen (con 18 filas, media pantalla de la laptop, sobra una: vale).
+    if [ "$ancho" -ge 16 ] && [ "$filas" -ge "$ALTO_DATOS" ]; then
         # Al lado. Centrado: lo que sobra, a partes iguales a cada lado.
-        izq=$(( (cols - ancho - 4 - ANCHO_DATOS) / 2 ))
-        [ "$izq" -ge 2 ] || izq=2
+        izq=$(( (cols - ancho - 3 - ANCHO_DATOS) / 2 ))
+        [ "$izq" -ge 1 ] || izq=1
         arriba=$(( 1 + (ALTO_DATOS - alto) / 2 ))
         echo "$ancho $alto $izq $arriba left"
         return
     fi
-    # No cabe al lado: encima, y mas pequeña (que se vean los datos sin
-    # desplazar la terminal).
-    alto=$(( filas / 2 ))
-    [ "$alto" -le 10 ] || alto=10
+    # No cabe al lado: encima, y mas pequeña, SOLO si caben la imagen, los
+    # datos y el prompt sin desplazar la terminal. Si no, la imagen sola
+    # (2026-10-22): un cuadro de datos mas ancho que la terminal parte cada
+    # linea en dos, el saludo crece el doble de alto y se lleva la imagen por
+    # arriba (tres terminales en fila en la laptop son 36 columnas).
+    if [ "$cols" -ge $(( ANCHO_DATOS + 2 )) ]; then
+        alto=$(( filas - ALTO_DATOS - 1 - ALTO_PROMPT - 1 ))
+        [ "$alto" -le 10 ] || alto=10
+        ancho=$(( alto * 2 ))
+        [ "$ancho" -le $(( cols - 4 )) ] || { ancho=$(( cols - 4 )); alto=$(( ancho / 2 )); }
+        if [ "$alto" -ge 4 ]; then
+            izq=$(( (cols - ancho) / 2 ))
+            echo "$ancho $alto $izq 1 top"
+            return
+        fi
+    fi
+    # La imagen sola, centrada, tan grande como quepa (hasta el alto de antes).
+    alto=$(( filas - ALTO_PROMPT - 2 ))
+    [ "$alto" -le "$ALTO_DATOS" ] || alto=$ALTO_DATOS
     ancho=$(( alto * 2 ))
     [ "$ancho" -le $(( cols - 4 )) ] || { ancho=$(( cols - 4 )); alto=$(( ancho / 2 )); }
-    if [ "$alto" -lt 4 ]; then
+    if [ "$alto" -lt 3 ]; then
         echo "0 0 0 0 none"
         return
     fi
     izq=$(( (cols - ancho) / 2 ))
-    [ "$izq" -ge 1 ] || izq=1
-    echo "$ancho $alto $izq 1 top"
+    echo "$ancho $alto $izq 1 solo"
 }
 
-# tamano_terminal → «FILAS COLUMNAS» de la terminal donde se abre el saludo.
+# tamano_terminal → deja en FILAS y COLS el tamaño de la terminal donde se
+# abre el saludo. Solo se le pregunta a la terminal si se pinta en una de
+# verdad (en una prueba, con la salida a un fichero, valen LINES y COLUMNS).
+# Rellena variables y NO se llama con $(...): ahi dentro la salida es una
+# tuberia, `[ -t 1 ]` da siempre falso y todo salia a 80x24 (asi estuvo del
+# 2026-10-21 al 22: la imagen no se ajustaba nunca a la terminal).
 tamano_terminal() {
     local t
-    # Solo si se pinta en una terminal de verdad (en una prueba, con la
-    # salida a un fichero, valen LINES y COLUMNS).
     if [ -t 1 ]; then
-        t="$(stty size 2>/dev/null </dev/tty)" && [ -n "$t" ] && { echo "$t"; return; }
+        t="$(stty size 2>/dev/null </dev/tty)" && [ -n "$t" ] && {
+            read -r FILAS COLS <<< "$t"
+            return
+        }
     fi
-    echo "${LINES:-24} ${COLUMNS:-80}"
+    FILAS="${LINES:-24}" COLS="${COLUMNS:-80}"
 }
 
 # copia_de RUTA → donde va (o esta) la copia adaptada de esa imagen. La clave
@@ -168,8 +200,71 @@ adaptada() {
     printf '%s\n' "$1"
 }
 
+# elegir → la imagen de este saludo (ya adaptada si se puede), o nada si no
+# va a haber imagen (sin fastfetch, terminal sin imagenes, carpeta vacia).
+elegir() {
+    local img
+    command -v fastfetch >/dev/null 2>&1 && sabe_imagenes || return 0
+    img="$(al_azar "$(carpeta)")" && [ -f "$img" ] || return 0
+    adaptada "$img"
+}
+
+# EL SALUDO EN FISH SE REDIBUJA AL CAMBIAR DE TAMAÑO (2026-10-22). Se mide la
+# terminal una vez, y la imagen se queda en las celdas donde se pinto; si luego
+# cambia de tamaño, kitty recoloca el TEXTO y la imagen no, y acaban una encima
+# del otro. Pasa siempre: al abrir otra ventana en el escritorio, la de antes
+# se encoge; y kitty nace con el tamaño de su ultima ventana y Hyprland lo
+# corrige un instante despues, a veces con el saludo ya pintado.
+# Por eso fish no llama a `celiuz-saludo` a secas sino a
+# `celiuz-saludo --fish | source`, que deja en la shell:
+#   - la imagen elegida en una variable, para repetir la MISMA;
+#   - un manejador del cambio de COLUMNS y LINES (no de SIGWINCH: llega
+#     antes de que fish los actualice, y compararia el tamaño viejo) que borra la pantalla y lo pinta otra vez al
+#     tamaño nuevo, solo si el tamaño cambio de verdad;
+#   - y otro que lo quita todo al ejecutar el primer comando: desde ahi la
+#     pantalla es del usuario y no se borra nunca.
+# kitty no borra las imagenes con el `clear` (se quedarian flotando), asi que
+# antes va la orden de su protocolo para quitarlas (a=d).
+fish_snippet() {
+    local img
+    img="$(elegir)"
+    if [ -z "$img" ]; then
+        echo 'celiuz-saludo'
+        return
+    fi
+    # Entre comillas simples de fish (no el %q de bash: con una tilde da
+    # $'...', que fish no entiende): solo \ y ' llevan barra.
+    img="${img//\\/\\\\}"
+    printf "set -g __celiuz_saludo '%s'\n" "${img//\'/\\\'}"
+    cat <<'FISH'
+set -g __celiuz_saludo_tam "$COLUMNS $LINES"
+celiuz-saludo $__celiuz_saludo
+function __celiuz_saludo_ajustar --on-variable COLUMNS --on-variable LINES
+    set -q __celiuz_saludo; or return
+    test "$COLUMNS $LINES" = "$__celiuz_saludo_tam"; and return
+    set -g __celiuz_saludo_tam "$COLUMNS $LINES"
+    printf '\e_Ga=d\e\\'
+    clear
+    celiuz-saludo $__celiuz_saludo
+    # Al repintar, fish sube desde el cursor tantas filas como lineas tiene el
+    # prompt menos una (las de un prompt de dos lineas, como el de CachyOS):
+    # sin este hueco se comia la ultima fila de la imagen.
+    for i in (seq 2 (count (fish_prompt 2>/dev/null)))
+        echo
+    end
+    commandline -f repaint
+end
+function __celiuz_saludo_soltar --on-event fish_preexec
+    set -e __celiuz_saludo __celiuz_saludo_tam
+    functions -e __celiuz_saludo_ajustar __celiuz_saludo_soltar
+end
+FISH
+}
+
 case "$1" in
     --carpeta) carpeta; exit 0 ;;
+    --elegir) elegir; exit 0 ;;
+    --fish) fish_snippet; exit 0 ;;
     --medidas) medidas "$2" "$3"; exit 0 ;;
     --preparar)
         pares=(); n=0
@@ -193,16 +288,29 @@ imagen="$1"
 
 if [ -n "$imagen" ] && [ -f "$imagen" ] && sabe_imagenes; then
     imagen="$(adaptada "$imagen")"
-    read -r filas cols <<< "$(tamano_terminal)"
-    read -r ancho alto izq arriba posicion <<< "$(medidas "$filas" "$cols")"
+    tamano_terminal
+    cols="$COLS"
+    read -r ancho alto izq arriba posicion <<< "$(medidas "$FILAS" "$COLS")"
     if [ "$ancho" -gt 0 ]; then
+        # La imagen sola: fastfetch sin ningun dato. Con `-s ""` no vale: lo
+        # ignora y saca la estructura de siempre. Van lineas vacias (`break`),
+        # tantas como alto: con UNA, fastfetch dejaba el cursor por dentro de
+        # la imagen y el prompt salia encima de su parte de abajo.
+        solo=()
+        if [ "$posicion" = solo ]; then
+            vacias="break"
+            for (( i = 1; i < arriba + alto; i++ )); do vacias+=":break"; done
+            solo=(-s "$vacias"); posicion=left
+        fi
         # Ancho y alto en CELDAS de texto; se respeta la proporcion de la imagen.
         exec fastfetch --logo-type kitty --logo "$imagen" --logo-position "$posicion" \
             --logo-width "$ancho" --logo-height "$alto" --logo-preserve-aspect-ratio true \
-            --logo-padding-left "$izq" --logo-padding-top "$arriba" --logo-padding-right 4
+            --logo-padding-left "$izq" --logo-padding-top "$arriba" --logo-padding-right 3 \
+            "${solo[@]}"
     fi
-    # Tan pequeña que no cabe ni encima: solo los datos, sin el logo de la
-    # distro (que es mas grande todavia que la imagen).
+    # Tan pequeña que no cabe ni la imagen sola: nada (los datos se partirian
+    # igual), o los datos sin logo si caben a lo ancho.
+    [ "$cols" -ge $(( ANCHO_DATOS + 2 )) ] || exit 0
     exec fastfetch --logo-type none
 fi
 exec fastfetch

@@ -762,7 +762,7 @@ def quitar_app_cli(cmd):
     return 0
 
 
-ATAJOS_ESCRITORIO = range(1, 8)       # los SUPER+1..7 de lua/keybinds.lua
+ATAJOS_ESCRITORIO = range(1, 10)      # los SUPER+1..9 de lua/keybinds.lua
 
 
 def cambiar_atajos_escritorio(modo, en_modo):
