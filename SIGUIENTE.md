@@ -25,6 +25,14 @@ cuentas, con Node). Visto en un Chromium sin ventana (vertical y horizontal),
 **sin probar en el celular**: APK en `~/Descargas/celiuz-remoto-mando.apk` de
 la PC (firmado con la clave de la PC).
 
+Después (el usuario, viéndolo en el HONOR: «en horizontal estaría mejor, la
+ventana más grandecita»): **el mando gira el celular a horizontal solo**
+(`lockAsync(LANDSCAPE)`; táctil deja girar libre; la contraseña, en vertical).
+En horizontal la imagen ocupa todo el alto: sin barra de estado y sin las filas
+de arriba y de abajo, que salen con «Menú» (arriba a la derecha) o al abrir el
+teclado; los controles, medio transparentes. Instalado en el HONOR por adb,
+**sin mirar aún con la pantalla conectada** (pide la contraseña de la app).
+
 ## 2026-10-21 (tarde-noche, PC): la guía de instalación del remoto, y SDDM sin uwsm
 
 El usuario estaba instalando Celiuz Remoto con un amigo, en su laptop y la del

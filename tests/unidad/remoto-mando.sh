@@ -56,6 +56,10 @@ titulo "2. La página lo lleva"
 afirmar "pantalla-entrada.js monta el mando" grep -q "import { montar } from './mando.js'" "$REPO/remoto/app/scripts/pantalla-entrada.js"
 afirmar "los escritorios mandan Super+número" grep -q "combinacion(\['XK_Super_L', String(n)\])" "$MANDO"
 afirmar "la app empieza en modo mando" grep -q "useState<'mando' | 'tactil'>('mando')" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
+# El usuario (2026-10-21): en vertical la pantalla salía chiquita.
+afirmar "con el mando, el celular gira a horizontal solo" grep -q "modo === 'mando' ? ScreenOrientation.lockAsync(O.LANDSCAPE)" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
+afirmar "la contraseña se pide en vertical" grep -q "!viendo ? ScreenOrientation.lockAsync(O.PORTRAIT_UP)" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
+afirmar "en horizontal, las barras solo si se piden" grep -q "const conBarras = !horizontal || barras || teclado > 0" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
 
 afirmar_intacta_la_casa_real
 resumen

@@ -9,16 +9,24 @@
 // un clic; dos dedos, clic derecho; arrastrar con el dedo mantiene pulsado.
 // Lo tecleado va por un campo nativo invisible, como en la terminal (Gboard
 // dentro de un WebView repetía las palabras), y llega a la página por texto().
-// Mientras se mira, el celular puede girar a horizontal.
+// Mientras se mira en modo táctil, el celular puede girar a horizontal.
 //
 // MANDO o TÁCTIL (el usuario, 2026-10-21: apuntar con el dedo en una pantalla
 // encogida era «realmente horrible»). De fábrica, MANDO: joystick, botones de
 // clic y rueda, y escritorios 1-9 (Super+número), pintados por la página
 // (scripts/mando.js) para que el joystick no pase por el puente de React
 // Native en cada movimiento. «Táctil» vuelve a lo de antes: tocar la imagen.
+//
+// El mando va SIEMPRE en horizontal (el usuario, 2026-10-21: en vertical la
+// pantalla salía chiquita y sobraba medio celular): se gira solo al entrar, y
+// en horizontal la imagen ocupa todo el alto, sin barra de estado ni las filas
+// de arriba y de abajo; «Menú» (arriba a la derecha) las saca cuando hacen
+// falta. La contraseña se pide en vertical, como el resto de la app.
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { StatusBar } from 'expo-status-bar';
 import { type ComponentType, type Ref, useCallback, useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView as WebViewOriginal } from 'react-native-webview';
 
 import type { Conexion, ErrorRemoto } from '../api/cliente';
@@ -57,15 +65,25 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
   const [ajustada, setAjustada] = useState(true);
   const [modo, setModo] = useState<'mando' | 'tactil'>('mando');
   const [teclado, setTeclado] = useState(0);
+  const [barras, setBarras] = useState(false);
+  const ventana = useWindowDimensions();
+  const horizontal = ventana.width > ventana.height;
+  const borde = useSafeAreaInsets();
   const web = useRef<Web>(null);
   const campo = useRef<{ focus(): void; clear(): void }>(null);
   const ultimo = useRef('');
 
-  // Girar solo aquí: el resto de la app está pensada en vertical.
+  // Girar solo aquí: el resto de la app está pensada en vertical. Con el
+  // mando, horizontal a la fuerza (cualquiera de los dos lados); en táctil,
+  // como esté el celular.
+  const viendo = !!billete;
   useEffect(() => {
-    ScreenOrientation.unlockAsync().catch(() => {});
-    return () => { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}); };
-  }, []);
+    const O = ScreenOrientation.OrientationLock;
+    const giro = !viendo ? ScreenOrientation.lockAsync(O.PORTRAIT_UP)
+      : modo === 'mando' ? ScreenOrientation.lockAsync(O.LANDSCAPE) : ScreenOrientation.unlockAsync();
+    giro.catch(() => {});
+  }, [viendo, modo]);
+  useEffect(() => () => { ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}); }, []);
   useEffect(() => {
     const a = Keyboard.addListener('keyboardDidShow', (e) => setTeclado(e.endCoordinates.height));
     const b = Keyboard.addListener('keyboardDidHide', () => setTeclado(0));
@@ -147,8 +165,14 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
     );
   }
 
+  // En horizontal, las filas de arriba y de abajo solo si se piden (o si el
+  // teclado está fuera, que sin la fila de teclas no hay Esc ni flechas).
+  const conBarras = !horizontal || barras || teclado > 0;
+
   return (
     <Marco relleno={false}>
+      <StatusBar hidden={horizontal} />
+      {conBarras ? (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 6 }}>
         <View style={{ flex: 1 }}>
           <Texto tipo="chico">{estado === 'conectado' ? conexion.equipo.equipo : estado === 'conectando' ? 'Conectando…' : 'Desconectada'}</Texto>
@@ -161,7 +185,14 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
                    style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
           <Texto tipo="chico" color={colores.alerta}>Cerrar</Texto>
         </Pressable>
+        {horizontal ? (
+          <Pressable accessibilityRole="button" onPress={() => { setBarras(false); Keyboard.dismiss(); }}
+                     style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
+            <Texto tipo="chico" color={colores.tenue}>Ocultar</Texto>
+          </Pressable>
+        ) : null}
       </View>
+      ) : null}
       {estado === 'cerrado' ? (
         <View style={{ paddingHorizontal: 14, gap: 8, paddingBottom: 8 }}>
           <Aviso texto="Se cerró la conexión con la pantalla (se quitó el permiso o el pase, o la PC cerró la sesión)."
@@ -169,10 +200,19 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
           <Boton texto="Volver a pedirla" tipo="borde" alto={44} alPulsar={() => setBillete(null)} />
         </View>
       ) : null}
-      <View style={{ flex: 1, backgroundColor: colores.abismo }}>
+      <View style={{ flex: 1, backgroundColor: colores.abismo,
+                     paddingLeft: horizontal ? borde.left : 0, paddingRight: horizontal ? borde.right : 0 }}>
         <WebView ref={web} originWhitelist={['*']} source={{ html: pagina }} javaScriptEnabled
                  mixedContentMode="always" onMessage={(ev) => alMensaje(ev.nativeEvent.data)}
                  style={{ backgroundColor: colores.abismo }} setSupportMultipleWindows={false} allowFileAccess={false} />
+        {!conBarras ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Menú: modo, teclas y cerrar" onPress={() => setBarras(true)}
+                     style={{ position: 'absolute', top: 8, right: 10 + (horizontal ? borde.right : 0), minHeight: 40,
+                              justifyContent: 'center', paddingHorizontal: 14, borderRadius: 12, borderWidth: 1,
+                              borderColor: colores.apagado, backgroundColor: colores.superficie, opacity: 0.85 }}>
+            <Texto tipo="chico" color={colores.neon}>Menú</Texto>
+          </Pressable>
+        ) : null}
       </View>
       <TextInput ref={campo as never} defaultValue="" onChangeText={alTeclear}
                  onSubmitEditing={() => { inyectar("window.tecla('XK_Return')"); ultimo.current = ''; campo.current?.clear(); }}
@@ -181,6 +221,7 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
                  onKeyPress={(e) => { if (e.nativeEvent.key === 'Backspace' && ultimo.current === '') inyectar("window.tecla('XK_BackSpace')"); }}
                  accessibilityLabel="Teclado de la pantalla remota"
                  style={{ position: 'absolute', left: -1000, width: 10, height: 10, opacity: 0 }} />
+      {conBarras ? (
       <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false}
                   style={{ flexGrow: 0, marginBottom: teclado, borderTopWidth: 1, borderTopColor: colores.apagado,
                            backgroundColor: colores.superficie }}
@@ -196,6 +237,7 @@ export default function Pantalla({ conexion, alVolver, alVerPase, alCaducar }: {
           </Pressable>
         ))}
       </ScrollView>
+      ) : null}
     </Marco>
   );
 }

@@ -93,6 +93,9 @@ const CSS = `
   color: var(--texto); font-size: 15px; touch-action: none; -webkit-user-select: none; user-select: none; }
 #mando button.puesto { border-color: var(--acento); color: var(--acento); box-shadow: 0 0 10px var(--acento); }
 #escritorios button { min-width: 38px; height: 38px; }
+#mando.horizontal button, #mando.horizontal #joy { background: var(--fondo-claro); }
+#mando.horizontal #perilla { opacity: .7; }
+#mando.horizontal #escritorios button { min-width: 34px; height: 34px; font-size: 14px; }
 #joy { position: absolute; border-radius: 50%; border: 2px solid var(--borde); background: var(--fondo);
   touch-action: none; }
 #perilla { position: absolute; left: 50%; top: 50%; width: 42%; height: 42%; margin: -21% 0 0 -21%;
@@ -116,7 +119,7 @@ export function montar(cosas) {
   const c = cosas.colores;
   const estilo = document.createElement('style');
   estilo.textContent = CSS + `:root { --fondo: ${c.superficie}cc; --borde: ${c.apagado}; --texto: ${c.luz};`
-    + ` --acento: ${c.neon}; }`;
+    + ` --fondo-claro: ${c.superficie}77; --acento: ${c.neon}; }`;
   document.head.appendChild(estilo);
 
   const raiz = document.createElement('div');
@@ -262,12 +265,14 @@ export function montar(cosas) {
   });
 
   // Dónde va cada cosa: en vertical, la pantalla arriba y el mando debajo (el
-  // hueco que quedaba vacío); en horizontal, la pantalla entera y el mando
-  // encima, en las esquinas.
+  // hueco que quedaba vacío); en horizontal —lo normal: la app gira sola al
+  // entrar en el mando—, la pantalla entera y el mando encima, en las
+  // esquinas y medio transparente, como los botones de un juego del celular.
   function recolocar() {
     const W = window.innerWidth, H = window.innerHeight;
     const lienzo = cosas.lienzo();
     const vertical = H > W;
+    raiz.classList.toggle('horizontal', !vertical);
     const lado = Math.round(Math.min(vertical ? W * 0.42 : H * 0.42, 190));
     if (vertical) {
       const v = vista();
