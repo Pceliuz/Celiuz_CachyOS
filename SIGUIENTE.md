@@ -33,6 +33,18 @@ de arriba y de abajo, que salen con «Menú» (arriba a la derecha) o al abrir e
 teclado; los controles, medio transparentes. Instalado en el HONOR por adb,
 **sin mirar aún con la pantalla conectada** (pide la contraseña de la app).
 
+Y luego: «en la PC va normal, en el celular cortado y retrasado». La PC no
+era (wayvnc tarda <10 ms por imagen entera; ~540 KB con la calidad 6 de
+noVNC, ~440 con la 2). Era el wifi del HONOR (-76 dBm, **6 Mbps de bajada**,
+ping por Tailscale 557 ms, aunque directo) **y la cola**: noVNC pide
+«actualizaciones continuas», wayvnc las da (contesta el 150), la PC empuja
+sin esperar y noVNC no tiene control de flujo, así que en un enlace lento lo
+que se ve es de hace segundos. `pantalla-entrada.js` quita esa codificación
+de la lista: una imagen en camino como mucho. Medido con la página generada
+en un Brave sin ventana contra un wayvnc real (puente que espía SetEncodings):
+«SIN continuas» y ~19 peticiones/s en local. Sin H.264: NVENC no sirve a
+neatvnc (va por VAAPI y el driver de NVIDIA solo decodifica).
+
 ## 2026-10-21 (tarde-noche, PC): la guía de instalación del remoto, y SDDM sin uwsm
 
 El usuario estaba instalando Celiuz Remoto con un amigo, en su laptop y la del

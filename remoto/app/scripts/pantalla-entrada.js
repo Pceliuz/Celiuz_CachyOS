@@ -19,8 +19,21 @@
 import RFB from '../node_modules/@novnc/novnc/core/rfb.js';
 import KeyTable from '../node_modules/@novnc/novnc/core/input/keysym.js';
 import keysyms from '../node_modules/@novnc/novnc/core/input/keysymdef.js';
+import { encodings } from '../node_modules/@novnc/novnc/core/encodings.js';
 import { montar } from './mando.js';
 import colores from '../src/colores.json';
+
+// SIN «actualizaciones continuas» (el usuario, 2026-10-21: en la PC todo iba
+// bien y en el celular llegaba cortado y tarde). noVNC se las pide a wayvnc, y
+// con ellas la PC empuja imágenes sin esperar a que el celular acabe con la
+// anterior; noVNC no frena nada, así que con un wifi lento (medido en el HONOR:
+// -76 dBm, 6 Mbps de bajada, ~540 KB una pantalla entera) se amontonan en el
+// camino y lo que se ve es de hace segundos. Sin ellas es el VNC de siempre:
+// pide, pinta y pide la siguiente, con UNA en camino como mucho. Se quita al
+// mandar la lista, que noVNC busca en RFB.messages en cada envío.
+const mandarCodificaciones = RFB.messages.clientEncodings;
+RFB.messages.clientEncodings = (sock, lista) =>
+  mandarCodificaciones(sock, lista.filter((c) => c !== encodings.pseudoEncodingContinuousUpdates));
 
 const rn = (o) => window.ReactNativeWebView.postMessage(JSON.stringify(o));
 let rfb = null;

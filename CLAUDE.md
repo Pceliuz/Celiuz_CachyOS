@@ -1320,6 +1320,12 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   el de software dice aguantar 1080p y no llega) y la PC convierte
   (`remoto/servidor/celiuz_remoto/conversion.py`). Con libx264 y no NVENC: lo
   lento es decodificar el 4K, no codificar (7,7 s contra 6,8 s).
+- **noVNC con «actualizaciones continuas» se atrasa en un wifi lento**: las
+  pide, wayvnc las da, la PC empuja sin esperar y noVNC no frena, así que las
+  imágenes se amontonan y en el celular se ve lo de hace segundos (en la PC
+  todo va bien). `pantalla-entrada.js` las quita de la lista de
+  codificaciones; antes de culpar a la PC, mira el enlace del celular
+  (`adb shell dumpsys wifi | grep 'Rx Link'`).
 - **Gboard dentro de un WebView repite lo que compone**: xterm.js recibía
   «echo hola» como «echchho hholla». Lo tecleado va por un `TextInput` nativo
   invisible con `keyboardType="visible-password"` (sin composición ni

@@ -58,6 +58,10 @@ afirmar "los escritorios mandan Super+número" grep -q "combinacion(\['XK_Super_
 afirmar "la app empieza en modo mando" grep -q "useState<'mando' | 'tactil'>('mando')" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
 # El usuario (2026-10-21): en vertical la pantalla salía chiquita.
 afirmar "con el mando, el celular gira a horizontal solo" grep -q "modo === 'mando' ? ScreenOrientation.lockAsync(O.LANDSCAPE)" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
+# El usuario (2026-10-21): en el celular se veía cortado y tarde. Con las
+# «actualizaciones continuas» la PC empuja sin esperar y en un wifi lento se
+# amontonan; sin ellas va una imagen en camino como mucho.
+afirmar "la página no pide actualizaciones continuas" grep -q "filter((c) => c !== encodings.pseudoEncodingContinuousUpdates)" "$REPO/remoto/app/scripts/pantalla-entrada.js"
 afirmar "la contraseña se pide en vertical" grep -q "!viendo ? ScreenOrientation.lockAsync(O.PORTRAIT_UP)" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
 afirmar "en horizontal, las barras solo si se piden" grep -q "const conBarras = !horizontal || barras || teclado > 0" "$REPO/remoto/app/src/pantallas/Pantalla.tsx"
 
