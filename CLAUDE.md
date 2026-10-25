@@ -1179,6 +1179,19 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   quién estás llamando rival**. Un proceso vivo con su propio dueño detrás no lo
   es, por mucho que comparta nombre y carpeta.
 
+- **Ctrl+Alt+Shift+Esc (la «Secure Attention Key» de logind, systemd 257+)
+  saca una pantalla de SDDM NUEVA encima de la sesión bloqueada**, en otra VT
+  y con el mismo tema, así que parece el bloqueo. Entrar por ella devuelve a
+  Hyprland con el bloqueo aún puesto, y ahí la contraseña buena fallaba
+  (2026-10-25: probablemente las teclas que Hyprland vio pulsar al salir y no
+  vio soltar). A los 3 fallos `pam_faillock` cierra la cuenta 10 min y ni la
+  buena sirve: se ve en `journalctl` («temporarily locked out») y en
+  `faillock --user`. Se apaga con `sistema/logind/celiuz-sin-sak.conf`
+  (`--sddm`). En el diario: «Secure Attention Key sequence pressed on seat».
+- **Una tarjeta con botones NO deja el foco en el primero**: GTK se lo da al
+  mostrarse, y un Intro a ciegas (la de `teclados.py` sale encima de un juego)
+  elegía «España» para un teclado US. `ventana.set_focus(None)` tras el
+  `show_all()`; medido en anidado leyendo `get_focus()`.
 - **El bloqueo no puede fiarse de haber saltado al escritorio vacío: lo MIRA.**
   El xray deja ver todo lo de debajo, y el salto al 99 no bastaba en tres casos:
   el vigilante del modo gaming te devolvía al juego en milisegundos («a uno

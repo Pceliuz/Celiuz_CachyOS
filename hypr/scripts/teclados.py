@@ -382,6 +382,11 @@ def tarjeta(descripcion):
                     lambda _w, e: terminar("") if e.keyval == Gdk.KEY_Escape else False)
     ventana.connect("destroy", Gtk.main_quit)
     ventana.show_all()
+    # GTK le da el foco al primer boton al mostrarse, y ese es «España»: un
+    # Intro a ciegas (la tarjeta sale encima de un juego) lo elegia sin querer
+    # y el teclado US quedo como es (2026-10-24). Sin foco, Intro no contesta
+    # nada; Tab o el raton eligen, Esc es «Ahora no».
+    ventana.set_focus(None)
     Gtk.main()
     if respuesta["valor"]:
         print(respuesta["valor"])

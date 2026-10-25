@@ -807,6 +807,11 @@ pantalla() {
 
 SDDM_TEMA="/usr/share/sddm/themes/celiuz"
 SDDM_DROPIN="/etc/sddm.conf.d/10-celiuz.conf"
+# Que Ctrl+Alt+Shift+Esc no saque SDDM encima del bloqueo (la cabecera del
+# fichero cuenta lo que paso). Va con el tema porque es SDDM quien atiende la
+# tecla, y la copia se compara con la del repo como las de --radio.
+SDDM_SAK_ORIGEN="$REPO/sistema/logind/celiuz-sin-sak.conf"
+SDDM_SAK="${CELIUZ_LOGIND_RAIZ:-}/etc/systemd/logind.conf.d/celiuz-sin-sak.conf"
 # La carpeta del fondo del login. Es tuya y la lee el grupo `sddm`; ver
 # preparar_fondo_sddm para por que existe y por que va con setgid.
 SDDM_COMPARTIDA="${SDDM_COMPARTIDA:-/var/lib/sddm-celiuz}"
@@ -951,6 +956,11 @@ sddm_instalar() {
         hecho "  $SDDM_DROPIN escrito"
     fi
 
+    # logind lo relee con un reload (SIGHUP), sin cerrar ninguna sesion.
+    raiz install -D -m 644 -o root -g root "$SDDM_SAK_ORIGEN" "$SDDM_SAK"
+    raiz systemctl reload systemd-logind
+    hecho "  Ctrl+Alt+Shift+Esc ya no saca SDDM encima del bloqueo ($SDDM_SAK)"
+
     echo
     gris "  pruebalo SIN reiniciar:"
     gris "    sddm-greeter-qt6 --test-mode --theme $SDDM_TEMA"
@@ -961,6 +971,8 @@ sddm_instalar() {
 sddm_quitar() {
     titulo "Quitar la pantalla de inicio de sesion"
     raiz rm -f "$SDDM_DROPIN"
+    raiz rm -f "$SDDM_SAK"
+    raiz systemctl reload systemd-logind
     raiz rm -rf "$SDDM_TEMA"
     # La compartida tambien: si no, quedaria una carpeta con tu fondo dentro de
     # /var/lib que ya no usa nadie y que nadie relacionaria con esto.
@@ -981,6 +993,8 @@ sddm_estado() {
             cmp -s "$REPO/sddm/celiuz/$f" "$SDDM_TEMA/$f" || vieja="$vieja $f"
         done
         [ -z "$vieja" ] || aviso "el tema instalado es una copia VIEJA (${vieja# }): ./instalar.sh --sddm"
+        cmp -s "$SDDM_SAK_ORIGEN" "$SDDM_SAK" \
+            || aviso "Ctrl+Alt+Shift+Esc puede sacar SDDM encima del bloqueo: ./instalar.sh --sddm"
         if [ -d "$SDDM_COMPARTIDA" ]; then
             gris "    el fondo se rehace solo al cambiar de fondo"
         else
