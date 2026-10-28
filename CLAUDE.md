@@ -1304,6 +1304,16 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
 - **En Wayland la clase de una ventana GTK3 sale de `GLib.set_prgname()`**,
   antes de crear nada; `set_wmclass` no hace nada (y avisa de obsoleto). Es la
   que casa con `StartupWMClass` y con las reglas de `lua/windowrules.lua`.
+- **Un diálogo modal TAPADO deja una app GTK3 sin poder cerrarse.** Mientras
+  `dialogo.run()` corre, GTK descarta el cierre que pide el compositor para la
+  ventana de debajo (atiende solo el del diálogo), y Hyprland sube al frente la
+  flotante que enfocas: si es la principal, el diálogo queda detrás, entero, y
+  SUPER+Q no hace nada (2026-10-27, la app de Celiuz Remoto con «Permisos»
+  abierto una mañana; medido en anidado: dos SUPER+Q y el proceso vivo). Lo
+  arreglado: la app devuelve el foco al diálogo con `present()` al enfocar la
+  principal, y eso **solo funciona con `focus_on_activate`** en su regla de
+  ventana (sin ella Hyprland ignora el `present()`, también medido). Para
+  cualquier otra app atascada así, SUPER+SHIFT+Q (`forzar-cierre.sh`).
 - **Un `Gtk.Label` con ajuste de línea pide el ancho de su frase ENTERA** en
   GTK3: una barra lateral de 230 px salía de 420. Se le pone
   `set_max_width_chars`.

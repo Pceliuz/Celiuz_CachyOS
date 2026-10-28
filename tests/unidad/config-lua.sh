@@ -80,6 +80,14 @@ afirmar_igual "True" "$(consulta "$TMP/pc.json" 'any("lanzar.sh foot" in b["acci
 afirmar_igual "True" "$(consulta "$TMP/pc.json" 'any(r.get("suppress_event")=="maximize" and r["match"].get("class")==".*" for r in R["reglas"])')" \
     "ninguna app se maximiza sola al abrirse (suppress_event = maximize, para todas)"
 
+# 2026-10-27: sin focus_on_activate, el present() con que la app de Celiuz
+# Remoto devuelve el foco a su dialogo modal no hace nada, el dialogo queda
+# tapado y la app no se cierra. Y solo para ella: para todas, robo de foco.
+afirmar_igual "True" "$(consulta "$TMP/pc.json" 'any(r.get("focus_on_activate") is True and r["match"].get("class")=="^(celiuz-remoto)$" for r in R["reglas"])')" \
+    "la app de Celiuz Remoto puede darle el foco a su dialogo (focus_on_activate)"
+afirmar_igual "False" "$(consulta "$TMP/pc.json" 'any(r.get("focus_on_activate") and r["match"].get("class")==".*" for r in R["reglas"])')" \
+    "   y ninguna regla para todas las apps lo da"
+
 titulo "3. Ningun atajo repetido"
 for f in pc laptop; do
     rep="$(consulta "$TMP/$f.json" '", ".join(sorted({b["teclas"] for b in R["binds"] if [x["teclas"] for x in R["binds"]].count(b["teclas"]) > 1}))')"

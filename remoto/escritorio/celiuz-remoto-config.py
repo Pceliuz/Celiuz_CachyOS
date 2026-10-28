@@ -197,6 +197,7 @@ class Ventana(Gtk.Window):
         self.ocupado = False         # emparejando o renovando
         self.servicio = {"instalado": False, "activo": False, "red": None}
         self._mirando_cable = False
+        self._dialogo = None         # el modal abierto (_correr), si hay uno
 
         raiz = caja(vertical=False)
         raiz.set_name("fondo")
@@ -226,6 +227,7 @@ class Ventana(Gtk.Window):
 
         self.connect("destroy", self._al_cerrar)
         self.connect("key-press-event", self._tecla)
+        self.connect("focus-in-event", self._al_enfocar)
         self.ir("telefonos")
         self.refrescar()
         self.mirar_cable()
@@ -281,6 +283,32 @@ class Ventana(Gtk.Window):
             self.pintar_registro()
         if clave == "vigilancia":
             self.refrescar()
+
+    # --- los diálogos modales ---
+    #
+    # Un modal TAPADO deja la app sin poder cerrarse. Mientras `dialogo.run()`
+    # corre, GTK descarta el cierre que pide el compositor para la ventana
+    # principal (solo atiende el del diálogo), así que SUPER+Q no hace nada; y
+    # Hyprland sube al frente la flotante que enfocas, que es la principal: el
+    # diálogo queda detrás, entero, y no hay a qué contestar. Pasó el
+    # 2026-10-27 con «Permisos» abierto toda una mañana. Por eso todo modal va
+    # por _correr, y al enfocar la principal con uno abierto se le devuelve el
+    # foco: SUPER+Q lo cierra (= Cancelar) y el siguiente cierra la app. El
+    # present() solo llega a mover el foco con `focus_on_activate` en la regla
+    # de lua/windowrules.lua (sin ella, Hyprland lo ignora: medido en anidado).
+
+    def _correr(self, dialogo):
+        self._dialogo = dialogo
+        try:
+            return dialogo.run()
+        finally:
+            self._dialogo = None
+
+    def _al_enfocar(self, *_):
+        dialogo = self._dialogo
+        if dialogo is not None:
+            GLib.idle_add(lambda: self._dialogo is dialogo and dialogo.present())
+        return False
 
     def _tecla(self, _w, ev):
         if ev.keyval == Gdk.KEY_Escape and not self.ocupado:
@@ -699,7 +727,7 @@ class Ventana(Gtk.Window):
         fila.pack_start(horas, False, False, 0)
         cuerpo.pack_start(fila, False, False, 0)
         dialogo.show_all()
-        respuesta = dialogo.run()
+        respuesta = self._correr(dialogo)
         marcadas = [i for i, c in enumerate(casillas) if c.get_active()]
         cuantas = int(horas.get_active_id() or "2")
         dialogo.destroy()
@@ -738,7 +766,7 @@ class Ventana(Gtk.Window):
         cuerpo.pack_start(enlace, False, False, 0)
         dialogo.show_all()
         while True:
-            respuesta = dialogo.run()
+            respuesta = self._correr(dialogo)
             if respuesta == Gtk.ResponseType.APPLY:
                 Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(d["texto"], -1)
                 self.op("Invitación copiada.", "ok")
@@ -772,7 +800,7 @@ class Ventana(Gtk.Window):
                                    "la terminal, la contraseña otra vez.", ("tenue", "chico"),
                                    envolver=True, ancho=40), False, False, 0)
         dialogo.show_all()
-        respuesta = dialogo.run()
+        respuesta = self._correr(dialogo)
         marcadas = [i for i, c in enumerate(casillas) if c.get_active()]
         dialogo.destroy()
         if respuesta != Gtk.ResponseType.OK:
@@ -793,7 +821,7 @@ class Ventana(Gtk.Window):
             "emparejarlo otra vez por cable.")
         dialogo.add_button("Cancelar", Gtk.ResponseType.CANCEL)
         dialogo.add_button("Revocar", Gtk.ResponseType.OK)
-        respuesta = dialogo.run()
+        respuesta = self._correr(dialogo)
         dialogo.destroy()
         if respuesta == Gtk.ResponseType.OK:
             self.almacen.revocar(d["id"])

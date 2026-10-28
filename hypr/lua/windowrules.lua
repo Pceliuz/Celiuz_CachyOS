@@ -64,10 +64,16 @@ hl.window_rule({
 -- se abre, se empareja y se cierra. Sin `size` a proposito: la maqueta mide
 -- 1200x760 y eso no cabe en la laptop (1366x768), asi que el tamaño lo elige la
 -- propia app segun la pantalla donde se abre.
+-- `focus_on_activate` deja que la app SE DÉ el foco a sí misma: cuando enfocas
+-- la ventana principal con un diálogo modal abierto, la app se lo devuelve al
+-- diálogo (present()), que si no quedaba tapado y la app no se cerraba con
+-- SUPER+Q (2026-10-27; el porqué, en celiuz-remoto-config.py, «los diálogos
+-- modales»). Sin la regla, Hyprland ignora el present(). Solo para esta clase:
+-- para todas, cualquier app podría robarte el foco a mitad de escribir.
 hl.window_rule({
     name  = "celiuz-remoto",
     match = { class = "^(celiuz-remoto)$" },
-    float = true, center = true,
+    float = true, center = true, focus_on_activate = true,
 })
 
 -- La clase "dock-term" existe pero NO tiene regla, y es a proposito: es la que
