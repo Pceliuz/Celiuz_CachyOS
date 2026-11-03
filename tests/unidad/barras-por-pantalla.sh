@@ -87,9 +87,22 @@ def argv(proc):
 
 
 def cfg_de(proc):
-    """El `-c` de waybar: el ULTIMO (el waybar de mentira es python3 -c ...)."""
-    a = argv(proc)
-    return a[len(a) - a[::-1].index("-c")]
+    """El `-c` de waybar: el ULTIMO (el waybar de mentira es python3 -c ...).
+
+    Se espera a que el proceso enseñe SU linea: recien lanzado, y antes de su
+    exec, /proc/<pid>/cmdline todavia es la del padre (`python3 - ...`, sin
+    ningun `-c`). Con el equipo cargado (la suite entera) ese hueco se veia, y
+    la sonda reventaba con un ValueError que tumbaba 10 comprobaciones."""
+    limite = time.monotonic() + 5
+    while True:
+        a = argv(proc)
+        if "-c" in a:
+            i = len(a) - a[::-1].index("-c")      # justo detras del ultimo -c
+            if i < len(a) and a[i].endswith(".jsonc"):
+                return a[i]
+        if time.monotonic() > limite:
+            raise RuntimeError("el waybar de mentira no enseña su -c: %r" % a)
+        time.sleep(0.01)
 
 
 bars = {}

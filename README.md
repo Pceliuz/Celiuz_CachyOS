@@ -129,6 +129,13 @@ y los vídeos de entrada y salida (si pones los tuyos) los reproduce mpv:
 sudo pacman -S mangohud lib32-mangohud mpv
 ```
 
+Y para que Dolphin y las apps Qt dejen ver el fondo detrás, como las de GTK y
+kitty (sin él se quedan opacas; el instalador avisa):
+
+```sh
+sudo pacman -S kvantum
+```
+
 Y para grabar la pantalla (`SUPER + R`), que va aparte por lo mismo:
 
 ```sh
@@ -246,6 +253,54 @@ Después, dos cosas que el repo **no** trae y hay que poner a mano:
    proyecto de Google Cloud) y `~/.local/share/gcal-panel/token.json` (lo escribe
    `hypr/scripts/lib/gcal.py auth`). Sin ellas el panel funciona igual, solo que
    sin eventos.
+
+### Al traer cambios en otro equipo
+
+El repo se usa en más de un equipo: lo que se cambia en uno llega al otro con
+
+```sh
+cd ~/dotfiles               # o donde lo hayas clonado
+git pull && ./instalar.sh
+```
+
+Lo normal es que termine con **«sin pendientes»**. Si no, esto es lo que puede
+salir y qué hacer (todo pasó de verdad al traer cambios a la laptop, el
+2026-11-03):
+
+1. **Un paquete nuevo que falta.** Los cambios pueden necesitar algo que este
+   equipo aún no tiene (aquel día, `kvantum` para que Dolphin y las apps Qt
+   salgan translúcidas). El instalador no instala paquetes: avisa con un `!` y
+   la orden debajo. Instálalo y **vuelve a pasar `./instalar.sh`**, que es el
+   que termina de configurarlo (genera el tema, por ejemplo).
+   ```sh
+   sudo pacman -S kvantum && ./instalar.sh
+   ```
+   Ojo con el directorio: si lo lanzas desde `~` en vez de desde el repo,
+   `pacman` funciona pero `./instalar.sh` no existe ahí y **no corre**. Con
+   fish ni siquiera se nota entre tanta salida de pacman.
+2. **Algo nuevo que va en `/etc` y pide sudo.** El instalador normal nunca pide
+   contraseña: solo avisa, y el aviso dice la orden. Las que pueden salir:
+   - `./instalar.sh --sddm`: la pantalla de inicio y lo que la rodea (por
+     ejemplo, que `Ctrl+Alt+Shift+Esc` no saque SDDM encima del bloqueo).
+   - `./instalar.sh --radio`: el wifi y el Bluetooth sin cortes.
+   - `./instalar.sh --remoto-sistema`: lo de Celiuz Remoto tras reiniciar.
+
+   Algunos de estos cambios solo hacen efecto del todo **al reiniciar** el
+   equipo (el del controlador del wifi, el de logind); el instalador lo dice.
+3. **Un aviso de algo que ya arreglaste a mano.** El instalador compara los
+   ficheros de `/etc` **byte a byte** con los del repo, así que una copia que
+   haga lo mismo con otros comentarios cuenta como «no puesto» y sigue
+   avisando. Es a propósito: una copia que se separa no avisaría nunca. Pasar
+   la orden que sugiere la cambia por la del repo y el aviso se va.
+4. **Las pruebas fallan justo después de instalar.** `./instalar.sh` termina
+   recargando la sesión abierta, y unas pocas pruebas (las de las barras y las
+   de Celiuz Remoto, que van con tiempos) pueden caer si corren mientras tanto.
+   Espera unos segundos y repite `./tests/run.sh`; si una sigue fallando,
+   pásala sola (`./tests/run.sh <nombre>`) para ver el detalle. Si falla
+   **sola y repetida**, eso sí es un problema.
+
+Y si los cambios tocan lo que arranca con la sesión (las barras, el fondo), se
+verán del todo al cerrar sesión y volver a entrar, como en la instalación.
 
 ---
 

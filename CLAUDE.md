@@ -1548,3 +1548,6 @@ git push origin main
 
 Al traer cambios en el otro equipo: `git pull && ./instalar.sh`. El instalador es
 idempotente y no toca el `dock-apps.json` que ya tengas.
+Lo que puede salir entonces (paquete nuevo, algo con sudo, un aviso de algo ya
+arreglado a mano, pruebas que caen por la recarga) y qué hacer, en el README:
+«Al traer cambios en otro equipo».
