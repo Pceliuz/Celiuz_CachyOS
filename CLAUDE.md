@@ -1,7 +1,7 @@
 # Notas para Claude Code
 
 Este repo es el escritorio de Hyprland de Parzival (`Pceliuz/Celiuz_CachyOS`),
-sobre CachyOS. **Es privado desde el 2026-10-20 (antes público) y se usa en más
+sobre CachyOS. **Es público (lo clonan amigos del usuario) y se usa en más
 de un equipo**: una PC de sobremesa y
 una laptop. Casi todo lo que sigue existe por esa razón.
 
@@ -125,14 +125,15 @@ lo está. La app se compila en la PC (nunca en la nube de Expo) y su
 
 ---
 
-## Privado, y con cosas que no se pueden publicar
+## Público, con las imágenes del saludo dentro
 
-Desde el 2026-10-20 el repo es **privado** en GitHub, y por eso lleva las 455
-imágenes de anime del saludo de la terminal en `fastfetch/imagenes/`: no son
-nuestras para repartir. **Si algún día vuelve a ser público, esa carpeta sale
-antes**, y de la historia también (un `git rm` no basta: siguen en los commits
-viejos). Lo demás del repo se sigue escribiendo como si lo fuera a clonar otra
-persona en otro equipo: la regla de abajo no cambia.
+El repo estuvo privado del 2026-10-20 al 2026-11-03 y volvió a ser **público**
+por decisión del usuario: lo clonan sus amigos, y siendo privado no podía
+trabajar en él desde la PC y la laptop. Las 455 imágenes de anime del saludo de
+la terminal (`fastfetch/imagenes/`) **se quedan en el repo y bajan con él**: el
+usuario las considera indispensables. No las saques ni propongas sacarlas.
+Todo se escribe pensando en que lo clona otra persona en otro equipo: la regla
+de abajo no cambia.
 
 ## La regla de oro
 
