@@ -106,7 +106,10 @@ if ! . "$(dirname "$(readlink -f "$BASH_SOURCE")")/lib/hypr.sh" 2>/dev/null \
 fi
 FIFO="${FIFO:-$(canal_fondo)}"
 FIFO_BARRAS="${FIFO_BARRAS:-$(canal_barras)}"
-MPV="${MPV:-$(socket_mpv)}"
+# Un mpvpaper por pantalla (ver wallpaper.sh): para PREGUNTAR (que video, en
+# que segundo) vale el primero, y las ORDENES van a todos (mpv_orden).
+[ -n "${MPV:-}" ] && MPV_FIJO=1
+MPV="${MPV:-$(sockets_mpv | head -n1)}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/celiuzpaper"
 FONDO="$CACHE/lock-bg.jpg"
 # El temporal lleva el .jpg AL FINAL a proposito: ffmpeg elige el formato de
@@ -321,17 +324,25 @@ PY
 }
 
 mpv_orden() {
-    [ -S "$MPV" ] || return 1
-    python3 - "$MPV" "$1" <<'PY'
+    # A TODOS los mpvpaper de la sesion, uno por pantalla. Con $MPV puesto desde
+    # fuera (las pruebas), solo a ese.
+    local socks
+    if [ -n "${MPV_FIJO:-}" ]; then socks="$MPV"; else socks="$(sockets_mpv)"; fi
+    [ -n "$socks" ] || return 1
+    printf '%s\n' "$socks" | python3 - "$1" <<'PY'
 import socket, sys
-try:
-    s = socket.socket(socket.AF_UNIX)
-    s.settimeout(2)
-    s.connect(sys.argv[1])
-    s.sendall((sys.argv[2] + "\n").encode())
-    s.recv(4096)
-except OSError:
-    sys.exit(1)
+algun = False
+for ruta in sys.stdin.read().split():
+    try:
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(2)
+        s.connect(ruta)
+        s.sendall((sys.argv[1] + "\n").encode())
+        s.recv(4096)
+        algun = True
+    except OSError:
+        pass
+sys.exit(0 if algun else 1)
 PY
 }
 

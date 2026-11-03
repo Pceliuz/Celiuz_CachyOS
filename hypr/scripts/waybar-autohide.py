@@ -35,6 +35,18 @@ El estado se consulta por el socket de control de Hyprland en vez de lanzar
 `hyprctl` cada vez: son ~0.03 ms por consulta, asi que sondear a 10 Hz es
 practicamente gratis (nada de procesos nuevos ni de hilos).
 
+UNA BARRA POR PANTALLA (2026-11-02). Cada pantalla lleva SUS cuatro waybar
+(con "output" puesto, ver config_de_salida()) y decide por su cuenta: con apps
+en una pantalla sus barras se esconden, con un escritorio vacio en la otra las
+suyas se quedan puestas, y el raton saca la barra solo de la pantalla donde
+esta. Antes habia una waybar para todas y se decidia por el escritorio con el
+foco: saltar a un escritorio vacio en una pantalla (para ver el fondo) sacaba
+las barras tambien encima de las apps de la otra. Y no habia arreglo con una
+sola waybar: su toggle mueve todas sus superficies a la vez (ver desalineada).
+Las ordenes que nombran UNA barra (show, toggle, hold) van a la de la pantalla
+del raton —ahi esta el tirador que se pulso, o el panel que cuelga de ella—; el
+resto, a todas. Con una sola pantalla todo queda como antes.
+
 ADEMAS ES UN SUPERVISOR: si una waybar se cae —se cuelga, la mata alguien, o
 revienta al leer su config—, se la vuelve a levantar (ver Bar.supervisar()). Es
 la razon de ser del demonio y no un extra: durante un tiempo hizo lo contrario,
@@ -254,7 +266,7 @@ def monitores():
     for m in data:
         try:
             escala = m.get("scale") or 1.0
-            lista.append({"x": m["x"], "y": m["y"],
+            lista.append({"name": m.get("name"), "x": m["x"], "y": m["y"],
                           "w": round(m["width"] / escala),
                           "h": round(m["height"] / escala)})
         except (KeyError, TypeError):
@@ -283,6 +295,37 @@ def monitor_en(x, y):
                 and mon["y"] <= y < mon["y"] + mon["h"]):
             return mon
     return lista[0]
+
+
+def nombre_monitor_en(x, y):
+    """El nombre ("DP-1") del monitor que contiene ese punto, o None."""
+    return monitor_en(x, y).get("name")
+
+
+def ventanas_por_monitor():
+    """{monitor: ventanas que lo tapan}: su escritorio visible + el especial.
+
+    Lo que decide si las barras de UNA pantalla se esconden. Se pregunta en cada
+    vuelta (no se recuerda como monitores()): cambiar de escritorio tiene que
+    notarse al instante. {} si Hyprland no contesta.
+    """
+    try:
+        mons = json.loads(query("j/monitors"))
+        escritorios = json.loads(query("j/workspaces"))
+    except ValueError:
+        return {}
+    if not isinstance(mons, list) or not isinstance(escritorios, list):
+        return {}
+    ventanas = {w.get("id"): w.get("windows", 0) for w in escritorios}
+    salida = {}
+    for m in mons:
+        n = ventanas.get((m.get("activeWorkspace") or {}).get("id"), 0)
+        especial = (m.get("specialWorkspace") or {}).get("id") or 0
+        if especial:
+            n += ventanas.get(especial, 0)
+        if m.get("name"):
+            salida[m["name"]] = n
+    return salida
 
 
 def read_state():
@@ -348,6 +391,24 @@ def layer_levels():
                 if ns:
                     niveles.setdefault(ns, []).append(int(nivel))
     return niveles
+
+
+def capas_por_monitor():
+    """{monitor: {namespace: [nivel, ...]}}: lo mismo que layer_levels(), por
+    pantalla. Con una waybar por pantalla, cada barra mira solo las suyas."""
+    try:
+        data = json.loads(query("j/layers"))
+    except ValueError:
+        return {}
+    salida = {}
+    for nombre, monitor in data.items():
+        niveles = salida.setdefault(nombre, {})
+        for nivel, superficies in monitor.get("levels", {}).items():
+            for capa in superficies:
+                ns = capa.get("namespace")
+                if ns:
+                    niveles.setdefault(ns, []).append(int(nivel))
+    return salida
 
 
 def in_top_zone(x, y):
@@ -417,23 +478,57 @@ def in_dock_zone(x, y):
     return y >= mon["y"] + mon["h"] - 90
 
 
-def launch(config):
+def config_de_salida(config, salida=None):
+    """La ruta que se le pasa a `waybar -c` para esa config en esa pantalla.
+
+    Sin pantalla, la del repo tal cual (una waybar para todas, como antes). Con
+    pantalla, una config minima en el runtime de la sesion que dice "output" e
+    incluye la del repo: waybar no acepta la salida por la linea de ordenes, y en
+    sus `include` gana el PRIMERO que define una clave, asi que esto pisa
+    cualquier "output" sin tocar el repo. Lleva la firma, como los canales (ver
+    lib/canales.py): dos sesiones no comparten estos ficheros.
+    """
+    original = os.path.join(WAYBAR_DIR, config)
+    if not salida:
+        return original
+    carpeta = os.path.join(RUNTIME, "waybar-autohide.%s" % (canales.firma() or "sin-sesion"),
+                           salida)
+    ruta = os.path.join(carpeta, config)
+    contenido = json.dumps({"output": salida, "include": [original]}, indent=2) + "\n"
+    try:
+        os.makedirs(carpeta, exist_ok=True)
+        with open(ruta) as fh:
+            if fh.read() == contenido:
+                return ruta
+    except OSError:
+        pass
+    try:
+        with open(ruta + ".nuevo", "w") as fh:
+            fh.write(contenido)
+        os.replace(ruta + ".nuevo", ruta)
+    except OSError:
+        return original     # sin runtime donde escribir: una para todas
+    return ruta
+
+
+def launch(config, salida=None):
     return subprocess.Popen(
-        ["waybar", "-c", os.path.join(WAYBAR_DIR, config),
+        ["waybar", "-c", config_de_salida(config, salida),
          "-s", os.path.join(WAYBAR_DIR, "style.css")],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
 
-def hijos_con_config(config):
+def hijos_con_config(config, salida=None):
     """PIDs de los hijos de ESTE demonio que corren waybar con esa config.
 
     Por PPID y por la ruta de la config en su linea de ordenes, nunca por
     nombre: un `waybar` de otra sesion (o el de la sesion de quien corre las
-    pruebas) no es hijo nuestro y no sale aqui.
+    pruebas) no es hijo nuestro y no sale aqui. Con pantalla, la ruta es la de
+    esa pantalla: barrer las de la barra de una no se lleva las de la otra.
     """
-    ruta = os.path.join(WAYBAR_DIR, config).encode()
+    ruta = config_de_salida(config, salida).encode()
     yo = os.getpid()
     pids = []
     for entrada in os.listdir("/proc"):
@@ -497,7 +592,16 @@ def avisar(cuerpo):
 class Bar:
     """Una barra y su linea-tirador: siempre visibles la una o la otra."""
 
-    def __init__(self, config, trigger_config, in_zone, namespace, trigger_namespace):
+    def __init__(self, config, trigger_config, in_zone, namespace, trigger_namespace,
+                 salida=None):
+        # La pantalla de esta barra ("DP-1"), o None: una para todas.
+        self.salida = salida
+        if salida:
+            # El raton solo cuenta en SU pantalla: la franja de arriba de la otra
+            # no saca esta barra.
+            zona = in_zone
+            in_zone = lambda x, y: (nombre_monitor_en(x, y) == salida  # noqa: E731
+                                    and zona(x, y))
         self.in_zone = in_zone
         self.config = config
         self.trigger_config = trigger_config
@@ -505,8 +609,8 @@ class Bar:
         # por donde update() consulta el estado REAL en vez de recordarlo.
         self.namespace = namespace
         self.trigger_namespace = trigger_namespace
-        self.proc = launch(config)
-        self.trigger = launch(trigger_config)
+        self.proc = launch(config, salida)
+        self.trigger = launch(trigger_config, salida)
         # Nace "sacada a mano", igual que tras un relanzar(). Importa en el
         # reinicio (SUPER+SHIFT+C): sin esto, con apps abiertas las barras
         # nuevas se escondian en el primer ciclo y el atajo parecia servir para
@@ -624,10 +728,10 @@ class Bar:
         # los relanzamientos, se barre por PPID y config. No se sabe aun que
         # camino la solto; con esto, el primer realineo la recoge sea cual sea.
         for config in (self.config, self.trigger_config):
-            for pid in hijos_con_config(config):
+            for pid in hijos_con_config(config, self.salida):
                 terminar_pid(pid)
-        self.proc = launch(self.config)
-        self.trigger = launch(self.trigger_config)
+        self.proc = launch(self.config, self.salida)
+        self.trigger = launch(self.trigger_config, self.salida)
         # Margen de cortesia para que se vea el cambio antes de que se esconda
         # sola. No hace falta anotar "queda visible": update() lo lee de la capa
         # real, y mientras la superficie no exista no le manda ninguna senal.
@@ -789,6 +893,76 @@ class Bar:
             except OSError:
                 pass
 
+    def retirar(self):
+        """Se fue su pantalla: matarlas y recogerlas, para no dejar zombis."""
+        for proc in (self.proc, self.trigger):
+            terminar_pid(proc.pid)
+
+
+# Las dos barras: (config, tirador, zona, namespace, namespace del tirador).
+TIPOS = {
+    "main": ("config.jsonc", "trigger.jsonc", in_top_zone,
+             "waybar-main", "waybar-trigger"),
+    "dock": ("dock.jsonc", "dock-trigger.jsonc", in_dock_zone,
+             "waybar-dock", "waybar-dock-trigger"),
+}
+
+# Las ordenes que nombran UNA barra: la que tiene el raton en su pantalla (el
+# tirador que se pulso esta ahi, y el panel del calendario cuelga del raton).
+ORDENES_DE_UNA = ("show", "toggle", "hold")
+
+
+def repartir_ordenes(bars, data, estado):
+    """Cada orden del FIFO, a sus barras.
+
+    "dock:show" va al dock y "show" a secas a la barra de arriba. Las de
+    ORDENES_DE_UNA, solo a la de la pantalla del raton; el resto, a todas las de
+    ese tipo (soltar, bloquear, el modo gaming, recargar el dock).
+    """
+    raton = None
+    for token in data.split():
+        target, _, cmd = token.rpartition(":")
+        tipo = target or "main"
+        if cmd in ("lock", "unlock"):
+            estado["locked"] = cmd == "lock"
+        elif cmd in ("gaming-on", "gaming-off"):
+            estado["gaming"] = cmd == "gaming-on"
+        destino = [b for (t, _), b in bars.items() if t == tipo]
+        if cmd in ORDENES_DE_UNA and len(destino) > 1:
+            if raton is None:
+                _, rx, ry, _ = read_state()
+                raton = nombre_monitor_en(rx, ry)
+            destino = [b for b in destino if b.salida == raton] or destino
+        for bar in destino:
+            bar.command(cmd)
+
+
+def sincronizar_barras(bars, estado):
+    """Una pareja de barras por pantalla encendida; quita las de las que se van.
+
+    `estado` lleva `locked`/`gaming`: una barra que nace con la pantalla
+    bloqueada o en modo gaming se mata al momento, como las demas. Si Hyprland
+    aun no dice que pantallas hay (arranque en frio) y no hay barras, una para
+    todas; en cuanto las diga, se cambian por las de cada pantalla.
+    """
+    nombres = [m["name"] for m in monitores() if m.get("name")]
+    if not nombres:
+        if not bars:
+            for tipo, args in TIPOS.items():
+                bars[(tipo, None)] = Bar(*args)
+        return
+    for clave in [c for c in bars if c[1] not in nombres]:
+        bars.pop(clave).retirar()
+    for nombre in nombres:
+        for tipo, args in TIPOS.items():
+            if (tipo, nombre) in bars:
+                continue
+            bar = Bar(*args, salida=nombre)
+            if estado["locked"] or estado["gaming"]:
+                bar.locked, bar.gaming = estado["locked"], estado["gaming"]
+                bar.kill()
+            bars[(tipo, nombre)] = bar
+
 
 def abrir_fifo():
     """Crea el FIFO de ordenes de cero y lo deja abierto. Devuelve el descriptor.
@@ -920,12 +1094,10 @@ def main():
 
     fifo = abrir_fifo()
 
-    bars = {
-        "main": Bar("config.jsonc", "trigger.jsonc", in_top_zone,
-                    "waybar-main", "waybar-trigger"),
-        "dock": Bar("dock.jsonc", "dock-trigger.jsonc", in_dock_zone,
-                    "waybar-dock", "waybar-dock-trigger"),
-    }
+    # {(tipo, pantalla): Bar}. Ver sincronizar_barras().
+    bars = {}
+    estado = {"locked": False, "gaming": False}
+    sincronizar_barras(bars, estado)
 
     def cleanup(*_):
         for bar in bars.values():
@@ -964,17 +1136,14 @@ def main():
             if not es_nuestro(fifo):
                 os.close(fifo)
                 fifo = abrir_fifo()
+            # Y que cada pantalla tenga sus barras (se enchufo o se quito una).
+            sincronizar_barras(bars, estado)
         if ready:
             try:
                 data = os.read(fifo, 1024).decode(errors="replace")
             except BlockingIOError:
                 data = ""
-            for token in data.split():
-                # "dock:show" -> dock; "show" a secas -> barra de arriba.
-                target, _, cmd = token.rpartition(":")
-                bar = bars.get(target or "main")
-                if bar:
-                    bar.command(cmd)
+            repartir_ordenes(bars, data, estado)
 
         # Antes de decidir nada, que esten en pie. Si alguna se cayo, esto la
         # relanza; sus superficies tardaran un momento en existir y update() se
@@ -1006,8 +1175,20 @@ def main():
                 cleanup()
 
         capas = layer_levels()
+        if any(b.salida for b in bars.values()):
+            por_monitor = capas_por_monitor()
+            ventanas = ventanas_por_monitor()
         for bar in bars.values():
-            bar.update(windows, cursor_x, cursor_y, capas)
+            if bar.salida:
+                # Las de SU pantalla: sus ventanas y sus superficies. Una
+                # pantalla que Hyprland no nombra aun (recien enchufada) se
+                # salta esta vuelta en vez de decidir con datos de otra.
+                if bar.salida not in ventanas:
+                    continue
+                bar.update(ventanas[bar.salida], cursor_x, cursor_y,
+                           por_monitor.get(bar.salida, {}))
+            else:
+                bar.update(windows, cursor_x, cursor_y, capas)
 
 
 if __name__ == "__main__":

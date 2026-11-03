@@ -1,0 +1,66 @@
+/* gtk/celiuz-transparente.css — las apps GTK (3 y 4) con el FONDO translucido,
+ * para que se vea el wallpaper detras (2026-11-02).
+ *
+ * Solo el fondo: el texto, los iconos, las imagenes y los videos se quedan
+ * solidos. Se probo antes la opacidad de Hyprland para todas las ventanas
+ * (decoration:active_opacity) y se descarto: vuelve transparente la ventana
+ * ENTERA, y los videos y las fotos se ven lavados.
+ *
+ * Lo engancha `instalar.sh` (gtk_transparencia): enlaza este fichero en
+ * ~/.config/gtk-3.0/ y anade un @import marcado al final de los gtk.css de
+ * GTK3 y GTK4, que son del usuario. Para quitarlo, borrar esas lineas.
+ *
+ * Los colores salen de la paleta del repo (hypr/conf/colores.conf), via el
+ * colores.css que genera gen-colores.py. La ruta es relativa a ESTE fichero
+ * tal como lo ve GTK, o sea el enlace de ~/.config/gtk-3.0/, y ~/.config/waybar
+ * es el otro enlace que crea instalar.sh. Ni un hex escrito aqui: lo vigila
+ * tests/unidad/transparencia.sh.
+ *
+ * Y el desenfoque NO va aqui: GTK4 ya sale nitido detras, y para las demas
+ * (kitty, Dolphin) se quita en lua/windowrules.lua. Con el blur de Hyprland
+ * (brightness + vibrancy) el fondo se volvia lechoso.
+ */
+@import url("../waybar/colores.css");
+
+window.background,
+dialog.background,
+.background:not(.popup):not(.tooltip):not(menu) {
+    background-color: alpha(@abismo, 0.40);
+}
+.view, iconview, treeview.view, textview text, list, listbox,
+viewport, scrolledwindow, notebook > stack, notebook > header,
+headerbar, .titlebar, toolbar, actionbar, statusbar, paned, .sidebar,
+placessidebar, stacksidebar, searchbar > revealer > box {
+    background-color: transparent;
+    background-image: none;
+}
+/* Lo que se abre encima (menus, desplegables, tooltips), casi opaco:
+ * transparente sobre la ventana de debajo no se lee. */
+menu, .menu, .context-menu, popover, popover.background, tooltip, tooltip.background,
+.csd.popup decoration, window.popup {
+    background-color: alpha(@abismo, 0.94);
+}
+
+/* --- Legibilidad: letras, campos y bordes que se vean sobre el fondo --- */
+label, entry, text, spinbutton, button, combobox, treeview.view, textview text,
+row, notebook > header tab, headerbar .title, .title, .subtitle {
+    color: @luz;
+    text-shadow: 0 1px 2px alpha(@negro, 0.85);
+}
+entry, spinbutton, combobox button, dropdown > button, button:not(.flat):not(.link),
+.linked > button, searchentry, textview.view border, frame > border, list.boxed-list,
+.card {
+    background-color: alpha(@abismo, 0.55);
+    border: 1px solid alpha(@amatista, 0.55);
+    border-radius: 8px;
+}
+button:hover:not(.flat) { background-color: alpha(@violeta, 0.35); }
+entry:focus, entry:focus-within, spinbutton:focus-within {
+    border-color: @neon;
+    box-shadow: 0 0 0 1px alpha(@neon, 0.6);
+}
+scale trough, progressbar trough { background-color: alpha(@luz, 0.22); }
+scale highlight, progressbar progress { background-color: @amatista; }
+separator { background-color: alpha(@amatista, 0.35); }
+notebook > header { border-color: alpha(@amatista, 0.45); }
+notebook > header tab:checked { box-shadow: inset 0 -2px @neon; }

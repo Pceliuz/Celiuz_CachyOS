@@ -45,6 +45,31 @@ canal_barras() { canal waybar-autohide; }
 canal_fondo()  { canal wallpaper-pause; }
 socket_mpv()   { canal mpvpaper sock; }
 
+# Un mpvpaper por pantalla (2026-11-02). El porque, en canales.py. Mismos
+# nombres y misma marca: lo compara tests/unidad/canales.sh.
+socket_mpv_de() {   # socket_mpv_de <salida>
+    local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    printf '%s/mpvpaper.%s.%s.sock\n' "$runtime" "${HYPRLAND_INSTANCE_SIGNATURE:-sin-sesion}" "$1"
+}
+marca_mpv() {
+    local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    printf '%s/mpvpaper.%s.\n' "$runtime" "${HYPRLAND_INSTANCE_SIGNATURE:-sin-sesion}"
+}
+sockets_mpv() {     # uno por linea, los que existen
+    local f viejo
+    if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+        viejo="$(socket_mpv)"
+        [ -S "$viejo" ] && printf '%s\n' "$viejo"
+        return 0
+    fi
+    local marca; marca="$(marca_mpv)"
+    # Sin el punto final, para que entre tambien el viejo (mpvpaper.<firma>.sock).
+    for f in "${marca%.}"*.sock; do
+        case "$f" in "$marca"*|"${marca%.}.sock") ;; *) continue ;; esac
+        [ -S "$f" ] && printf '%s\n' "$f"
+    done | LC_ALL=C sort
+}
+
 # --- Procesos de ESTA sesion --------------------------------------------------
 #
 # `pkill -x mpvpaper` y `pgrep -x hyprlock` matan y cuentan POR NOMBRE, y eso no

@@ -8,6 +8,11 @@ ve. Hace dos cosas distintas:
   1. PAUSA el video cuando hay una ventana tapandolo, y lo reanuda al volver a
      un workspace vacio. Corta el gasto de CPU y del decodificador de la GPU;
      la RAM se queda reservada, que es lo que permite reanudar al instante.
+     CADA PANTALLA POR SU CUENTA (2026-11-02): hay un mpvpaper por pantalla
+     (ver wallpaper.sh) y cada uno se pausa por lo que haya en el escritorio
+     que enseña SU pantalla. Antes se miraba solo el escritorio con el foco y
+     se aplicaba a todas: saltar a uno vacio en una pantalla ponia el fondo en
+     marcha tambien detras de las apps de la otra.
 
   2. MATA mpvpaper entero mientras corra alguno de los programas de
      ~/.config/mpvpaper/stoplist (tus juegos), y lo vuelve a levantar al
@@ -63,12 +68,16 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "lib"))
 import canales  # noqa: E402
 
-# Lo abre mpvpaper con --input-ipc-server (ver wallpaper.sh).
-# Con la firma de la sesion; ver lib/canales.py. Ademas de evitar que dos
-# sesiones se hablen al mpvpaper equivocado, esta ruta sale en la linea de
-# comandos de NUESTRO mpvpaper, que es como se le distingue de los ajenos
-# sin recurrir a un `pkill -x` que los mata a todos.
-MPV_SOCKET = canales.socket_mpv()
+# Los abre cada mpvpaper con --input-ipc-server (ver wallpaper.sh), uno por
+# pantalla, y todos empiezan por la MARCA de la sesion (lib/canales.py). Ademas
+# de evitar que dos sesiones se hablen al mpvpaper equivocado, la marca sale en
+# la linea de comandos de NUESTROS mpvpaper, que es como se les distingue de los
+# ajenos sin recurrir a un `pkill -x` que los mata a todos.
+MARCA_MPV = canales.marca_mpv()
+# Cuanto puede faltar el fondo de una pantalla antes de relanzarlo. Al enchufar
+# una, monitores.py ya relanza el fondo (ver relanzar_fondo alli); sin esta
+# espera se relanzaba dos veces seguidas, una por cada uno.
+GRACIA_FONDO = 4.0
 STOPLIST = os.path.expanduser("~/.config/mpvpaper/stoplist")
 # La raiz del repo, resolviendo el enlace simbolico: a este script se le puede
 # llamar por ~/.config/hypr/... o por ~/.local/bin/..., y realpath() lleva
@@ -112,6 +121,8 @@ EVENTOS = (
     "openwindow>>", "closewindow>>",
     "movewindowv2>>", "movewindow>>",
     "fullscreen>>", "changefloatingmode>>",
+    "monitoradded>>", "monitorremoved>>",
+    "activespecial>>",
 )
 
 
@@ -129,32 +140,52 @@ def hypr_dir():
 HYPR_DIR = hypr_dir()
 
 
-def ventanas_activas():
-    """Cuantas ventanas hay en el workspace que se esta viendo. None si falla."""
+def consulta(orden):
+    """La respuesta JSON de Hyprland a `j/<orden>`, o None si falla."""
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(1.0)
             s.connect(os.path.join(HYPR_DIR, ".socket.sock"))
-            s.sendall(b"activeworkspace")
+            s.sendall(b"j/" + orden.encode())
             datos = b""
             while True:
-                trozo = s.recv(8192)
+                trozo = s.recv(65536)
                 if not trozo:
                     break
                 datos += trozo
-    except OSError:
+        return json.loads(datos.decode(errors="replace"))
+    except (OSError, ValueError):
         return None
-    for linea in datos.decode(errors="replace").splitlines():
-        if linea.strip().startswith("windows:"):
-            try:
-                return int(linea.split(":", 1)[1])
-            except ValueError:
-                return None
-    return None
 
 
-def mpv(orden):
-    """Manda una orden al socket IPC de mpv. Devuelve None si no esta.
+def ventanas_por_pantalla():
+    """{pantalla: ventanas que tapan su fondo}, y "ALL": las de la enfocada.
+
+    Lo que tapa el fondo de una pantalla son las ventanas del escritorio que
+    ENSEÑA (activeWorkspace) mas las de un escritorio especial abierto encima
+    (el scratchpad). "ALL" es para el mpvpaper de reserva de una sola pieza
+    (ver wallpaper.sh): se queda con la regla de antes, la pantalla con el foco.
+    None si Hyprland no contesta.
+    """
+    monitores = consulta("monitors")
+    escritorios = consulta("workspaces")
+    if not isinstance(monitores, list) or not isinstance(escritorios, list):
+        return None
+    ventanas = {w.get("id"): w.get("windows", 0) for w in escritorios}
+    salida = {}
+    for m in monitores:
+        n = ventanas.get((m.get("activeWorkspace") or {}).get("id"), 0)
+        especial = (m.get("specialWorkspace") or {}).get("id") or 0
+        if especial:
+            n += ventanas.get(especial, 0)
+        salida[m.get("name")] = n
+        if m.get("focused"):
+            salida["ALL"] = n
+    return salida
+
+
+def mpv(orden, sock):
+    """Manda una orden al socket IPC de un mpvpaper. Devuelve None si no esta.
 
     Que no este es normal, no un error: puede que mpvpaper aun no haya
     arrancado, o que lo hayamos matado nosotros por la stoplist.
@@ -162,16 +193,16 @@ def mpv(orden):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(1.0)
-            s.connect(MPV_SOCKET)
+            s.connect(sock)
             s.sendall((json.dumps(orden) + "\n").encode())
             return s.recv(4096)
     except (OSError, ValueError):
         return None
 
 
-def pausa_real():
-    """Lo que mpv tiene puesto DE VERDAD, o None si no se le pudo preguntar."""
-    respuesta = mpv({"command": ["get_property", "pause"]})
+def pausa_real(sock):
+    """Lo que ese mpv tiene puesto DE VERDAD, o None si no se le pudo preguntar."""
+    respuesta = mpv({"command": ["get_property", "pause"]}, sock)
     if not respuesta:
         return None
     try:
@@ -213,7 +244,7 @@ def _pids(nombre, marca=None):
     Se hace leyendo /proc y no con pgrep/pkill por lo de siempre: esos matan y
     cuentan POR NOMBRE, y con dos sesiones vivas del mismo usuario eso significa
     llevarse por delante el fondo de la otra. La marca es el socket IPC, que
-    lleva la firma de la sesion (ver MPV_SOCKET).
+    lleva la firma de la sesion (ver MARCA_MPV).
     """
     encontrados = []
     for pid in os.listdir("/proc"):
@@ -234,19 +265,32 @@ def _pids(nombre, marca=None):
 
 
 def mpvpaper_vivo():
-    return bool(_pids("mpvpaper", MPV_SOCKET))
+    return bool(_pids("mpvpaper", MARCA_MPV))
+
+
+def pantallas_sin_fondo(pantallas):
+    """Las pantallas encendidas que no tienen su mpvpaper vivo.
+
+    Con el de reserva (`ALL`, o el viejo de un solo socket) vivo, ninguna: ese
+    pinta todas.
+    """
+    if (_pids("mpvpaper", canales.socket_mpv_de("ALL"))
+            or _pids("mpvpaper", canales.socket_mpv())):
+        return []
+    return [p for p in pantallas
+            if p != "ALL" and not _pids("mpvpaper", canales.socket_mpv_de(p))]
 
 
 def matar_mpvpaper():
     """Mata NUESTRO mpvpaper. Los dos golpes: si arranco con opciones invalidas
     se queda colgado sin capa y no responde a SIGTERM."""
-    for pid in _pids("mpvpaper", MPV_SOCKET):
+    for pid in _pids("mpvpaper", MARCA_MPV):
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:
             pass
     time.sleep(0.5)
-    for pid in _pids("mpvpaper", MPV_SOCKET):
+    for pid in _pids("mpvpaper", MARCA_MPV):
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
@@ -342,12 +386,13 @@ def main():
 
     fifo = abrir_fifo()
 
-    pausado = None       # lo ultimo que le dijimos a mpv
+    pausado = {}         # {socket: lo ultimo que le dijimos a ese mpv}
     parado_por_juego = False
     retenido = False     # alguien pidio `hold`: no se toca la pausa
     modo_gaming = False  # `gaming-on`: fondo fuera mientras dure el modo
     revividos = 0        # intentos seguidos de resucitar mpvpaper (ver 1b)
     sin_hyprland = None  # desde cuando no se consigue hablar con el compositor
+    sin_fondo = None     # desde cuando falta el fondo de alguna pantalla
 
     while True:
         try:
@@ -384,7 +429,7 @@ def main():
             continue
 
         sin_hyprland = None
-        pausado = None
+        pausado = {}
         buffer = b""
         try:
             while True:
@@ -403,7 +448,7 @@ def main():
                             retenido = True
                         elif orden == "release":
                             retenido = False
-                            pausado = None   # obliga a recalcular abajo
+                            pausado = {}     # obliga a recalcular abajo
                         elif orden == "gaming-on":
                             modo_gaming = True
                         elif orden == "gaming-off":
@@ -416,15 +461,26 @@ def main():
                 # llamado mpvpaper»: con dos sesiones vivas el de la otra hacia
                 # creer que el nuestro seguia en pie y no se resucitaba nunca.
                 # Sigue sin crear procesos (lee /proc, ver la cabecera).
-                hay_fondo = mpvpaper_vivo()
+                # Y uno por pantalla: falta el fondo si alguna pantalla
+                # encendida se quedo sin el suyo. Si Hyprland no contesta, se
+                # cae a la regla de antes (algun mpvpaper nuestro vivo).
+                ventanas = ventanas_por_pantalla()
+                if ventanas is None:
+                    hay_fondo = mpvpaper_vivo()
+                else:
+                    hay_fondo = not pantallas_sin_fondo(ventanas)
+                if hay_fondo:
+                    sin_fondo = None
+                elif sin_fondo is None:
+                    sin_fondo = time.monotonic()
                 if hay_juego and not parado_por_juego:
                     matar_mpvpaper()
                     parado_por_juego = True
-                    pausado = None
+                    pausado = {}
                 elif not hay_juego and parado_por_juego:
                     levantar_mpvpaper()
                     parado_por_juego = False
-                    pausado = None
+                    pausado = {}
                     revividos = 0
                     time.sleep(1.5)   # deja que mpv abra su socket
 
@@ -446,13 +502,21 @@ def main():
                 # segundo 1, vivo otra vez al 2. Pasaba igual con la stoplist,
                 # cinco segundos despues; la prueba no lo veia porque su copia del
                 # repo no tenia `current` y esta rama no se ejecutaba nunca.
+                #
+                # Con un mpvpaper por pantalla, «se murio» es «a alguna pantalla
+                # le falta el suyo» durante GRACIA_FONDO: al enchufar una,
+                # monitores.py ya relanza el fondo, y sin la espera se hacia dos
+                # veces seguidas.
                 elif (not parado_por_juego and not hay_fondo
+                      and time.monotonic() - sin_fondo >= GRACIA_FONDO
                       and os.path.exists(CURRENT) and revividos < MAX_REVIVIR):
                     revividos += 1
                     levantar_mpvpaper()
-                    pausado = None
+                    pausado = {}
+                    sin_fondo = None
                     time.sleep(1.5)
-                    if not mpvpaper_vivo() and revividos >= MAX_REVIVIR:
+                    if (not mpvpaper_vivo() or pantallas_sin_fondo(ventanas or {})) \
+                            and revividos >= MAX_REVIVIR:
                         avisar("El fondo de pantalla no arranca",
                                "mpvpaper se cierra solo al abrirlo. Prueba a "
                                "elegir otro video con CeliuzPaper.")
@@ -476,7 +540,7 @@ def main():
                 if retenido:
                     # Alguien esta eligiendo fondo: el video se queda como lo
                     # ponga el, y al soltar (`release`) se recalcula.
-                    pausado = None
+                    pausado = {}
                     continue
 
                 # Sin evento de Hyprland, el latido (cada PERIODO) sirve para
@@ -487,19 +551,26 @@ def main():
                 # local diciendo que ya estaba pausado, el video se quedaba
                 # corriendo hasta el siguiente evento de ventanas, o para
                 # siempre si no lo habia. Cuesta una consulta al socket.
+                sockets = canales.sockets_mpv()
                 if not recontar:
-                    pausado = pausa_real()
+                    pausado = {s: pausa_real(s) for s in sockets}
 
-                n = ventanas_activas()
-                if n is None:
+                if recontar:
+                    ventanas = ventanas_por_pantalla()
+                if ventanas is None:
                     continue
-                quiere_pausa = n > 0
-                if quiere_pausa != pausado:
-                    # Solo se apunta si la orden LLEGO. Si mpvpaper todavia no
-                    # ha abierto su socket, apuntarla dejaria a `pausado`
-                    # mintiendo y el fondo no se pausaria nunca.
-                    if mpv({"command": ["set_property", "pause", quiere_pausa]}) is not None:
-                        pausado = quiere_pausa
+                for sock in sockets:
+                    # La pantalla de ese mpvpaper. Una que ya no esta (se
+                    # desenchufo y su mpvpaper sigue vivo) no se ve: pausa.
+                    n = ventanas.get(canales.salida_de_socket(sock))
+                    quiere_pausa = n is None or n > 0
+                    if quiere_pausa != pausado.get(sock):
+                        # Solo se apunta si la orden LLEGO. Si mpvpaper todavia
+                        # no ha abierto su socket, apuntarla dejaria a `pausado`
+                        # mintiendo y el fondo no se pausaria nunca.
+                        if mpv({"command": ["set_property", "pause", quiere_pausa]},
+                               sock) is not None:
+                            pausado[sock] = quiere_pausa
         except OSError:
             pass
         finally:

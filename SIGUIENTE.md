@@ -5,7 +5,42 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-10-22**, en la **laptop**.
+Última sesión: **2026-11-02**, en la **PC**.
+## 2026-11-02 (PC): dos pantallas, fondo de las apps translúcido, y fondo y barras por pantalla
+
+En su propio commit. El **modo programador** (le faltan ajustes) y el
+**repetidor** (temporal, para un trabajo con solo 4G; lo quitará) se quedan
+en LOCAL, sin commitear, y no entran en commits de otras tareas.
+
+- **Las pantallas**: la PC tiene ya dos (Gigabyte GS27QCA por DP a 180 Hz y el
+  TES de 24" por HDMI a 100 Hz). El orden y el escritorio 1 en el Gigabyte van
+  en SU `personal.lua` (no versionado). Si cambia los cables de puerto, se
+  cruzan: es por conector.
+- **Fondo translúcido de las apps** (solo el fondo: lo de `active_opacity` se
+  probó y lava vídeos y fotos, descartado). GTK con
+  `gtk/celiuz-transparente.css`, kitty con `kitty/celiuz-transparencia.conf`
+  (0.35), Qt/Dolphin con el tema Kvantum que genera `gen-kvantum.py`, y sin
+  blur detrás (`fondo-nitido`). Lo engancha `instalar.sh` (sección 2d). Pide
+  el paquete `kvantum` (la PC ya lo tiene). **Firefox no se dejó** (ver la
+  trampa en CLAUDE.md) y Brave/Steam no pueden; el usuario lo dio por perdido.
+- **Un mpvpaper y cuatro waybar por pantalla**, cada pantalla decide por su
+  escritorio visible. Aplicado y visto en la sesión real (fondo en marcha en
+  el Gigabyte vacío y en pausa en el TES con apps; barras igual).
+
+Pendiente:
+- [ ] Que el usuario lo use un rato con las dos pantallas: saltar entre
+      escritorios, el ratón arriba en cada una, el tirador, SUPER+B, el panel
+      del calendario y bloquear/desbloquear.
+- [ ] En la **laptop**: `git pull && ./instalar.sh` (pedirá `sudo pacman -S
+      kvantum`), y comprobar con una sola pantalla que barras y fondo van
+      como siempre, y con el televisor que cada una va por su lado.
+- [ ] `unidad/saludo` falla con dos pantallas: la línea de pantallas del
+      saludo mide 43 columnas y la reserva es de 42. De antes, sin arreglar.
+- [ ] `e2e/bluetooth` falló UNA vez en la tanda completa y pasa sola (77/77):
+      parece de tiempos con la máquina cargada. Vigilar.
+
+---
+
 
 ---
 

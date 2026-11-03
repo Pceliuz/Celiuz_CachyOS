@@ -339,6 +339,104 @@ kitty_iconos() {
     fi
 }
 
+# transparencia — el FONDO de las apps translucido, para ver el wallpaper
+# (2026-11-02). Solo el fondo: texto, imagenes y videos quedan solidos (la
+# opacidad de ventana entera se probo y se descarto, lava los videos).
+#   - GTK 3 y 4: gtk/celiuz-transparente.css, enlazado al lado del gtk.css
+#     del usuario y con un @import marcado al final de cada gtk.css.
+#   - kitty: kitty/celiuz-transparencia.conf, con un include marcado al final
+#     del kitty.conf (gana el ultimo, asi que pisa su background_opacity).
+#   - Qt/KDE (Dolphin): el tema Kvantum «Celiuz», que GENERA
+#     scripts/gen-kvantum.py desde el KvGnomeDark del paquete kvantum y la
+#     paleta; y qt6ct pasa a usar el estilo kvantum.
+# El desenfoque de detras se quita en lua/windowrules.lua («fondo-nitido»).
+# El tema base de Kvantum: el del paquete (las pruebas le dan uno falso).
+KVANTUM_BASE="${KVANTUM_BASE:-/usr/share/Kvantum/KvGnomeDark}"
+TRANSP_MARCA="celiuz-transparente (lo puso instalar.sh; borra estas dos lineas para quitarlo)"
+KITTY_TRANSP_LINEA="include celiuz-transparencia.conf"
+transparencia() {
+    titulo "2d. Fondos translucidos (GTK, kitty, Qt)"
+    local cfg="${XDG_CONFIG_HOME:-$HOME/.config}" v css linea
+
+    # GTK: el mismo fichero para las dos versiones; el de GTK4 lo importa por
+    # su ruta en gtk-3.0 (la relativa a colores.css se resuelve desde ahi).
+    hacer mkdir -p "$cfg/gtk-3.0" "$cfg/gtk-4.0"
+    enlazar "$REPO/gtk/celiuz-transparente.css" "$cfg/gtk-3.0/celiuz-transparente.css"
+    linea="@import url(\"$cfg/gtk-3.0/celiuz-transparente.css\");"
+    for v in 3.0 4.0; do
+        css="$cfg/gtk-$v/gtk.css"
+        if [ -f "$css" ] && grep -qF "celiuz-transparente.css" "$css"; then
+            gris "  GTK $v: ya enganchado en $css"
+        elif [ "$SOLO_REVISAR" -eq 1 ]; then
+            gris "  (haria) añadir el @import al final de $css"
+        else
+            printf '\n/* %s */\n%s\n' "$TRANSP_MARCA" "$linea" >> "$css"
+            hecho "  GTK $v: enganchado en $css (las apps que se abran desde ahora)"
+        fi
+    done
+
+    # kitty
+    if command -v kitty >/dev/null 2>&1; then
+        local kdir="$cfg/kitty"
+        hacer mkdir -p "$kdir"
+        enlazar "$REPO/kitty/celiuz-transparencia.conf" "$kdir/celiuz-transparencia.conf"
+        if [ -f "$kdir/kitty.conf" ] && grep -qxF "$KITTY_TRANSP_LINEA" "$kdir/kitty.conf"; then
+            gris "  kitty: ya enganchado en $kdir/kitty.conf"
+        elif [ "$SOLO_REVISAR" -eq 1 ]; then
+            gris "  (haria) añadir la transparencia al final de $kdir/kitty.conf"
+        else
+            printf '\n# %s\n%s\n' "$TRANSP_MARCA" "$KITTY_TRANSP_LINEA" >> "$kdir/kitty.conf"
+            hecho "  kitty: enganchado en $kdir/kitty.conf (las terminales nuevas)"
+        fi
+    fi
+
+    # Qt: Kvantum. Sin el paquete no hay tema base, y las apps Qt siguen opacas.
+    if [ ! -f "$KVANTUM_BASE/$(basename "$KVANTUM_BASE").kvconfig" ]; then
+        aviso "sin kvantum, Dolphin y las apps Qt se quedan con el fondo opaco"
+        gris "    sudo pacman -S kvantum"
+        return 0
+    fi
+    if [ "$SOLO_REVISAR" -eq 1 ]; then
+        if "$REPO/hypr/scripts/gen-kvantum.py" --base "$KVANTUM_BASE" --check 2>/dev/null; then
+            gris "  Kvantum: el tema Celiuz esta al dia"
+        else
+            gris "  (haria) generar el tema Kvantum Celiuz en $cfg/Kvantum/Celiuz"
+        fi
+    else
+        "$REPO/hypr/scripts/gen-kvantum.py" --base "$KVANTUM_BASE" >/dev/null \
+            && hecho "  Kvantum: tema Celiuz generado en $cfg/Kvantum/Celiuz" \
+            || aviso "gen-kvantum.py fallo: las apps Qt se quedan como estaban"
+    fi
+    # Que Kvantum use ese tema. Si ya habia elegido OTRO, es del usuario.
+    local kv="$cfg/Kvantum/kvantum.kvconfig" actual=""
+    [ -f "$kv" ] && actual="$(sed -n 's/^theme=//p' "$kv" | head -1)"
+    if [ "$actual" = "Celiuz" ]; then
+        gris "  Kvantum: usa el tema Celiuz"
+    elif [ -n "$actual" ]; then
+        gris "  Kvantum: tienes elegido el tema «$actual»; no lo toco (Celiuz esta disponible)"
+    elif [ "$SOLO_REVISAR" -eq 1 ]; then
+        gris "  (haria) elegir el tema Celiuz en $kv"
+    else
+        hacer mkdir -p "$cfg/Kvantum"
+        printf '[General]\ntheme=Celiuz\n' > "$kv"
+        hecho "  Kvantum: tema Celiuz elegido"
+    fi
+    # Y que las apps Qt usen Kvantum: por qt6ct, que es como las configura
+    # CachyOS (QT_QPA_PLATFORMTHEME=qt6ct). Se copia el qt6ct.conf la primera vez.
+    local qt="$cfg/qt6ct/qt6ct.conf"
+    if [ ! -f "$qt" ]; then
+        gris "  sin $qt: las apps Qt no pasan por qt6ct y siguen con su estilo"
+    elif grep -qx 'style=kvantum' "$qt"; then
+        gris "  qt6ct: estilo kvantum"
+    elif [ "$SOLO_REVISAR" -eq 1 ]; then
+        gris "  (haria) poner style=kvantum en $qt"
+    else
+        [ -f "$qt.antes-celiuz" ] || hacer cp "$qt" "$qt.antes-celiuz"
+        sed -i -e 's/^style=.*/style=kvantum/' -e 's/^custom_palette=.*/custom_palette=false/' "$qt"
+        hecho "  qt6ct: estilo kvantum (el de antes, en $qt.antes-celiuz)"
+    fi
+}
+
 # comprobar_hyprland_lua — que el Hyprland instalado lee Lua, y en que idioma
 # esta la sesion abierta.
 comprobar_hyprland_lua() {
@@ -1359,6 +1457,7 @@ else
     desplegar
     saludo_fish
     kitty_iconos
+    transparencia
     celiuzpaper
     dock
     maquina_local

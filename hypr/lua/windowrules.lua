@@ -23,6 +23,20 @@ hl.window_rule({
     suppress_event = "maximize",
 })
 
+-- --- El wallpaper NITIDO detras de las apps con fondo translucido ---
+-- (2026-11-02) kitty (kitty/celiuz-transparencia.conf) y las apps Qt con el
+-- tema Kvantum «Celiuz» (scripts/gen-kvantum.py) dejan ver el fondo. Con el
+-- desenfoque de Hyprland (`decoration.blur`, con su brightness y su vibrancy)
+-- ese fondo salia LECHOSO, como un velo gris; sin el se ve nitido con el tinte
+-- violeta de cada app, que es lo que eligio el usuario mirando las dos cosas
+-- lado a lado. Las GTK4 (Control de volumen) ya salian nitidas sin regla.
+-- Una clase que no este en el equipo no hace nada.
+hl.window_rule({
+    name  = "fondo-nitido",
+    match = { class = "^(kitty|org\\.kde\\.dolphin)$" },
+    no_blur = true,
+})
+
 -- --- Terminales de consulta rapida (btop, nmtui) ---
 -- Flotantes y centradas: son ventanas para mirar un momento y cerrar. Si
 -- entraran en el mosaico le robarian la mitad de la pantalla a lo que estuvieras

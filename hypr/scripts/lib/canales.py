@@ -114,10 +114,74 @@ def socket_mpv():
     return canal("mpvpaper", "sock")
 
 
+# --- Un mpvpaper POR PANTALLA (2026-11-02) ------------------------------------
+#
+# Con un solo mpvpaper para todas las salidas (`ALL`) la pausa es una sola: si en
+# una pantalla habia un escritorio vacio y en la otra apps, o se movia el fondo
+# en las dos o en ninguna. Ahora wallpaper.sh lanza uno por pantalla, cada uno
+# con SU socket, y wallpaper-pause.py pausa cada uno segun lo que haya en su
+# pantalla.
+#
+# Todos los sockets de la sesion empiezan igual, `mpvpaper.<firma>.`, y ese
+# prefijo es la MARCA con que se reconoce (y se mata) a todos los nuestros
+# leyendo su linea de comandos. Lo recoge tambien el formato de antes,
+# `mpvpaper.<firma>.sock` (socket_mpv), asi que el primer relanzamiento tras
+# actualizar mata bien al mpvpaper viejo.
+
+def socket_mpv_de(salida):
+    """El socket del mpvpaper que pinta la pantalla `salida` (DP-1, HDMI-A-1...).
+
+    `ALL` es el de reserva: un mpvpaper para todas, cuando wallpaper.sh no pudo
+    preguntar que pantallas hay.
+    """
+    return os.path.join(RUNTIME, f"mpvpaper.{firma() or 'sin-sesion'}.{salida}.sock")
+
+
+def marca_mpv():
+    """Lo que llevan en su linea de comandos TODOS los mpvpaper de esta sesion.
+
+    Sin firma es la de "sin-sesion", que no la lleva ningun mpvpaper vivo: lo
+    de siempre, sin firma no se reclama nada (ver la cabecera).
+    """
+    return os.path.join(RUNTIME, f"mpvpaper.{firma() or 'sin-sesion'}.")
+
+
+def salida_de_socket(ruta):
+    """La pantalla de un socket de mpvpaper: "DP-1", o "ALL" (tambien el viejo)."""
+    nombre = os.path.basename(ruta)
+    prefijo = os.path.basename(marca_mpv())
+    if not nombre.startswith(prefijo) or not nombre.endswith(".sock"):
+        return None
+    salida = nombre[len(prefijo):-len(".sock")]
+    return salida or "ALL"
+
+
+def sockets_mpv():
+    """Los sockets de mpvpaper de ESTA sesion que existen, uno por pantalla.
+
+    A quien manda una orden al fondo (la pantalla de bloqueo, CeliuzPaper) le
+    toca mandarla a todos: si no, solo cambiaria una pantalla.
+    """
+    if not firma():
+        viejo = socket_mpv()   # sin firma: el unico que haya, si hay uno solo
+        return [viejo] if _del_tipo(viejo, "sock") else []
+    # Sin el punto final de la marca, para que entre tambien el viejo
+    # (`mpvpaper.<firma>.sock`); salida_de_socket descarta lo que no sea.
+    candidatos = glob.glob(glob.escape(marca_mpv()[:-1]) + "*.sock")
+    return sorted(f for f in candidatos
+                  if salida_de_socket(f) and _del_tipo(f, "sock"))
+
+
 if __name__ == "__main__":
     import sys
 
-    verbos = {"barras": canal_barras, "fondo": canal_fondo, "mpv": socket_mpv}
+    verbos = {"barras": canal_barras, "fondo": canal_fondo, "mpv": socket_mpv,
+              "marca-mpv": marca_mpv, "mpvs": lambda: "\n".join(sockets_mpv())}
+    if len(sys.argv) == 3 and sys.argv[1] == "mpv-de":
+        print(socket_mpv_de(sys.argv[2]))
+        sys.exit(0)
     if len(sys.argv) != 2 or sys.argv[1] not in verbos:
-        sys.exit(f"uso: {os.path.basename(sys.argv[0])} {{{'|'.join(verbos)}}}")
-    print(verbos[sys.argv[1]]())
+        sys.exit(f"uso: {os.path.basename(sys.argv[0])} {{{'|'.join(verbos)}|mpv-de SALIDA}}")
+    salida = verbos[sys.argv[1]]()
+    if salida:
+        print(salida)

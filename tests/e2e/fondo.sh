@@ -29,7 +29,11 @@ binario_falso pkill 0
 binario_falso pgrep 0
 # setsid que no arranca nada.
 binario_falso setsid 0
-_gris "  ninguno de los cuatro hace nada de verdad"
+# hyprctl que no contesta, como desde un TTY: wallpaper.sh no sabe que
+# pantallas hay y lanza UNO para todas (`ALL`). Con el de verdad, la prueba
+# dependeria de cuantas pantallas tenga quien la corre.
+binario_falso hyprctl 1
+_gris "  ninguno de los cinco hace nada de verdad"
 
 # El fondo activo es el enlace `current`. Se apunta a un fichero de mentira
 # dentro del temporal; wallpaper.sh resuelve el enlace para mirar la extension.
@@ -77,7 +81,20 @@ poner_fondo "sin-extension-en-el-enlace.png"
 afirmar_contiene "$REGISTRO/mpvpaper.log" 'image-display-duration=inf' \
     "resuelve el enlace \"current\" para saber que es una imagen"
 
-titulo "4. No mato nada de tu sesion"
+titulo "4. Un mpvpaper POR PANTALLA, cada uno con su socket"
+# Con un solo mpvpaper para todas, la pausa era una sola: o se movia el fondo
+# en todas las pantallas o en ninguna (ver wallpaper-pause.py y
+# tests/unidad/fondo-por-pantalla.sh).
+afirmar_contiene "$REGISTRO/mpvpaper.log" ' ALL ' "sin poder preguntar las pantallas: uno solo, ALL"
+binario_falso hyprctl 0 'printf %s '"'"'[{"name":"DP-1","disabled":false},{"name":"HDMI-A-1","disabled":false},{"name":"Apagada","disabled":true}]'"'"
+poner_fondo "pelicula.mp4"
+afirmar_igual "2" "$(veces_llamado mpvpaper)" "dos pantallas encendidas: dos mpvpaper (la apagada no)"
+afirmar_contiene "$REGISTRO/mpvpaper.log" 'mpvpaper\.sin-sesion\.DP-1\.sock.* DP-1 ' "uno para DP-1, con su socket"
+afirmar_contiene "$REGISTRO/mpvpaper.log" 'mpvpaper\.sin-sesion\.HDMI-A-1\.sock.* HDMI-A-1 ' "otro para HDMI-A-1, con el suyo"
+afirmar_no_contiene "$REGISTRO/mpvpaper.log" ' ALL ' "   y ninguno para ALL"
+binario_falso hyprctl 1
+
+titulo "5. No mato nada de tu sesion"
 # Ya no se mata por nombre, asi que lo que hay que exigir es lo contrario que
 # antes: que NO se llame a pkill. Se reconoce al mpvpaper propio por la ruta de
 # su socket, que lleva la firma de la sesion; sin firma —como aqui, que

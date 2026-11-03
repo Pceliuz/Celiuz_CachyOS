@@ -88,6 +88,18 @@ afirmar_igual "True" "$(consulta "$TMP/pc.json" 'any(r.get("focus_on_activate") 
 afirmar_igual "False" "$(consulta "$TMP/pc.json" 'any(r.get("focus_on_activate") and r["match"].get("class")==".*" for r in R["reglas"])')" \
     "   y ninguna regla para todas las apps lo da"
 
+# 2026-11-02: las apps con fondo translucido (kitty, Dolphin con Kvantum)
+# enseñan el wallpaper NITIDO; con el blur de Hyprland salia lechoso.
+afirmar_igual "True" "$(consulta "$TMP/pc.json" 'any(r.get("no_blur") is True and r["match"].get("class")=="^(kitty|org\\.kde\\.dolphin)$" for r in R["reglas"])')" \
+    "kitty y Dolphin sin desenfoque detras (fondo-nitido)"
+# Y la transparencia es SOLO del fondo de cada app: la opacidad de la ventana
+# entera se probo y se descarto el mismo dia (los videos y las fotos se ven
+# lavados). Que nadie la vuelva a bajar para todas.
+for op in active_opacity inactive_opacity fullscreen_opacity; do
+    afirmar_igual "1.0" "$(consulta "$TMP/pc.json" "str(float(R['opciones']['decoration.$op']))")" \
+        "decoration.$op sigue en 1 (la transparencia va por app, no por ventana)"
+done
+
 titulo "3. Ningun atajo repetido"
 for f in pc laptop; do
     rep="$(consulta "$TMP/$f.json" '", ".join(sorted({b["teclas"] for b in R["binds"] if [x["teclas"] for x in R["binds"]].count(b["teclas"]) > 1}))')"

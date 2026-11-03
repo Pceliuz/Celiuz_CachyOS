@@ -26,7 +26,22 @@ if ! . "$SCRIPTS/lib/canales.sh" 2>/dev/null || ! declare -F canal >/dev/null; t
     echo "wallpaper: no encuentro lib/canales.sh; me paro antes de tocar nada" >&2
     exit 1
 fi
-MPV_SOCK="$(socket_mpv)"
+# Uno por pantalla (ver socket_mpv_de en lib/canales.py); la marca es lo que
+# llevan TODOS los de esta sesion en su linea de comandos, el viejo de un solo
+# socket incluido.
+MARCA_MPV="$(marca_mpv)"
+
+# Un relanzamiento a la vez por sesion. Entre matar el mpvpaper viejo y que
+# nazca el nuevo pasa casi un segundo SIN fondo, y en ese hueco el latido de
+# wallpaper-pause.py lo da por muerto y llama aqui tambien: dos llamadas a la
+# vez no se ven entre si, cada una lanza el suyo, y quedaban DOS mpvpaper
+# pintando encima (visto el 2026-11-01 relanzandolo a mano, y monitores.py
+# ahora lo relanza al volver una pantalla). Con el candado la segunda espera,
+# mata al de la primera y lanza el suyo: siempre queda uno.
+# El candado NO se hereda: mpvpaper y el demonio llevan `9>&-`, o lo tendrian
+# cogido mientras vivan y nadie mas podria relanzar el fondo.
+exec 9>"$(canal wallpaper lock)"
+flock -w 20 9 || { echo "wallpaper: otro relanzamiento no termina; me rindo" >&2; exit 1; }
 
 SOLO_MPV=0
 [ "${1:-}" = "--only-mpv" ] && SOLO_MPV=1
@@ -46,12 +61,15 @@ SOLO_MPV=0
 #
 # Hacen falta los dos golpes: si mpvpaper arranco con opciones invalidas se
 # queda colgado sin capa y NO responde a SIGTERM, asi que hay que rematarlo.
-MIS_MPV="$(pids_con_marca mpvpaper "$MPV_SOCK")"
+MIS_MPV="$(pids_con_marca mpvpaper "$MARCA_MPV")"
 [ -n "$MIS_MPV" ] && kill $MIS_MPV 2>/dev/null
 sleep 0.5
-MIS_MPV="$(pids_con_marca mpvpaper "$MPV_SOCK")"
+MIS_MPV="$(pids_con_marca mpvpaper "$MARCA_MPV")"
 [ -n "$MIS_MPV" ] && kill -9 $MIS_MPV 2>/dev/null
 sleep 0.3
+# Y sus sockets: uno rematado con -9 deja el fichero, y quien manda ordenes a
+# "todos los sockets de la sesion" (sockets_mpv) llamaria a uno muerto.
+rm -f "$MARCA_MPV"*.sock "${MARCA_MPV%.}.sock"
 
 # El demonio que pausa el video cuando hay una ventana tapandolo y lo mata
 # entero mientras juegas. Va aparte de mpvpaper a proposito: sobrevive a que
@@ -76,7 +94,7 @@ sleep 0.3
 # demonio al salir de un juego, asi que un demonio nuevo barreria a quien nos
 # esta llamando. Ahi se pregunta primero, y solo por los de ESTA sesion.
 if [ "$SOLO_MPV" -eq 0 ] || [ -z "$(pids_de_esta_sesion_cmd wallpaper-pause.py)" ]; then
-    setsid "$SCRIPTS/wallpaper-pause.py" >/dev/null 2>&1 &
+    setsid "$SCRIPTS/wallpaper-pause.py" >/dev/null 2>&1 9>&- &
 fi
 
 if [ ! -e "$CURRENT" ]; then
@@ -89,8 +107,13 @@ fi
 #
 #  -f          se desdobla y suelta la terminal, para que exec-once no se quede
 #              colgado esperandolo.
-#  ALL         todas las salidas. Con un solo monitor da igual, pero si algun
-#              dia conectas otro no hay que tocar nada.
+#  <salida>    UN mpvpaper POR PANTALLA, cada uno con su socket (2026-11-02).
+#              Antes era uno solo con `ALL`, y su pausa era una sola: con un
+#              escritorio vacio en una pantalla y apps en la otra, el fondo se
+#              movia en las dos o en ninguna. Ahora wallpaper-pause.py pausa
+#              cada uno por lo que haya en SU pantalla. Pausado, uno casi no
+#              gasta: solo decodifica el que se mueve. Si no se puede preguntar
+#              que pantallas hay, uno solo con `ALL`, como antes.
 #
 # NO se pasan -p ni -s, y esto es importante. Las dos prometen ahorrar recursos
 # cuando el fondo esta tapado, pero **bajo Hyprland ninguna funciona**: se
@@ -135,6 +158,20 @@ case "${DESTINO,,}" in
         ;;
 esac
 
-mpvpaper -f \
-    -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 $EXTRA --input-ipc-server=$MPV_SOCK" \
-    ALL "$CURRENT"
+# Las pantallas encendidas. hyprctl -j habla igual con config Lua que con
+# hyprlang (es una consulta, no una orden).
+mapfile -t SALIDAS < <(hyprctl -j monitors 2>/dev/null | python3 -c '
+import json, sys
+try:
+    for m in json.load(sys.stdin):
+        if not m.get("disabled") and m.get("name"):
+            print(m["name"])
+except ValueError:
+    pass' 2>/dev/null)
+[ "${#SALIDAS[@]}" -gt 0 ] || SALIDAS=(ALL)
+
+for salida in "${SALIDAS[@]}"; do
+    mpvpaper -f \
+        -o "--no-audio --loop-file=inf --hwdec=auto --panscan=1.0 $EXTRA --input-ipc-server=$(socket_mpv_de "$salida")" \
+        "$salida" "$CURRENT" 9>&-
+done

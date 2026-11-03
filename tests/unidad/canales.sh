@@ -135,6 +135,35 @@ export HYPRLAND_INSTANCE_SIGNATURE="firma_de_prueba_1"
 afirmar_gemelos mpv "$XDG_RUNTIME_DIR/mpvpaper.firma_de_prueba_1.sock" \
     "el socket de mpv"
 
+titulo "8b. Un mpvpaper por pantalla: sus sockets, en las dos implementaciones"
+# 2026-11-02. Mismos nombres y misma marca en Python y en shell: lock.sh y
+# wallpaper.sh usan el gemelo de shell, el demonio y CeliuzPaper el de Python.
+gem() { python3 "$PY" "$@"; }
+gem_sh() {
+    case "$1" in
+        mpv-de) bash -c ". '$SH'; socket_mpv_de '$2'" ;;
+        marca-mpv) bash -c ". '$SH'; marca_mpv" ;;
+        mpvs) bash -c ". '$SH'; sockets_mpv" ;;
+    esac
+}
+M="$XDG_RUNTIME_DIR/mpvpaper.firma_de_prueba_1"
+afirmar_igual "$M.DP-1.sock" "$(gem mpv-de DP-1)" "el socket de DP-1 (python)"
+afirmar_igual "$(gem mpv-de DP-1)" "$(gem_sh mpv-de DP-1)" "   shell dice lo mismo"
+afirmar_igual "$M." "$(gem marca-mpv)" "la marca de todos los de la sesion (python)"
+afirmar_igual "$(gem marca-mpv)" "$(gem_sh marca-mpv)" "   shell dice lo mismo"
+afirmar "la marca casa con el socket viejo de un solo mpvpaper" \
+    sh -c "case '$(gem mpv)' in '$M.'*) exit 0 ;; *) exit 1 ;; esac"
+# Sockets de verdad: dos de esta sesion, el viejo, uno de OTRA sesion cuya
+# firma empieza igual, y un fichero normal que se llama como un socket.
+crear_socket() { python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$1"; }
+crear_socket "$M.DP-1.sock"; crear_socket "$M.HDMI-A-1.sock"; crear_socket "$M.sock"
+crear_socket "${M}_otra.DP-1.sock"
+: > "$M.Falso.sock"
+esperados="$(printf '%s\n' "$M.DP-1.sock" "$M.HDMI-A-1.sock" "$M.sock")"
+afirmar_igual "$esperados" "$(gem mpvs)" "los sockets de la sesion: los dos por pantalla y el viejo (python)"
+afirmar_igual "$(gem mpvs)" "$(gem_sh mpvs)" "   shell dice lo mismo (ni el de otra firma ni el que no es socket)"
+rm -f "$M".*.sock "$M.sock" "${M}_otra.DP-1.sock"
+
 titulo "9. Sin firma NO se reclama nada como propio"
 # Esta es la parte que mas cerca estuvo de salir mal, y por eso tiene prueba.
 #

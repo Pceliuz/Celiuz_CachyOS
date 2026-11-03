@@ -56,8 +56,6 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import canales  # noqa: E402
 import hypr  # noqa: E402
 
-# Con la firma de la sesion; ver canales.py (aqui al lado).
-MPV_SOCKET = canales.socket_mpv()
 # FIFO del demonio de ahorro: mientras se esta eligiendo fondo hay que pedirle
 # que no toque la pausa, o pausaria el video de la vista previa.
 # Con la firma de la sesion; ver canales.py (aqui al lado).
@@ -483,19 +481,27 @@ def _pasar_el_fondo_al_login():
 # --- Hablar con mpvpaper ------------------------------------------------------
 
 def mpv(*orden):
-    """Manda una orden al socket IPC de mpv y devuelve su respuesta (o None).
+    """Manda una orden a TODOS los mpvpaper (uno por pantalla) y devuelve la
+    respuesta del primero que conteste (o None).
 
-    Que no haya socket es normal, no un error: puede que mpvpaper no este
-    corriendo (arranque en frio, o lo mato el demonio por la stoplist).
+    A todos porque cada pantalla tiene el suyo (ver wallpaper.sh): un `loadfile`
+    a uno solo cambiaria el fondo de una pantalla y no de las demas. Que no haya
+    socket es normal, no un error: puede que mpvpaper no este corriendo
+    (arranque en frio, o lo mato el demonio por la stoplist).
     """
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-            s.settimeout(1.0)
-            s.connect(MPV_SOCKET)
-            s.sendall((json.dumps({"command": list(orden)}) + "\n").encode())
-            return json.loads(s.recv(8192).decode(errors="replace").splitlines()[0])
-    except (OSError, ValueError, IndexError):
-        return None
+    primera = None
+    for sock in canales.sockets_mpv():
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(1.0)
+                s.connect(sock)
+                s.sendall((json.dumps({"command": list(orden)}) + "\n").encode())
+                r = json.loads(s.recv(8192).decode(errors="replace").splitlines()[0])
+        except (OSError, ValueError, IndexError):
+            continue
+        if primera is None:
+            primera = r
+    return primera
 
 
 def mpv_vivo():

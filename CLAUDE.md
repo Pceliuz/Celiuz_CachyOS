@@ -25,7 +25,7 @@ lo que vayas a escribir tú.
 |---|---|---|
 | Nombre | `Celiuz-CachyOS` | — |
 | GPU | **NVIDIA RTX 3050 6 GB** (GA107) | — |
-| Pantalla | HDMI-A-1, 1920x1080 **@100 Hz**, escala 1 | + televisor a la derecha, escala 1.5 |
+| Pantalla | **dos** (2026-11-02): Gigabyte GS27QCA en DP-1, 2560x1440 **@180 Hz**, a la izquierda y con el escritorio 1; TES TE-2412S en HDMI-A-1, 1920x1080 @100 Hz, a su derecha. Fijado en su `personal.lua` | + televisor a la derecha, escala 1.5 |
 | Teclado | `us,latam`, perfil «sin-altgr» (Ctrl derecho hace de AltGr) | el suyo |
 | Atajos | **66** (65 del repo + `SUPER+A` suyo, de `personal.lua`; 9 escritorios desde el 2026-10-22) | 70 |
 
@@ -170,6 +170,9 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.cache/celiuz/saludo/` | las copias adaptadas de esas imágenes (clave: tamaño + fecha + ruta) |
 | la línea `celiuz-saludo` al final de `~/.config/fish/config.fish` | el `fish_greeting`; `instalar.sh` la añade una vez y no toca un saludo propio |
 | la línea `geninclude celiuz-iconos.py` al final de `~/.config/kitty/kitty.conf` | los iconos de Nerd Font de la variante normal, no la Mono que los encoge (`kitty/celiuz-iconos.py`, que elige la fuente al abrir cada kitty) |
+| las líneas `celiuz-transparente` al final de `~/.config/gtk-{3.0,4.0}/gtk.css` y de `kitty.conf` | el fondo translúcido de las apps GTK y de kitty (`gtk/celiuz-transparente.css`, `kitty/celiuz-transparencia.conf`); `instalar.sh` las añade una vez |
+| `$XDG_RUNTIME_DIR/waybar-autohide.<firma>/<pantalla>/*.jsonc` | la config de cada waybar por pantalla: `"output"` + `include` de la del repo; la escribe `waybar-autohide.py` (`config_de_salida`) |
+| `~/.config/Kvantum/Celiuz/` y `style=kvantum` en `~/.config/qt6ct/qt6ct.conf` | el tema Qt translúcido (Dolphin), GENERADO por `gen-kvantum.py`; el qt6ct de antes queda en `qt6ct.conf.antes-celiuz`, y un tema de Kvantum que eligieras tú no se pisa |
 | `~/.config/celiuz/clima.conf` | `ubicacion` (auto / zona / fija), `clima = no`, `signo` del panel del reloj |
 | `~/.cache/celiuz/ubicacion.json`, `clima.json` | la ÚLTIMA ciudad (redondeada, 0600, sin historial) y el tiempo de hace menos de 15 min |
 | `~/.config/celiuz/bluetooth.conf` | `cerrojo` y `auto` del demonio; lo escriben también los interruptores del panel (`Ajustes.guardar`, que respeta lo escrito a mano) |
@@ -181,6 +184,7 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
 | `~/.config/celiuz/remoto*` y `~/.local/state/celiuz/remoto/` | Celiuz Remoto: ajustes, clave de firma del APK, teléfonos emparejados (hashes), historial y registro |
 | `/etc/modprobe.d/{rtw88,btusb}-sin-ahorro.conf` y `/etc/NetworkManager/conf.d/wifi-sin-ahorro.conf` | wifi rtw88 y Bluetooth USB sin ahorro de energía (cortes): los COPIA `instalar.sh --radio` desde `sistema/radio/`, solo lo que el equipo tiene; la instalación normal avisa si falta (`tests/unidad/radio.sh`) |
+| `/etc/systemd/logind.conf.d/celiuz-sin-sak.conf` | `HandleSecureAttentionKey=ignore`: Ctrl+Alt+Shift+Esc ya no saca SDDM encima del bloqueo. Lo COPIA `instalar.sh --sddm` desde `sistema/logind/`; la instalación normal avisa si falta |
 | `/etc/polkit-1/rules.d/50-celiuz-remoto.rules` y compañía | Celiuz Remoto tras reiniciar, con TU usuario dentro: lo copia `instalar.sh --remoto-sistema` (lista entera en `remoto/DISEÑO.md`) |
 
 **No cablees `~/dotfiles` en código nuevo.** Saca la raíz de donde está tu propio
@@ -263,6 +267,7 @@ editarlos a mano el cambio se pierde en la siguiente regeneración.
 | `waybar/colores.css`, `mako/colores`, `sddm/celiuz/Colores.qml`, `hypr/conf/colores-pango.conf`, `remoto/app/src/colores.json` | `hypr/scripts/gen-colores.py` | `hypr/conf/colores.conf` |
 | `hypr/lua/local.lua` y `hypr/conf/local.conf` | `instalar.sh` | `lib/apps.py` (terminal) y `lib/maquina.py` (portátil o sobremesa) |
 | `waybar/local.jsonc` | `instalar.sh` | `waybar/derecha.jsonc` + `lib/maquina.py`, y `waybar/sensores.jsonc` + `lib/sensores.py` |
+| `~/.config/Kvantum/Celiuz/` (fuera del repo) | `hypr/scripts/gen-kvantum.py` | el KvGnomeDark del paquete `kvantum` + `hypr/conf/colores.conf` |
 | `~/.cache/celiuzpaper/lock-medidas.conf` | `hypr/scripts/lock.sh` | `lib/pantalla.py` |
 
 Ese último es la excepción que confirma la regla: `hyprlock.conf` trae **también**
@@ -1314,6 +1319,31 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   principal, y eso **solo funciona con `focus_on_activate`** en su regla de
   ventana (sin ella Hyprland ignora el `present()`, también medido). Para
   cualquier otra app atascada así, SUPER+SHIFT+Q (`forzar-cierre.sh`).
+- **Con dos pantallas, cada una lleva SU fondo y SUS barras** (2026-11-02).
+  Con un mpvpaper `ALL` y una waybar para todas, la pausa y el toggle eran uno
+  solo y se decidían por el escritorio del FOCO: saltar a uno vacío en una
+  pantalla ponía el fondo en marcha y sacaba las barras también encima de las
+  apps de la otra. Ahora `wallpaper.sh` lanza un mpvpaper por pantalla, con
+  socket `mpvpaper.<firma>.<pantalla>.sock` (la marca común
+  `mpvpaper.<firma>.` recoge también el viejo; `lib/canales`), y
+  `waybar-autohide.py` cuatro waybar por pantalla con `"output"`. Quien manda
+  órdenes al fondo (bloqueo, CeliuzPaper) las manda a **todos** los sockets
+  (`sockets_mpv`); las órdenes de UNA barra (show/toggle/hold) van a la de la
+  pantalla del ratón. Lo que tapa una pantalla es su escritorio visible **más**
+  un especial abierto encima. Lo vigilan `unidad/fondo-por-pantalla` y
+  `unidad/barras-por-pantalla`.
+- **«Que se vea el fondo detrás de las apps» NO es la opacidad de Hyprland**
+  (2026-11-02). `decoration.active_opacity` vuelve transparente la ventana
+  ENTERA: el texto, las fotos y los vídeos salen lavados, y el usuario lo
+  descartó a la primera. Lo bueno es que cada app deje transparente solo su
+  FONDO: GTK por CSS (`gtk/celiuz-transparente.css`), kitty con
+  `background_opacity`, Qt con Kvantum (`gen-kvantum.py`). Chromium/Electron
+  (Brave, Steam) no saben, y **Firefox 158 tampoco se dejó** con
+  `allow_transparent_browser` + userChrome + sin región opaca de Wayland: el
+  CSS cargaba y quedaba un gris sólido debajo. Y el desenfoque de Hyprland,
+  con su `brightness`/`vibrancy`, deja el fondo LECHOSO detrás de un fondo
+  translúcido: se quita por clase (`fondo-nitido`, `lua/windowrules.lua`). Lo
+  vigilan `unidad/transparencia` y `unidad/config-lua`.
 - **Un `Gtk.Label` con ajuste de línea pide el ancho de su frase ENTERA** en
   GTK3: una barra lateral de 230 px salía de 420. Se le pone
   `set_max_width_chars`.
