@@ -376,6 +376,98 @@ afirmar_igual "1 2" "$cuenta" \
         "aplica al arrancar, ignora una ventana, y vuelve a aplicar tras «configreloaded»"
 
 
+titulo "5c. Al volver una pantalla se relanza el fondo, y solo entonces"
+
+# Apagar el monitor con su boton es desenchufarlo, y mpvpaper deja su capa sin
+# dibujar al volver (2026-11-01, Gigabyte GS27QCA, tres veces en una tarde). Se
+# usa el relanzar_fondo() de verdad con un wallpaper.sh de mentira que apunta
+# cada llamada, y se decide a mano si «hay fondo vivo» (no lo hay mientras
+# juegas: wallpaper-pause.py lo mata y lo levanta el solo al salir).
+FONDO_EV="$TMP/fondo-ev"
+mkdir -p "$FONDO_EV"
+printf '#!/bin/sh\necho "$@" >> "%s/llamadas"\n' "$FONDO_EV" > "$FONDO_EV/wallpaper.sh"
+chmod +x "$FONDO_EV/wallpaper.sh"
+fondo="$(python3 - "$SCRIPT" "$FONDO_EV" 2>"$TMP/fondo.err" <<'PYEOF'
+import importlib.util, os, socket, sys, threading, time
+ruta, carpeta = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("monitores", ruta)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+mod.aplicar = lambda raiz=None, seco=False: None
+mod._socket_control = lambda: os.path.join(carpeta, ".socket.sock")
+mod.REPOSO = 0.05
+mod.FONDO = os.path.join(carpeta, "wallpaper.sh")
+vivo = {"si": True}
+mod.fondo_vivo = lambda firma: vivo["si"]
+llamadas = os.path.join(carpeta, "llamadas")
+
+def cuantas():
+    try:
+        with open(llamadas) as fh:
+            return len(fh.read().splitlines())
+    except OSError:
+        return 0
+
+servidor = socket.socket(socket.AF_UNIX)
+servidor.bind(os.path.join(carpeta, ".socket2.sock"))
+servidor.listen(1)
+threading.Thread(target=mod.demonio, daemon=True).start()
+conexion, _ = servidor.accept()
+
+def manda(*eventos):
+    for ev in eventos:
+        conexion.sendall(ev + b"\n")
+        time.sleep(0.15)
+    time.sleep(0.3)
+    return cuantas()
+
+r = []
+r.append(manda(b"activewindow>>kitty,algo", b"configreloaded>>",
+               b"monitorremoved>>DP-1"))
+# La rafaga real: llegan los dos, a veces en lecturas separadas.
+r.append(manda(b"monitoradded>>DP-1", b"monitoraddedv2>>1,DP-1,GS27QCA"))
+mod.PAUSA_FONDO = 0
+vivo["si"] = False
+r.append(manda(b"monitoradded>>DP-1"))
+with open(llamadas) as fh:
+    r.append(fh.read().splitlines()[0])
+
+# fondo_vivo() de verdad: un proceso que se llama mpvpaper y lleva la firma en
+# su socket, frente a otro de la misma pinta pero de otra sesion.
+import subprocess
+def falso(firma):
+    # `exec -a` le pone «mpvpaper» como argv[0], que es lo que mira fondo_vivo.
+    return subprocess.Popen(
+        ["bash", "-c", 'exec -a mpvpaper python3 -c "import time; time.sleep(30)" "$0"',
+         "--input-ipc-server=/run/x/mpvpaper.%s.sock" % firma])
+spec2 = importlib.util.spec_from_file_location("monitores2", ruta)
+real = importlib.util.module_from_spec(spec2)
+spec2.loader.exec_module(real)
+p = falso("FIRMA_DE_PRUEBA_123")
+time.sleep(0.3)
+r.append(real.fondo_vivo("FIRMA_DE_PRUEBA_123"))
+r.append(real.fondo_vivo("OTRA_SESION_456"))
+r.append(real.fondo_vivo(""))
+p.kill()
+print("|".join(str(x) for x in r))
+PYEOF
+)"
+afirmar "el demonio de mentira no escribe nada en stderr" test ! -s "$TMP/fondo.err"
+IFS='|' read -r f_otros f_vuelve f_jugando f_orden f_vivo f_otra f_sin <<<"$fondo"
+afirmar_igual "0" "$f_otros" \
+        "ventanas, recargas y pantallas que se van NO relanzan el fondo"
+afirmar_igual "1" "$f_vuelve" \
+        "una pantalla que vuelve lo relanza UNA vez, aunque lleguen added y addedv2"
+afirmar_igual "1" "$f_jugando" \
+        "sin fondo vivo (estas jugando) no se relanza: lo hara wallpaper-pause.py"
+afirmar_igual "--only-mpv" "$f_orden" \
+        "y se relanza solo mpvpaper, sin tocar su demonio de pausa"
+afirmar_igual "True" "$f_vivo" "fondo_vivo reconoce el mpvpaper de esta sesion"
+afirmar_igual "False" "$f_otra" "   pero no el de otra sesion"
+afirmar_igual "False" "$f_sin" "   y sin firma no da por vivo a nadie"
+
+
 titulo "6. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 

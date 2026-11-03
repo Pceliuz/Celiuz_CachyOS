@@ -61,6 +61,8 @@ USO
 El modo --demonio es el que va en lua/autostart.lua. Enchufar una pantalla
 dispara `monitoradded`, y el modo nuevo se le pone sola; recargar la config
 dispara `configreloaded`, que devolveria la pantalla a `preferred`, y lo mismo.
+Y cuando una pantalla vuelve (apagarla con su boton cuenta como desenchufarla)
+relanza el fondo, que mpvpaper deja sin dibujar en ella: ver relanzar_fondo().
 """
 
 import json
@@ -113,6 +115,15 @@ REPOSO = 0.5
 # Los eventos tras los que hay que volver a mirar (ver demonio()).
 EVENTOS = (b"monitoradded", b"monitoraddedv2", b"monitorremoved",
            b"configreloaded")
+
+# Los que ademas obligan a relanzar el fondo (ver relanzar_fondo()).
+PANTALLA_NUEVA = (b"monitoradded", b"monitoraddedv2")
+
+# monitoradded y monitoraddedv2 llegan por separado a veces: sin esto el fondo
+# se relanzaria dos veces seguidas, y cada mpvpaper son ~430 MB al arrancar.
+PAUSA_FONDO = 5.0
+
+FONDO = os.path.join(os.path.dirname(os.path.realpath(__file__)), "wallpaper.sh")
 
 
 def _socket_control():
@@ -333,6 +344,53 @@ def ver(raiz=RAIZ):
     return 0
 
 
+def fondo_vivo(firma):
+    """¿Hay un mpvpaper de ESTA sesion? Se le reconoce por su socket IPC.
+
+    Mismo criterio que wallpaper.sh (`pids_con_marca`): la ruta del socket lleva
+    la firma de la instancia de Hyprland, asi que no se confunde con el de otra
+    sesion viva ni con el de un Hyprland anidado de pruebas.
+    """
+    if not firma:
+        return False
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open("/proc/%s/cmdline" % pid, "rb") as fh:
+                partes = fh.read().split(b"\0")
+        except OSError:
+            continue
+        if (partes and os.path.basename(partes[0]) == b"mpvpaper"
+                and any(firma.encode() in p for p in partes)):
+            return True
+    return False
+
+
+def relanzar_fondo(firma, lanzar=None):
+    """Tras volver una pantalla, relanza el fondo para que se vuelva a dibujar.
+
+    mpvpaper (1.8) sabe estrenar una pantalla NUEVA, pero no recuperar una que
+    se fue y volvio: apagar el monitor con su boton es, para el PC, desenchufar
+    el cable, y al volver su capa queda creada pero sin dibujar (`a: 0` en
+    `hyprctl layers`, mientras la de la pantalla recien llegada sale `a: 1`).
+    Visto el 2026-11-01 en un Gigabyte GS27QCA por DisplayPort, tres veces.
+
+    Solo si el fondo estaba vivo. Si no lo esta es que lo quito a proposito
+    wallpaper-pause.py porque estas jugando, y relanzarlo ahora le devolveria
+    sus ~430 MB al juego; ese demonio ya lo levanta el solo al salir.
+    """
+    if not fondo_vivo(firma):
+        return False
+    if lanzar is None:
+        import subprocess
+        lanzar = lambda orden: subprocess.Popen(  # noqa: E731
+            orden, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True)
+    lanzar([FONDO, "--only-mpv"])
+    return True
+
+
 def demonio(raiz=RAIZ):
     """Aplica al arrancar, al aparecer o desaparecer una pantalla y al recargar.
 
@@ -349,6 +407,8 @@ def demonio(raiz=RAIZ):
     """
     aplicar(raiz)
     ruta = os.path.join(os.path.dirname(_socket_control()), ".socket2.sock")
+    firma = os.path.basename(os.path.dirname(ruta))
+    ultimo_fondo = 0.0
     while True:
         try:
             eventos = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -368,13 +428,19 @@ def demonio(raiz=RAIZ):
                 lineas, _, buffer = buffer.rpartition(b"\n")
                 if not lineas:
                     continue
-                if any(l.split(b">>")[0] in EVENTOS
-                       for l in lineas.split(b"\n")):
+                nombres = {l.split(b">>")[0] for l in lineas.split(b"\n")}
+                if nombres & set(EVENTOS):
                     # Que amaine la rafaga de eventos antes de preguntar: si se
                     # mira en el primero, la pantalla nueva aun no tiene ni
                     # posicion ni modos que leer.
                     time.sleep(REPOSO)
                     aplicar(raiz)
+                    # Despues de aplicar, para que el fondo nazca ya con el
+                    # modo y la posicion buenos de la pantalla que volvio.
+                    if (nombres & set(PANTALLA_NUEVA)
+                            and time.monotonic() - ultimo_fondo > PAUSA_FONDO):
+                        if relanzar_fondo(firma):
+                            ultimo_fondo = time.monotonic()
         except OSError:
             pass
         finally:
