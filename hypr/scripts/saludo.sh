@@ -32,7 +32,8 @@
 # la terminal al abrirse (`medidas`):
 #   - la imagen crece con la terminal hasta el alto del cuadro de datos (unas
 #     ALTO_DATOS filas), y si es mas baja se centra en vertical contra el;
-#   - imagen y datos van centrados en horizontal;
+#   - imagen y datos van a la IZQUIERDA, con MARGEN columnas delante (lo pidio
+#     el usuario el 2026-11-05; antes iban centrados en horizontal);
 #   - si al lado no caben (una terminal partida en mosaico), la imagen va
 #     ENCIMA de los datos, mas pequeña, en vez de pisarlos;
 #   - y si tampoco caben imagen, datos y prompt sin desplazar la terminal, la
@@ -100,9 +101,14 @@ CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/celiuz/saludo"
 # separador son 40 columnas; 42 deja margen para un dato algo mas largo en otro
 # equipo. Era 46, y por esas 4 de mas una terminal a media pantalla de la
 # laptop (67 columnas) ponia la imagen encima en vez de al lado (2026-10-22).
+# Y 44 desde el 2026-11-05: con dos pantallas, la linea del display
+# («2560x1440 @ 180 Hz, 1920x1080 @ 100 Hz») ocupa 43.
 # tests/unidad/saludo.sh mide el fastfetch de verdad contra este numero.
 ALTO_DATOS=16
-ANCHO_DATOS=42
+ANCHO_DATOS=44
+# Las columnas delante de la imagen (las mismas que el logo.padding.left de
+# fastfetch/plantilla.jsonc).
+MARGEN=2
 # El prompt de fish de CachyOS: la carpeta y la flecha.
 ALTO_PROMPT=2
 
@@ -125,9 +131,10 @@ medidas() {
     # Y con alto para los datos: mas bajita, se desplazaria y se llevaria la
     # imagen (con 18 filas, media pantalla de la laptop, sobra una: vale).
     if [ "$ancho" -ge 16 ] && [ "$filas" -ge "$ALTO_DATOS" ]; then
-        # Al lado. Centrado: lo que sobra, a partes iguales a cada lado.
-        izq=$(( (cols - ancho - 3 - ANCHO_DATOS) / 2 ))
-        [ "$izq" -ge 1 ] || izq=1
+        # Al lado, a la izquierda; si va justa (dos terminales lado a lado en
+        # la laptop), una columna menos para que los datos no se partan.
+        izq=$MARGEN
+        [ $(( izq + ancho + 3 + ANCHO_DATOS )) -le "$cols" ] || izq=1
         arriba=$(( 1 + (ALTO_DATOS - alto) / 2 ))
         echo "$ancho $alto $izq $arriba left"
         return
@@ -143,12 +150,11 @@ medidas() {
         ancho=$(( alto * 2 ))
         [ "$ancho" -le $(( cols - 4 )) ] || { ancho=$(( cols - 4 )); alto=$(( ancho / 2 )); }
         if [ "$alto" -ge 4 ]; then
-            izq=$(( (cols - ancho) / 2 ))
-            echo "$ancho $alto $izq 1 top"
+            echo "$ancho $alto $MARGEN 1 top"
             return
         fi
     fi
-    # La imagen sola, centrada, tan grande como quepa (hasta el alto de antes).
+    # La imagen sola, a la izquierda, tan grande como quepa (hasta el alto de antes).
     alto=$(( filas - ALTO_PROMPT - 2 ))
     [ "$alto" -le "$ALTO_DATOS" ] || alto=$ALTO_DATOS
     ancho=$(( alto * 2 ))
@@ -157,8 +163,7 @@ medidas() {
         echo "0 0 0 0 none"
         return
     fi
-    izq=$(( (cols - ancho) / 2 ))
-    echo "$ancho $alto $izq 1 solo"
+    echo "$ancho $alto $MARGEN 1 solo"
 }
 
 # tamano_terminal → deja en FILAS y COLS el tamaño de la terminal donde se

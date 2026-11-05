@@ -94,22 +94,22 @@ fi
 
 titulo "5b. La imagen sigue al tamaño de la terminal (2026-10-21)"
 medidas() { bash "$SCRIPT" --medidas "$1" "$2"; }
-afirmar_igual "32 16 26 1 left" "$(medidas 36 130)" "la laptop a pantalla completa: grande, al lado y centrada"
-afirmar_igual "24 12 5 3 left" "$(medidas 24 80)" "una de 80x24: mas chica, centrada en vertical contra los datos"
-afirmar_igual "32 16 76 1 left" "$(medidas 60 230)" "una enorme: hasta el alto del cuadro, no mas"
+afirmar_igual "32 16 2 1 left" "$(medidas 36 130)" "la laptop a pantalla completa: grande, al lado y a la izquierda"
+afirmar_igual "24 12 2 3 left" "$(medidas 24 80)" "una de 80x24: mas chica, centrada en vertical contra los datos"
+afirmar_igual "32 16 2 1 left" "$(medidas 60 230)" "una enorme: hasta el alto del cuadro, no mas, y a la izquierda"
 afirmar_igual "left" "$(medidas 38 82 | cut -d' ' -f5)" "si al lado no cabe entera, mas chica pero al lado"
 afirmar_igual "top" "$(medidas 40 60 | cut -d' ' -f5)" "estrecha pero alta: la imagen ENCIMA, no pisando los datos"
 # 2026-10-22: con los datos partidos en dos lineas el saludo crecia el doble y
 # se llevaba la imagen por arriba. Si no caben imagen, datos y prompt: la
 # imagen sola, y que quepa entera con el prompt debajo.
-afirmar_igual "28 14 4 1 solo" "$(medidas 18 36)" "tres terminales en fila en la laptop: la imagen sola, centrada"
+afirmar_igual "28 14 2 1 solo" "$(medidas 18 36)" "tres terminales en fila en la laptop: la imagen sola, a la izquierda"
 afirmar_igual "solo" "$(medidas 18 60 | cut -d' ' -f5)" "estrecha y baja: la imagen sola, no encima de unos datos que no caben"
 afirmar_igual "solo" "$(medidas 12 100 | cut -d' ' -f5)" "ancha pero muy baja: tampoco al lado"
 afirmar_igual "left" "$(medidas 18 74 | cut -d' ' -f5)" "media pantalla de la laptop (18 filas): al lado, como antes"
 # Dos terminales lado a lado en la laptop: 34x67 (medido). Con el cuadro de
 # datos reservando 46 columnas la imagen iba encima; el usuario la queria al
 # lado, como con una sola (2026-10-22).
-afirmar_igual "21 10 1 4 left" "$(medidas 34 67)" "dos terminales lado a lado en la laptop: la imagen al lado"
+afirmar_igual "19 9 1 4 left" "$(medidas 34 67)" "dos terminales lado a lado en la laptop: la imagen al lado"
 afirmar_igual "solo" "$(medidas 15 67 | cut -d' ' -f5)" "cuatro (15 filas): la imagen sola, como se aprobo"
 for t in "18 36" "12 100" "25 40" "18 60" "30 50"; do
     read -r ancho alto izq arriba pos <<< "$(medidas $t)"
@@ -117,11 +117,11 @@ for t in "18 36" "12 100" "25 40" "18 60" "30 50"; do
     afirmar "$t: la imagen sola cabe entera, a lo ancho y con el prompt debajo" \
         test "$pos" != solo -o \( $(( arriba + alto + 2 )) -le "$f" -a $(( izq + ancho )) -le "$c" \)
 done
-afirmar_igual "24 12 5 3 left" "$(medidas x '')" "algo que no es un numero: como 80x24, sin reventar"
+afirmar_igual "24 12 2 3 left" "$(medidas x '')" "algo que no es un numero: como 80x24, sin reventar"
 : > "$REGISTRO/fastfetch.log"
 KITTY_WINDOW_ID=1 LINES=36 COLUMNS=130 "$SCRIPT" > /dev/null
 afirmar "se lo pasa a fastfetch (ancho, alto, sitio)" grep -q -- \
-    "--logo-position left --logo-width 32 --logo-height 16 .*--logo-padding-left 26 --logo-padding-top 1" \
+    "--logo-position left --logo-width 32 --logo-height 16 .*--logo-padding-left 2 --logo-padding-top 1" \
     "$REGISTRO/fastfetch.log"
 : > "$REGISTRO/fastfetch.log"
 KITTY_WINDOW_ID=1 LINES=6 COLUMNS=60 "$SCRIPT" > /dev/null
