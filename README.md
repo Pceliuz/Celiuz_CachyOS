@@ -26,7 +26,7 @@ del fondo de pantalla, la pantalla de bloqueo). Si te sirve algo, cógelo suelto
 | `celiuzpaper/` | App propia para cambiar el fondo de pantalla. |
 | `mako/` | Notificaciones. `config` a mano, `colores` generado. |
 | `mpvpaper/` | Lista de programas que pausan el fondo en vídeo. |
-| `sddm/celiuz/` | Tema de la pantalla de inicio de sesión, en QML. Opcional: se instala aparte con `--sddm` porque es lo único que pide root. |
+| `sddm/celiuz/` | Tema de la pantalla de inicio de sesión, en QML. Lo pone `./instalar.sh`, pidiendo la contraseña una vez (es lo único que necesita root); `--sin-sddm` se lo salta. |
 | `tests/` | Pruebas automáticas. `./tests/run.sh` y listo — no hacen falta ni Hyprland corriendo ni nada instalado. Y `anidado.sh`, para lo que sí necesita un compositor. |
 
 ### Las piezas a medida
@@ -178,6 +178,10 @@ Notas:
 
 ## Instalación
 
+> **¿Es la primera vez?** La guía paso a paso, con capturas y lo que hace cada
+> orden, está en **[`INSTALAR.md`](INSTALAR.md)**. Lo de aquí abajo es el
+> resumen para quien ya lo conoce.
+
 Se enlaza, no se copia, para que editar el repo sea editar la config:
 
 ```sh
@@ -278,10 +282,11 @@ salir y qué hacer (todo pasó de verdad al traer cambios a la laptop, el
    Ojo con el directorio: si lo lanzas desde `~` en vez de desde el repo,
    `pacman` funciona pero `./instalar.sh` no existe ahí y **no corre**. Con
    fish ni siquiera se nota entre tanta salida de pacman.
-2. **Algo nuevo que va en `/etc` y pide sudo.** El instalador normal nunca pide
-   contraseña: solo avisa, y el aviso dice la orden. Las que pueden salir:
-   - `./instalar.sh --sddm`: la pantalla de inicio y lo que la rodea (por
-     ejemplo, que `Ctrl+Alt+Shift+Esc` no saque SDDM encima del bloqueo).
+2. **Algo nuevo que va en `/etc` y pide sudo.** La pantalla de inicio y lo
+   que la rodea (por ejemplo, que `Ctrl+Alt+Shift+Esc` no saque SDDM encima
+   del bloqueo) la pone al día el propio `./instalar.sh`: te pide la
+   contraseña una vez, en la terminal o, si no hay terminal, en una ventana.
+   Lo demás solo lo avisa, y el aviso dice la orden:
    - `./instalar.sh --radio`: el wifi y el Bluetooth sin cortes.
    - `./instalar.sh --remoto-sistema`: lo de Celiuz Remoto tras reiniciar.
 
@@ -353,6 +358,7 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 |---|---|
 | `SUPER + RETURN` | Terminal (la que detecte `instalar.sh`) |
 | `SUPER + Q` | Cerrar ventana |
+| `SUPER + SHIFT + Q` | Forzar el cierre de la app que no hace caso a SUPER+Q (SIGTERM; a los 3 s, SIGKILL) |
 | `SUPER + V` | Flotante / anclada |
 | `SUPER + B` | Lanzador de aplicaciones |
 | `SUPER + SHIFT + B` | Lanzador en modo "ejecutar binario" |
@@ -375,7 +381,8 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 | Volumen, silencio, micro, brillo | Lo cambian **y enseñan** cómo queda (abajo, con una barra) |
 | `CTRL + RePág` / `CTRL + AvPág` | Subir / bajar el volumen, para teclados sin esas teclas (en el navegador, cambiar de pestaña queda en `CTRL + TAB`) |
 | `SUPER + G` | Modo gaming: entrar / salir (pregunta antes; con un juego abierto no deja salir) |
-| `SUPER` + la tecla de al lado del 1 | Menú rápido del modo gaming (va por código de tecla: vale en `us` y en `latam`) |
+| `SUPER + P` | Modo programador: entrar / salir (pregunta antes). Dentro, `SUPER + B` abre su inicio |
+| `SUPER` + la tecla de al lado del 1 | Menú rápido del modo gaming o del programador, el que esté puesto (va por código de tecla: vale en `us` y en `latam`) |
 | `Supr` en la PC, `Insert` (o `Ins`) en un portátil (dentro de un juego) | Enseñar / esconder el overlay de FPS (MangoHud) |
 | `SUPER + 1..7` | Ir al escritorio |
 | `SUPER + SHIFT + 1..7` | Mover la ventana al escritorio |
@@ -1430,6 +1437,41 @@ Desde un script: `hypr/scripts/modo-gaming.py on|off|estado --json`.
 
 ---
 
+## El modo programador (SUPER + P)
+
+El de trabajo: casi lo mismo que el modo gaming, con más libertad y con otra
+cara (la de un editor y una terminal, nada del violeta del gaming). Al entrar:
+
+- **no se cierra nada**: lo que no es de trabajo (juegos, Steam…) se guarda en
+  un escritorio oculto y vuelve a su sitio al salir. Tus editores, terminales,
+  el navegador, Dolphin y la música se quedan donde estaban;
+- se van el **dock** (lleva juegos) y el **fondo en vídeo** (la VRAM, para los
+  modelos de IA y lo que compiles); la **barra de arriba se queda**. Los avisos
+  pasan a «no molestar» y el borde de las ventanas se pone verde;
+- con **dos pantallas**, solo se toca la de trabajo (la que tenga el foco): en
+  la otra puede seguir el anime;
+- sale el **inicio**: todas las apps de trabajo por carpetas (`codigo/`,
+  `sistemas/`, `seguridad/`, `documentos/`, `web/` con la música y el
+  navegador, `terminal/` con nvim, lazygit… y `mias/`). Se escribe para
+  buscar, Enter abre y **⇧Enter abre en la otra pantalla**. Dentro del modo
+  vuelve con `SUPER + B`.
+
+El **menú rápido** (`SUPER` + la tecla de al lado del 1, la misma que en el
+gaming) enseña lo abierto con el volumen de cada app, la música, el micro,
+la captura, el «no molestar» y tus **apps fijadas** (de fábrica: navegador,
+archivos, editor, OnlyOffice y la música; `+ fijar` añade otra, la X la
+quita). Mientras dura el modo, un juego que se abra se guarda con un aviso.
+Los dos modos no se juntan.
+
+Lo tuyo, fuera del repo: `~/.config/celiuz/modo-programador.json` (apps
+añadidas, fijadas del menú, `"no_molestar": false`, `"apagar_fondo": false`,
+y `"tema"` para cambiar cualquier color) y los ganchos de
+`~/.config/celiuz/modo-programador.d/` (`on` / `off`).
+
+Desde un script: `hypr/scripts/modo-programador.py on|off|estado --json`.
+
+---
+
 ## El panel del reloj
 
 Al pulsar la hora de la barra. A la izquierda, el calendario de siempre
@@ -1871,17 +1913,23 @@ paleta, título, reloj y tu fondo en vídeo con la pantalla de bloqueo. Vive en
 > pide `sudo` y lo único que puede dejarte sin arrancar—, pero si buscas por qué
 > se ven distintas, es esto y no un descuido.
 
-**Es opcional y es lo único de este repo que pide `sudo`.** Un tema de SDDM no
-tiene equivalente por usuario: tiene que copiarse a `/usr/share/sddm/themes`. Por
-eso no se instala con el resto y hay que pedirlo:
+**Es lo único de la instalación normal que pide `sudo`.** Un tema de SDDM no
+tiene equivalente por usuario: tiene que copiarse a `/usr/share/sddm/themes`.
+Desde el 2026-11-05 lo pone el `./instalar.sh` de siempre si falta o si la
+copia instalada es vieja, pidiendo la contraseña **una vez**: en la terminal,
+o en una ventana (`hypr/scripts/pedir-clave.py`) si quien lo ejecuta no es una
+terminal, como Claude Code. Antes iba solo aparte, y quien instalaba el repo
+se quedaba sin pantalla de inicio sin saber que existía otra orden.
 
 ```sh
-./instalar.sh --sddm            # instalar (pide contraseña)
+./instalar.sh                   # todo, con la pantalla de inicio (pide contraseña si hace falta)
+./instalar.sh --sin-sddm        # todo menos ella, sin preguntar
+./instalar.sh --sddm            # solo ella
 ./instalar.sh --sddm --revisar  # ver qué haría, sin tocar nada ni pedirla
 ./instalar.sh --sddm-quitar     # quitarla y volver a la de siempre
 ```
 
-Sin ejecutarlo, el escritorio funciona igual; solo te falta esa pantalla.
+Sin ella, el escritorio funciona igual; solo te falta esa pantalla.
 
 ### Pruébala sin reiniciar
 
@@ -2153,7 +2201,7 @@ config se carga igual.
 paleta y son iguales en cualquier equipo. Los del dock, `local.lua`, `local.conf` y
 `local.jsonc` **no**, porque dependen de la máquina — los crea `instalar.sh`. Los dos de `~/.cache`
 tampoco: se rehacen en cada bloqueo. Y los tres de fuera del repo (el fondo del
-arranque y el drop-in de SDDM) los pone `--sddm`, que es lo único que pide root.
+arranque y el drop-in de SDDM) los pone el paso 8 de `./instalar.sh` (o `--sddm`), lo único que pide root.
 
 Además, fuera del repo a propósito:
 

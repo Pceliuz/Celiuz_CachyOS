@@ -4,10 +4,12 @@
 # Deja este escritorio funcionando en una maquina nueva. Se puede volver a
 # ejecutar cuantas veces haga falta: no repite lo que ya esta hecho.
 #
-#   ./instalar.sh                 instala
+#   ./instalar.sh                 instala, con la pantalla de inicio de sesion
+#                                 (esa parte PIDE TU CONTRASEÑA una vez)
+#   ./instalar.sh --sin-sddm      instala todo menos la pantalla de inicio
 #   ./instalar.sh --revisar       solo dice que haria, sin tocar nada
 #   ./instalar.sh --dock          solo rehace el dock de esta maquina
-#   ./instalar.sh --sddm          pantalla de inicio de sesion (PIDE SUDO)
+#   ./instalar.sh --sddm          SOLO la pantalla de inicio de sesion (PIDE SUDO)
 #   ./instalar.sh --sddm-quitar   la quita y deja la de antes
 #   ./instalar.sh --remoto-sistema         Celiuz Remoto tras reiniciar (PIDE SUDO)
 #   ./instalar.sh --remoto-sistema-quitar  lo quita
@@ -37,6 +39,7 @@ DATOS="${XDG_DATA_HOME:-$HOME/.local/share}"
 SOLO_REVISAR=0
 SOLO_DOCK=0
 SOLO_SDDM=0
+SIN_SDDM=0
 QUITAR_SDDM=0
 SOLO_REMOTO_SISTEMA=0
 QUITAR_REMOTO_SISTEMA=0
@@ -48,23 +51,30 @@ for arg in "$@"; do
         --revisar|-n)  SOLO_REVISAR=1 ;;
         --dock)        SOLO_DOCK=1 ;;
         --sddm)        SOLO_SDDM=1 ;;
+        --sin-sddm)    SIN_SDDM=1 ;;
         --sddm-quitar) QUITAR_SDDM=1 ;;
         --remoto-sistema)        SOLO_REMOTO_SISTEMA=1 ;;
         --remoto-sistema-quitar) QUITAR_REMOTO_SISTEMA=1 ;;
         --remoto-todo)           SOLO_REMOTO_TODO=1 ;;
         --radio)                 SOLO_RADIO=1 ;;
         --radio-quitar)          QUITAR_RADIO=1 ;;
-        -h|--help)     sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+        -h|--help)     sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
         *) echo "instalar: no entiendo «$arg». Prueba --help" >&2; exit 2 ;;
     esac
 done
 
-rojo()  { printf '\033[31m%s\033[0m\n' "$*"; }
-verde() { printf '\033[32m%s\033[0m\n' "$*"; }
+# Lo que se escribe lleva ~ en vez de tu carpeta personal: se lee mejor, y una
+# captura o un mensaje pegado en un chat no enseña tu nombre de usuario.
+corto() {
+    local t="$*"
+    case "$HOME" in ""|/) printf '%s' "$t" ;; *) printf '%s' "${t//$HOME/\~}" ;; esac
+}
+rojo()  { printf '\033[31m%s\033[0m\n' "$(corto "$*")"; }
+verde() { printf '\033[32m%s\033[0m\n' "$(corto "$*")"; }
 # Para lo que solo es verdad si de verdad se hizo: en --revisar no se dice
 # "hecho" de algo que no se ha tocado.
 hecho() { [ "$SOLO_REVISAR" -eq 1 ] || verde "$*"; }
-gris()  { printf '\033[90m%s\033[0m\n' "$*"; }
+gris()  { printf '\033[90m%s\033[0m\n' "$(corto "$*")"; }
 titulo() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
 AVISOS=()
@@ -73,7 +83,12 @@ aviso() { AVISOS+=("$1"); rojo "  ! $1"; }
 hacer() {
     # Ejecuta, o solo lo cuenta si es --revisar.
     if [ "$SOLO_REVISAR" -eq 1 ]; then
-        gris "  (haria) $*"
+        # Una orden con medio repo detras (el chmod de los scripts) se resume.
+        if [ "$#" -gt 6 ]; then
+            gris "  (haria) $1 $2 $3 ... (y $(( $# - 3 )) ficheros mas)"
+        else
+            gris "  (haria) $*"
+        fi
         return 0
     fi
     "$@"
@@ -895,13 +910,20 @@ pantalla() {
 }
 
 # --- 8. Pantalla de inicio de sesion (SDDM) ----------------------------------
-# ES EL UNICO PASO QUE PIDE ROOT, y por eso va aparte y no se ejecuta con el
-# resto: un tema de SDDM no tiene equivalente por usuario, tiene que vivir en
-# /usr/share/sddm/themes. Todo lo demas de este repo se instala sin contrasena y
-# asi debe seguir.
+# ES EL UNICO PASO DE LA INSTALACION NORMAL QUE PIDE ROOT: un tema de SDDM no
+# tiene equivalente por usuario, tiene que vivir en /usr/share/sddm/themes.
 #
-# Tampoco es imprescindible: sin correrlo, el escritorio funciona igual y solo
-# te falta la pantalla del arranque.
+# Hasta el 2026-11-05 iba solo aparte (--sddm), para que `./instalar.sh` no
+# pidiera contraseña nunca. Salio mal en la practica: quien instalaba el repo
+# (a mano o pidiendoselo a Claude Code) se quedaba sin pantalla de inicio y
+# tenia que saber que existia otra orden. Ahora la instalacion normal la pone
+# si falta o si la copia instalada es vieja, pidiendo la contraseña UNA vez:
+# en la terminal si hay una, y si no (Claude Code) en una tarjeta
+# (hypr/scripts/pedir-clave.py). Si ya esta al dia no pide nada, y
+# --sin-sddm se la salta. Decir «Ahora no» deja el resto instalado igual.
+#
+# No es imprescindible: sin ella el escritorio funciona igual y solo te falta
+# la pantalla del arranque.
 
 SDDM_TEMA="/usr/share/sddm/themes/celiuz"
 SDDM_DROPIN="/etc/sddm.conf.d/10-celiuz.conf"
@@ -926,7 +948,48 @@ raiz() {
         gris "  (haria, como root) $*"
         return 0
     fi
-    if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif [ "${SUDO_TARJETA:-0}" -eq 1 ]; then
+        sudo -A "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+# pedir_permiso "MOTIVO" → 0 si ya se puede usar `raiz` sin que vuelva a
+# preguntar. La contraseña se pide UNA vez (sudo -v) y sudo la recuerda unos
+# minutos para este proceso. Donde se pide:
+#   - con terminal: alli, despues de un «¿lo hago ahora? [S/n]»;
+#   - sin terminal pero con sesion grafica (Claude Code, un atajo): en la
+#     tarjeta de pedir-clave.py, que tiene su «Ahora no»;
+#   - sin ninguna de las dos: no se pide, se avisa (1).
+# OJO: `raiz` no puede ir detras de una tuberia (`algo | raiz tee`): eso lo
+# corre en un subproceso, sudo lo ve como otro y volveria a preguntar.
+SUDO_TARJETA=0
+pedir_permiso() {
+    local motivo="$1" resp
+    [ "$(id -u)" -eq 0 ] && return 0
+    sudo -n true 2>/dev/null && return 0
+    if [ -t 0 ]; then
+        echo "  $motivo necesita tu contraseña (la de sudo)."
+        printf '  ¿Lo hago ahora? [S/n] '
+        read -r resp || resp=n
+        case "$resp" in [nN]*) return 1 ;; esac
+        sudo -v
+        return
+    fi
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -x "$REPO/hypr/scripts/pedir-clave.py" ]; then
+        echo "  $motivo necesita tu contraseña: te la pido en una ventana"
+        export SUDO_ASKPASS="$REPO/hypr/scripts/pedir-clave.py"
+        export CELIUZ_CLAVE_MOTIVO="Para $motivo: instalar.sh tiene que copiar ficheros en carpetas del sistema. Se pide una sola vez."
+        if sudo -A -v 2>/dev/null; then
+            SUDO_TARJETA=1
+            return 0
+        fi
+        return 1
+    fi
+    return 1
 }
 
 # El fondo del arranque NO se copia a /usr/share, y esa es toda la gracia.
@@ -982,8 +1045,16 @@ preparar_fondo_sddm() {
     gris "    a partir de ahora se rehace solo al cambiar de fondo"
 }
 
-sddm_instalar() {
+# El titulo del paso 8 sale una vez aunque pasen por el dos funciones.
+SDDM_TITULO=0
+sddm_titulo() {
+    [ "$SDDM_TITULO" -eq 1 ] && return 0
+    SDDM_TITULO=1
     titulo "8. Pantalla de inicio de sesion (SDDM)"
+}
+
+sddm_instalar() {
+    sddm_titulo
 
     # El nombre de la funcion NO es `sddm` a proposito: `command -v sddm`
     # encontraria la funcion en vez del programa y esta comprobacion diria que si
@@ -1046,11 +1117,12 @@ sddm_instalar() {
         gris "  (haria, como root) escribir $SDDM_DROPIN con Current=celiuz"
     else
         raiz install -d -m 755 /etc/sddm.conf.d
-        printf '%s\n' \
-            "# GENERADO por $REPO/instalar.sh --sddm" \
+        # Con < <(...) y no con una tuberia: ver pedir_permiso.
+        raiz tee "$SDDM_DROPIN" >/dev/null < <(printf '%s\n' \
+            "# GENERADO por $REPO/instalar.sh" \
             "# Se quita con: ./instalar.sh --sddm-quitar" \
             "[Theme]" \
-            "Current=celiuz" | raiz tee "$SDDM_DROPIN" >/dev/null
+            "Current=celiuz")
         hecho "  $SDDM_DROPIN escrito"
     fi
 
@@ -1078,10 +1150,38 @@ sddm_quitar() {
     hecho "  quitado: SDDM vuelve a su tema de siempre en el proximo arranque"
 }
 
-# En la instalacion normal no se toca nada de esto (pide root): solo se dice como
-# esta, para que nadie tenga que adivinar que existe.
+# sddm_pendiente → 0 si hay SDDM y al tema le falta algo: no esta, la copia
+# es vieja (un git pull con QML o colores nuevos no llega solo, lo vio la
+# laptop el 2026-10-21), falta lo de logind o la carpeta del fondo.
+sddm_pendiente() {
+    command -v sddm >/dev/null 2>&1 || return 1
+    [ -f "$SDDM_TEMA/Main.qml" ] || return 0
+    local f
+    for f in Main.qml FondoVideo.qml Colores.qml theme.conf metadata.desktop; do
+        cmp -s "$REPO/sddm/celiuz/$f" "$SDDM_TEMA/$f" || return 0
+    done
+    cmp -s "$SDDM_SAK_ORIGEN" "$SDDM_SAK" || return 0
+    [ -d "$SDDM_COMPARTIDA" ] || return 0
+    return 1
+}
+
+# El paso 8 de la instalacion normal: si hay algo que poner, se pide la
+# contraseña y se pone; si no (o dijiste que no), se dice como esta.
+sddm_paso() {
+    if [ "$SIN_SDDM" -eq 0 ] && [ "$SOLO_REVISAR" -eq 0 ] && sddm_pendiente; then
+        sddm_titulo
+        if pedir_permiso "la pantalla de inicio de sesion"; then
+            sddm_instalar
+            return
+        fi
+        gris "  sin contraseña no se toca: el resto se instala igual"
+    fi
+    sddm_estado
+}
+
+# Como esta, sin tocar nada (--revisar, --sin-sddm, o si dijiste que no).
 sddm_estado() {
-    titulo "8. Pantalla de inicio de sesion"
+    sddm_titulo
     if [ -f "$SDDM_TEMA/Main.qml" ]; then
         verde "  el tema celiuz esta puesto"
         # Lo que se ve al arrancar es una COPIA: un git pull con colores o QML
@@ -1090,18 +1190,21 @@ sddm_estado() {
         for f in Main.qml FondoVideo.qml Colores.qml theme.conf metadata.desktop; do
             cmp -s "$REPO/sddm/celiuz/$f" "$SDDM_TEMA/$f" || vieja="$vieja $f"
         done
-        [ -z "$vieja" ] || aviso "el tema instalado es una copia VIEJA (${vieja# }): ./instalar.sh --sddm"
+        [ -z "$vieja" ] || aviso "el tema instalado es una copia VIEJA (${vieja# }): lo pone ./instalar.sh (pide tu contraseña)"
         cmp -s "$SDDM_SAK_ORIGEN" "$SDDM_SAK" \
-            || aviso "Ctrl+Alt+Shift+Esc puede sacar SDDM encima del bloqueo: ./instalar.sh --sddm"
+            || aviso "Ctrl+Alt+Shift+Esc puede sacar SDDM encima del bloqueo: lo arregla ./instalar.sh (pide tu contraseña)"
         if [ -d "$SDDM_COMPARTIDA" ]; then
             gris "    el fondo se rehace solo al cambiar de fondo"
         else
             aviso "el fondo del login NO se actualiza solo (instalacion antigua)"
-            gris "    se arregla pasando una vez:  ./instalar.sh --sddm"
+            gris "    se arregla pasando una vez:  ./instalar.sh (pide tu contraseña)"
         fi
     else
-        echo "  no instalada (es opcional y es lo unico que pide sudo)"
-        gris "    ./instalar.sh --sddm"
+        if command -v sddm >/dev/null 2>&1; then
+            aviso "la pantalla de inicio de sesion no esta puesta: la pone ./instalar.sh (pide tu contraseña)"
+        else
+            echo "  este equipo no usa SDDM: no hay nada que poner"
+        fi
     fi
 }
 
@@ -1385,7 +1488,7 @@ radio_instalar() {
                 local intf disp
                 for intf in "$RADIO_SYS"/bus/usb/drivers/btusb/*:*; do
                     disp="$(dirname "$(readlink -f "$intf")")"
-                    [ -e "$disp/power/control" ] && echo on | raiz tee "$disp/power/control" >/dev/null
+                    [ -e "$disp/power/control" ] && raiz tee "$disp/power/control" >/dev/null <<< on
                 done
                 gris "    Bluetooth: despierto ya, y asi seguira al reiniciar" ;;
         esac
@@ -1449,7 +1552,12 @@ elif [ "$SOLO_REMOTO_SISTEMA" -eq 1 ]; then
 elif [ "$QUITAR_SDDM" -eq 1 ]; then
     sddm_quitar
 elif [ "$SOLO_SDDM" -eq 1 ]; then
-    sddm_instalar
+    if [ "$SOLO_REVISAR" -eq 1 ] || pedir_permiso "la pantalla de inicio de sesion"; then
+        sddm_instalar
+    else
+        sddm_titulo
+        aviso "sin contraseña no se instalo la pantalla de inicio de sesion"
+    fi
 elif [ "$SOLO_DOCK" -eq 1 ]; then
     dock
 else
@@ -1463,7 +1571,7 @@ else
     maquina_local
     fondo
     pantalla
-    sddm_estado
+    sddm_paso
     remoto
     radio_estado
     recargar_sesion
