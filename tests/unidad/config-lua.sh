@@ -9,7 +9,7 @@
 # (tests/lib/hl_falso.lua hace de Hyprland con el `lua` del sistema):
 #
 #   1. Carga entera, como sobremesa y como portatil, sin un error.
-#   2. Portatil y sobremesa cargan lo que toca: 65 atajos y 70, el teclado.
+#   2. Portatil y sobremesa cargan lo que toca: 66 atajos y 71, el teclado.
 #   3. Ningun atajo repetido (el segundo pisaria al primero sin avisar).
 #   4. Todo script al que llama un atajo o el arranque EXISTE y es ejecutable.
 #      Un atajo a un script que no esta no falla: no hace nada.
@@ -59,8 +59,8 @@ afirmar "   sin nada por stderr" test ! -s "$TMP/laptop.json.err"
 [ -s "$TMP/pc.json.err" ] && sed 's/^/      /' "$TMP/pc.json.err"
 
 titulo "2. Cada equipo carga lo suyo"
-afirmar_igual "65" "$(consulta "$TMP/pc.json" 'len(R["binds"])')" "sobremesa: 65 atajos (9 escritorios desde el 2026-10-22)"
-afirmar_igual "70" "$(consulta "$TMP/laptop.json" 'len(R["binds"])')" "portatil: 70 (brillo, avion, tapa x2... )"
+afirmar_igual "66" "$(consulta "$TMP/pc.json" 'len(R["binds"])')" "sobremesa: 66 atajos (9 escritorios desde el 2026-10-22, forzar cierre desde el 24)"
+afirmar_igual "71" "$(consulta "$TMP/laptop.json" 'len(R["binds"])')" "portatil: 71 (brillo, avion, tapa x2... )"
 afirmar_igual "lv3:switch" "$(consulta "$TMP/pc.json" 'R["opciones"]["input.kb_options"]')" \
     "sobremesa: el Ctrl derecho hace de AltGr (teclado del autor)"
 afirmar_igual "" "$(consulta "$TMP/laptop.json" 'R["opciones"]["input.kb_options"]')" \
@@ -131,7 +131,7 @@ titulo "6. Sin local.lua (aun sin instalar) arranca igual"
 rm -f "$COPIA/hypr/lua/local.lua"
 cargar "$TMP/sin-local.json"; codigo=$?
 afirmar_igual "0" "$codigo" "carga sin error"
-afirmar_igual "65" "$(consulta "$TMP/sin-local.json" 'len(R["binds"])')" "como sobremesa"
+afirmar_igual "66" "$(consulta "$TMP/sin-local.json" 'len(R["binds"])')" "como sobremesa"
 afirmar_igual "True" "$(consulta "$TMP/sin-local.json" 'any(b["teclas"]=="SUPER + RETURN" and "lanzar.sh " in b["accion"]["args"][0] and not b["accion"]["args"][0].rstrip().endswith("lanzar.sh") for b in R["binds"])')" \
     "y SUPER+RETURN tiene alguna terminal (la pregunta a lib/apps.py)"
 

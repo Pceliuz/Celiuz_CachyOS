@@ -129,15 +129,25 @@ pids_con_marca() {
 #
 # Ojo, la trampa clasica: un `pgrep -f` normal SE ENCUENTRA A SI MISMO y al
 # shell que lo lanza, porque el patron aparece en su propia linea de comandos.
-# Aqui se descartan el propio proceso y su padre por PID, que es lo unico que no
-# se puede confundir.
+# Aqui se descartan por PID el propio shell ($$) y la subshell del `$(...)` desde
+# la que casi siempre se llama ($BASHPID), que es lo unico que no se puede
+# confundir.
+#
+# El PADRE NO se descarta, y esto es importante: antes se descartaba ($PPID), y
+# a `wallpaper.sh --only-mpv` lo llama justo el demonio que busca. No se veia a
+# si mismo, lanzaba OTRO demonio, el nuevo mataba al viejo (`matar_otros`) a
+# mitad del relanzamiento —el `subprocess.run` del viejo se llevaba el
+# wallpaper.sh por delante, con el fondo de una pantalla sin lanzar todavia—, el
+# nuevo veia esa pantalla sin fondo y volvia a llamar. Un bucle cada ~10 s:
+# una pantalla sin fondo y la otra apagandose y encendiendose (2026-11-02, al
+# salir del modo gaming con dos pantallas).
 pids_de_esta_sesion_cmd() {
     local patron="$1" sig="${HYPRLAND_INSTANCE_SIGNATURE:-}" pid linea
     [ -n "$sig" ] || return 0   # sin firma no se reclama nada; ver arriba
     for d in /proc/[0-9]*; do
         pid="${d##*/}"
         [ "$pid" = "$$" ] && continue
-        [ "$pid" = "$PPID" ] && continue
+        [ "$pid" = "$BASHPID" ] && continue
         linea="$(tr '\0' ' ' 2>/dev/null < "$d/cmdline")" || continue
         case "$linea" in *"$patron"*) ;; *) continue ;; esac
         tr '\0' '\n' 2>/dev/null < "$d/environ" \

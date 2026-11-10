@@ -208,6 +208,26 @@ else
 fi
 kill "$COBAYA" 2>/dev/null; wait "$COBAYA" 2>/dev/null
 
+titulo "10b. Quien te LLAMA tambien cuenta: el padre no se descarta"
+# Es el bucle del 2026-11-02: wallpaper-pause.py llama a `wallpaper.sh
+# --only-mpv`, que pregunta si hay demonio. Descartando al padre no se veia a
+# quien llamaba, lanzaba otro, el nuevo mataba al viejo a mitad del relanzamiento
+# y vuelta a empezar: una pantalla sin fondo y la otra parpadeando.
+# Aqui el «demonio» es un python con nombre propio que llama a bash, y el propio
+# `bash -c` lleva el patron en su linea de comandos (no debe salir: es $$, y la
+# subshell del $(...) es $BASHPID).
+export HYPRLAND_INSTANCE_SIGNATURE="firma_de_prueba_padre"
+DEMONIO="$TMP/demonio-cobaya.py"
+cat > "$DEMONIO" <<EOF
+import os, subprocess
+r = subprocess.run(["bash", "-c",
+    ". '$SH'; echo \"\$(pids_de_esta_sesion_cmd demonio-cobaya)\""],
+    capture_output=True, text=True)
+print(os.getpid(), r.stdout.strip().replace("\n", " "))
+EOF
+read -r padre vistos < <(python3 "$DEMONIO")
+afirmar_igual "$padre" "$vistos" "desde un hijo, se ve al padre (y solo a el)"
+
 titulo "11. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 

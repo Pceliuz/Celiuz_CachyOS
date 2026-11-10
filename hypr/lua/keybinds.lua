@@ -56,6 +56,9 @@ end
 -- si el comando no existe en vez de no hacer nada.
 exec(mainMod, "RETURN", S .. "lanzar.sh " .. M.terminal)
 accion(mainMod, "Q", hl.dsp.window.close(), "cerrar la ventana")
+-- Y con SHIFT, para la app que no hace caso a SUPER+Q (ONLYOFFICE, 2026-10-24):
+-- SIGTERM al proceso y, si sigue vivo a los 3 s, SIGKILL. El porque, en el script.
+exec(mainMod .. " SHIFT", "Q", S .. "forzar-cierre.sh")
 accion(mainMod, "V", hl.dsp.window.float({ action = "toggle" }), "flotante o en mosaico")
 -- Menu de salida: bloquear, suspender, cerrar sesion, reiniciar, apagar. Va con P
 -- y no con E porque la E estaba pegada a las teclas que se usan a diario y era

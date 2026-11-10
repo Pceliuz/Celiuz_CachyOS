@@ -142,7 +142,7 @@ animar("fadePopups", 2, "neon")
 -- ESCRITORIOS
 -- -----------------------------------------------------------------------------
 -- `slidefade 15%` = se desliza SOLO un 15% del ancho de pantalla mientras
--- se funde, en vez de arrastrar el escritorio entero de lado a lado. Con 7
+-- se funde, en vez de arrastrar el escritorio entero de lado a lado. Con 9
 -- escritorios y atajos directos (SUPER+1..9) saltas mucho y a menudo lejos:
 -- un deslizado completo obligaria a esperar el viaje cada vez. Asi se
 -- conserva la pista de hacia donde te has movido sin pagar el recorrido.
