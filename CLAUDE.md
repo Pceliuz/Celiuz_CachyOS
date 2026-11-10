@@ -5,6 +5,14 @@ sobre CachyOS. **Es público (lo clonan amigos del usuario) y se usa en más
 de un equipo**: una PC de sobremesa y
 una laptop. Casi todo lo que sigue existe por esa razón.
 
+> **Desde el 2026-11-09 este repo es de Celiuz** (decisión de Parzival; D11 en
+> `Celiuz-CachyOS/docs/ROADMAP_INTEGRACION_OS.md`). Ella lo crea, lo edita y lo
+> sube, coordinando antes con él. Trabaja **en su laboratorio de dotfiles** —un
+> `git worktree` aparte, `./tests/run.sh` en verde antes de integrar y una
+> etiqueta `respaldo/antes-de-…`— y nunca sobre este checkout, que es el
+> escritorio vivo. Claude Code entra para lo avanzado. Antes de cada subida se
+> busca cualquier secreto: el repo es público.
+
 ---
 
 # Dónde va la cosa (al 2026-10-20)
