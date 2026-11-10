@@ -5,7 +5,37 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-11-02**, en la **PC**.
+Última sesión: **2026-11-05**, en la **PC**.
+
+---
+
+## 2026-11-05 (PC): la pantalla de inicio entra en la instalación, y guía con capturas
+
+- **El saludo de la terminal sale a la izquierda** (lo pidió el usuario), y su
+  reserva de ancho sube a 44: con dos pantallas, la línea del display ocupaba
+  43 y `unidad/saludo` fallaba (era el pendiente de abajo: ya está).
+- **`./instalar.sh` pone el SDDM** si falta o está viejo, pidiendo la
+  contraseña una vez: en la terminal, o en la tarjeta `pedir-clave.py` (askpass
+  de `sudo -A`) si no hay terminal, que es como lo ejecuta Claude Code. Al día
+  no pide nada; `--sin-sddm` se lo salta. Prueba: `unidad/instalar-sddm`.
+- **`INSTALAR.md`**: la guía para quien instala por primera vez, con 7
+  capturas de verdad (`docs/instalar/`), sacadas en un anidado sobre una
+  pantalla virtual en el escritorio 8 (la receta, en CLAUDE.md). El nombre de
+  la wifi va pixelado en la del escritorio.
+- Las rutas que escribe el instalador salen con `~` (`corto()`).
+
+Pendiente:
+- [ ] **Probar la tarjeta con la contraseña DE VERDAD**: en las capturas se usó
+      un sudo de mentira (para no arriesgar el bloqueo de 10 min de
+      faillock). Lo que falta comprobar es que, sin terminal, sudo no vuelve
+      a preguntar en cada `raiz`. Con `./instalar.sh --sddm < /dev/null`
+      desde una terminal: tiene que salir la tarjeta UNA vez.
+- [ ] `instalar.sh` lleva también el repetidor (local): al commitear lo del
+      SDDM, `git add -p` para no meterlo.
+- [ ] Al quitar un monitor, su mpvpaper sigue vivo (las barras sí se van).
+
+---
+
 ## 2026-11-02 (PC): dos pantallas, fondo de las apps translúcido, y fondo y barras por pantalla
 
 En su propio commit. El **modo programador** (le faltan ajustes) y el
@@ -34,13 +64,151 @@ Pendiente:
 - [ ] En la **laptop**: `git pull && ./instalar.sh` (pedirá `sudo pacman -S
       kvantum`), y comprobar con una sola pantalla que barras y fondo van
       como siempre, y con el televisor que cada una va por su lado.
-- [ ] `unidad/saludo` falla con dos pantallas: la línea de pantallas del
-      saludo mide 43 columnas y la reserva es de 42. De antes, sin arreglar.
+- [x] `unidad/saludo` falla con dos pantallas: la línea de pantallas del
+      saludo mide 43 columnas y la reserva es de 42. Arreglado el 2026-11-05 (reserva 44).
 - [ ] `e2e/bluetooth` falló UNA vez en la tanda completa y pasa sola (77/77):
       parece de tiempos con la máquina cargada. Vigilar.
+- [ ] **RECORDÁRSELO AL USUARIO al empezar la próxima sesión**: subir
+      `SUPER+SHIFT+Q` (`forzar-cierre.sh` + `tests/unidad/forzar-cierre.sh`,
+      del 2026-10-24). No es del modo programador ni del repetidor, y el
+      `CLAUDE.md` subido ya lo nombra, pero el script NO está en el repo. Su
+      línea de `keybinds.lua` va pegada a la de `SUPER+P` y `config-lua.sh`
+      cuenta también el modo programador: hace falta un parche solo con lo
+      suyo (66/71 atajos, no 67/72), comprobado en un índice aparte
+      (`GIT_INDEX_FILE`) con las pruebas sobre el repo limpio, como se hizo
+      con `37d63be`. De paso, el comentario de `animations.lua` («Con 7» → 9).
 
 ---
 
+## 2026-10-23 (PC): compartir internet por wifi — el REPETIDOR (sin instalar aún)
+
+Lo pidió el usuario: el wifi de su celular es lento y se corta, y la PC (con
+la MT7922 de la placa nueva) recibe mucho mejor. Quiere que la PC, conectada
+por wifi, emita OTRA red con la misma tarjeta; y también el caso de internet
+por cable/USB. **Siempre encendido salvo que lo apague él.**
+
+**Primero se traen 2 commits de la laptop** (`58bb3cd`, `8e0bbbe`: 9
+escritorios, kitty sin maximizarse solo, saludo, `--radio`): 62/62 pruebas,
+66 atajos, 100 Hz, `configerrors` vacío. Waybar hubo que recargarla por el
+FIFO (seguía con 7 escritorios). Pendientes con sudo que se le dijeron:
+`--radio` (la PC también tiene Bluetooth USB con autosuspend a 2 s) y
+`--sddm` (copia sin 5 colores que el tema no usa). Esos cambios de
+`CLAUDE.md` y `animations.lua` están **sin commitear**, junto con todo lo de
+abajo.
+
+**Lo medido a mano** (todo con `iw dev wlan0 interface add ap0 type __ap`):
+- La MT7922 admite cliente + AP a la vez, **en el MISMO canal**
+  (`#channels <= 1` en `iw list`). El router está en el 40 (5 GHz, 160 MHz).
+- **NetworkManager (modo hotspot) solo da 20 MHz**: a 40 y 80 «Unable to setup
+  interface» (wpa_supplicant). Celular: ~55 Mbit/s estables.
+- **hostapd a 80 MHz arranca a la primera**: enlace de 390 Mbit/s y
+  **125-149 Mbit/s** en speedtest (pico 174 medido en la PC). El wifi directo
+  del celular: 30-126, a saltos. Ping con carga 197 ms (sin mirar aún; puede
+  ser el router). La subida no se midió (el speedtest web solo baja).
+- **ufw descarta todo** (INPUT y FORWARD a DROP): sin sus reglas el celular se
+  asocia, no recibe IP y se va a los ~18 s. Ojo: con «sin internet» Android
+  **sigue por datos móviles** sin decir nada — los primeros 4-7 Mbit/s eran
+  los datos, no el repetidor (ap0 había movido 127 KB). Medir con los datos
+  apagados y mirando los bytes de ap0.
+
+**Lo construido** (con pruebas: `tests/unidad/repetidor.sh`, 126, y probada
+rompiendo a propósito el filtro DFS, el seguir canal y la gracia; suite 63/63):
+- `sistema/repetidor/repetidor.py` — el demonio, de ROOT (se COPIA a
+  `/usr/local/lib/celiuz-repetidor/repetidor`). Crea ap0 en la tarjeta,
+  hostapd en el canal del router probando 80 → 40 → 20 MHz, dnsmasq
+  (10.43.N.0/24), NAT con su tabla nft, sin ahorro de energía. Sigue el canal
+  si el router se mueve; **el wifi de la PC manda**: si el cliente se cae o
+  no hay internet, suelta el canal a los 8 s (un AP ata la tarjeta a su canal
+  y el cliente no podría reconectar en otro); en DFS o 6 GHz no emite y lo
+  dice; elige canal solo (36/149/6) con internet por otro lado Y ninguna red
+  wifi guardada que se conecte sola (`nmcli`; si no contesta, no emite). Lo
+  de antes («con internet por cable elige canal») dejó a la PC sin wifi
+  cinco horas el 2026-10-23: el celular por USB daba internet, el router se
+  movió al 48 y el AP se quedó en el 36. La unidad borra ap0 y el NAT al
+  parar aunque el programa muera (`ExecStopPost`). Y si se apaga la radio
+  (rfkill: el panel, `nmcli radio wifi off`), quita hostapd y ap0 en <0,5 s:
+  con ap0 viva al volver la radio, la MT7922 colgó su firmware ese mismo día
+  (wlan0 `unavailable`, «chip reset failed»; se sale recargando `mt7921e` o
+  apagando la PC). **Falta instalarlo (`./instalar.sh --repetidor`) y
+  probarlo en vivo SIN apagar la radio**: lo de rfkill se queda en la prueba.
+  Estado en `/run/celiuz-repetidor/estado.json` (sin la contraseña). Lee
+  `~/.config/celiuz/repetidor.conf` COMO el usuario, con O_NOFOLLOW y
+  comprobando el dueño.
+- `celiuz-repetidor@.service` (HABILITADA: vuelve al reiniciar; con
+  `encendido = no` sale sin hacer nada), `repetidor.rules.in` (polkit:
+  start/stop/restart de ESA unidad, nada más), `repetidor-nm.conf` (ap0
+  unmanaged).
+- `hypr/scripts/repetidor.py` — la CLI del usuario: `estado`, `encender`,
+  `apagar`, `nombre`, `clave [--nueva]`, `puede`. Inventa nombre
+  (`Celiuz-<equipo>`) y contraseña de 12 la primera vez; fichero 0600.
+- **Panel del wifi**: sección «Compartir internet» con interruptor, estado en
+  una línea, y en el «⋯» el QR, la contraseña y «Otra contraseña». ap0
+  (unmanaged) ya no cuenta como otro wifi del equipo.
+- `./instalar.sh --repetidor` / `--repetidor-quitar`: paquetes que falten
+  (hostapd, dnsmasq, iw, nftables), las copias, polkit con el usuario, NM, las
+  4 reglas de ufw (firewalld: solo avisa), `enable` y lo enciende. La
+  instalación normal (sección 9c) lo sugiere si la tarjeta puede y avisa si la
+  copia de root se queda vieja.
+
+**Tarde del 2026-10-23: el firmware se colgó y se blindó.** La MT7922 se
+colgó (wlan0 `unavailable`); el usuario apagó, desenchufó y volvió a encender, y
+el wifi volvió limpio (canal 48, 160 MHz, ping por wlan0 bien). La prueba a
+mano ya no existe (la quitó el reinicio). Lo instalado en `/usr/local` era de
+las 14:40, **sin** la guarda de rfkill. Se añadió además:
+- **Suspender**: `celiuz-repetidor-dormir.service` (de `sleep.target`) pone
+  `/run/celiuz-repetidor-pausa` antes de dormir (`repetidor --dormir`, espera
+  a que se vaya ap0 y si no la borra él) y la quita al despertar; con la marca
+  el demonio suelta todo como con la radio apagada.
+- **Autocuración**: el demonio lee `/dev/kmsg`; con «chip reset failed» del
+  módulo de la tarjeta quita el AP y hace `modprobe -r` + `modprobe`. Máximo 3
+  en 30 min; si no, deja de emitir hasta reiniciar y lo dice.
+Pruebas nuevas en `tests/unidad/repetidor.sh`. **Nada de esto está instalado.**
+
+**2026-10-24: SUPER+SHIFT+Q, forzar cierre.** ONLYOFFICE (un .pptx en el
+escritorio 3) no se cerraba con SUPER+Q; se cerró con SIGTERM en 1 s.
+`hypr/scripts/forzar-cierre.sh`: SIGTERM al pid de la ventana activa, SIGKILL
+a los 3 s, aviso; se niega con Hyprland, pid de otro usuario o sin ventana.
+Prueba `tests/unidad/forzar-cierre.sh`; atajos 66 del repo (71 portátil),
+README actualizado. Cargado en la PC (67 con el SUPER+A suyo). Sin probar
+contra una app trabada de verdad.
+
+**ESTADO AL CERRAR SESIÓN (2026-10-24), por orden:**
+1. `./instalar.sh --repetidor` (sudo) para el arreglo de los picos (DTIM 1 +
+   `despierto`); lo instalado AHORA no lo tiene. Luego medir: celular en el
+   repetidor, `ping -i 1 <ip del celular>` desde la PC (antes: 119 ms de
+   media; debe quedar en pocos ms) y que el usuario juegue una partida.
+2. Probar en vivo lo que solo cubren las pruebas: suspender con el
+   repetidor puesto, y SUPER+SHIFT+Q con una app trabada.
+3. Nada está commiteado (lo hace él): el repetidor
+   entero, `--radio`, forzar cierre, docs. Sin seguimiento:
+   `hypr/scripts/repetidor.py`, `hypr/scripts/forzar-cierre.sh`,
+   `sistema/repetidor/`, `tests/unidad/repetidor.sh`,
+   `tests/unidad/forzar-cierre.sh`.
+4. Pendientes con sudo ajenos: `--radio`, `--sddm`, y falta `bluetui`.
+
+**2026-10-24: picos de ping jugando (Mobile Legends).** Instalado y emitiendo
+(canal 44-48, 80 MHz), pero en el juego: 15 ms y cada ~10 s 150-170. PC →
+router limpio (máx 12 ms, sin búsquedas de redes). PC → celular por ap0: ping
+cada 1 s, 119 ms de media; cada 20 ms, 2,6 ms; cada 50 ms, 4,7 con picos de
+144. Es el AHORRO DE ENERGÍA DEL CELULAR (dientes de sierra 430/223/16). El
+router usa DTIM 1 y hostapd traía 2. Arreglo: `dtim_period=1` y `despierto`
+(ping de 16 bytes cada 20 ms a cada conectado, ~2 KB/s; `repetidor.py
+despierto no` lo quita). **Falta `./instalar.sh --repetidor` y medirlo jugando.**
+
+**LO PRIMERO al volver** (el usuario se fue a medias):
+1. ~~Quitar la prueba a mano~~: ya no hace falta, el reinicio la quitó.
+2. `./instalar.sh --repetidor` y comprobar: `systemctl status
+   celiuz-repetidor@celiuz`, `repetidor.py estado` (debe decir canal 40 ·
+   80 MHz), el panel del wifi DE VERDAD (el aspecto no lo cubre ninguna
+   prueba), y el celular con speedtest **con los datos apagados**.
+3. Probar lo que no se pudo medir: reiniciar la PC y ver que vuelve solo;
+   apagarlo desde el panel y que siga apagado tras reiniciar; que la PC
+   siga con internet si el router cambia de canal (difícil de forzar).
+4. Las reglas de ufw que el usuario puso a mano (comentarios «celiuz
+   repetidor: …») quedan junto a las del instalador; si estorban, borrar las
+   viejas con `sudo ufw status numbered`.
+5. Luego: commitear (lo hace él; darle los comandos) y llevarlo a la laptop
+   (`repetidor.py puede` dirá si su Realtek admite AP + cliente).
 
 ---
 
@@ -978,6 +1146,50 @@ tocar ese día:
 6. **`lua/env.lua` para Nvidia** (vacío). Solo se puede medir en la PC. Pista:
    el anidado sobre esa NVIDIA pide `AQ_NO_MODIFIERS=1`.
 7. Reglas de ventana del flujo de seguridad; el login y el TTY en `latam`.
+
+## Modo programador (2026-10-27): hecho, falta probarlo en la sesión real
+
+Lo pidió el usuario (estudia software con IA, sistemas y ciberseguridad): un
+modo de trabajo «como el gaming, con un poco más de libertad», inicio y menú
+rápido, apps de las tres carreras + Dolphin, Brave, música y OnlyOffice, una
+pantalla para trabajar y otra para el anime, y un aspecto **completamente
+distinto** del gaming, de programador. Las decisiones (tomadas por Claude, a
+confirmar con el usuario al probarlo):
+
+- `SUPER+P` entra/sale con tarjeta (la del gaming con `--programador`). Con el
+  gaming puesto no entra, y al revés.
+- **No cierra nada**: lo que no es de trabajo de la pantalla de trabajo va a
+  `special:modo-programador` y vuelve a su número al salir. Escritorios libres
+  (sin «una app por escritorio»). Un juego que se abra durante el modo se
+  guarda con un aviso «de paso» (se ve en «no molestar»).
+- Fuera: el dock y el fondo en vídeo (VRAM). Se queda la barra de arriba.
+  «No molestar», borde verde→cian y color de fondo del tema; todo vuelve al
+  valor que había. Las animaciones se quedan.
+- Con varias pantallas solo se toca la enfocada al entrar.
+- Inicio (`programador-inicio.py`, `SUPER+B` dentro del modo): pestañas,
+  números de línea, explorador por carpetas, buscador tipo prompt, panel de
+  CPU/mem/disco, pantallas y lo que suena, línea de estado tipo vim.
+  ⇧Enter abre en la otra pantalla (`hl.dsp.focus({ monitor = ... })`, probado).
+- Menú (`programador-menu.py`): abierto con volumen por app, música, micro,
+  captura, «no molestar», fijadas (+ fijar con fuzzel, X / Supr quita).
+- Tema: `lib/programador.py` `TEMA_FABRICA`, cambiable en
+  `~/.config/celiuz/modo-programador.json` (`"tema"`).
+
+Comprobado: `tests/unidad/modo-programador.sh` (83), `config-lua` con 67/72
+atajos, y el aspecto de inicio, menú y tarjeta dibujado a PNG (1920x1080 y
+1366x768) con los datos reales de la PC. **Sin probar en la sesión real**: el
+usuario estaba en el modo gaming, y un anidado abre ventana (ver la trampa en
+CLAUDE.md). Lo que queda, en el escritorio 7 y con el gaming quitado:
+1. `SUPER+P`: la tarjeta, entrar, que lo ajeno se guarde y lo de trabajo no.
+2. El inicio: escribir, Tab, Enter, ⇧Enter con dos pantallas, `SUPER+B`.
+3. El menú con `SUPER` + la tecla de al lado del 1: volumen por app, fijar.
+4. Salir: lo guardado vuelve, borde/fondo/dock/avisos/`SUPER+B` como antes.
+5. Una recarga (`SUPER+SHIFT+R`) dentro del modo devuelve borde y `SUPER+B`
+   de fábrica (documentado como límite, igual que el gaming).
+
+Para preguntarle al usuario al volver: ¿vale que no cierre nada, que la barra
+de arriba se quede y que un juego abierto durante el modo se guarde? Sin
+commit (lo hace él; comandos en la conversación del 2026-10-27).
 
 ## Modo gaming: el diseño (cerrado con el usuario el 2026-09-25)
 

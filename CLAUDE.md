@@ -15,7 +15,7 @@ se actualiza cada sesión) y las crónicas de cada cambio, con todo lo medido, e
 **`HISTORIAL.md`**. El resto de este fichero cuenta *cómo* se trabaja aquí, y
 eso no caduca.
 
-**Antes de escribir nada: `./tests/run.sh`** (59 pruebas, no hace falta que
+**Antes de escribir nada: `./tests/run.sh`** (63 pruebas, no hace falta que
 Hyprland esté corriendo). Si falla de entrada, cambió el sistema por debajo, no
 lo que vayas a escribir tú.
 
@@ -27,7 +27,7 @@ lo que vayas a escribir tú.
 | GPU | **NVIDIA RTX 3050 6 GB** (GA107) | — |
 | Pantalla | **dos** (2026-11-02): Gigabyte GS27QCA en DP-1, 2560x1440 **@180 Hz**, a la izquierda y con el escritorio 1; TES TE-2412S en HDMI-A-1, 1920x1080 @100 Hz, a su derecha. Fijado en su `personal.lua` | + televisor a la derecha, escala 1.5 |
 | Teclado | `us,latam`, perfil «sin-altgr» (Ctrl derecho hace de AltGr) | el suyo |
-| Atajos | **66** (65 del repo + `SUPER+A` suyo, de `personal.lua`; 9 escritorios desde el 2026-10-22) | 70 |
+| Atajos | **68** (67 del repo + `SUPER+A` suyo, de `personal.lua`; 9 escritorios desde el 2026-10-22, `SUPER+SHIFT+Q` desde el 24, `SUPER+P` desde el 27) | 72 |
 
 ## El estado, en cuatro frases
 
@@ -43,8 +43,8 @@ lo que vayas a escribir tú.
    teclado con su distribución (`teclados.py`). Antes, en septiembre: menú de
    salida (`SUPER+SHIFT+P`), portapapeles (`SUPER+SHIFT+V`) y el OSD del
    volumen. El detalle, en `SIGUIENTE.md`.
-4. **La PC está verificada al 2026-10-20**: 43/43 pruebas, `hyprctl
-   configerrors` vacío, `instalar.sh --revisar` sin pendientes, 62 atajos, los
+4. **La PC está verificada al 2026-10-22**: 62/62 pruebas, `hyprctl
+   configerrors` vacío, `instalar.sh --revisar` sin más pendientes que `--sddm` y `--radio` (piden sudo), 66 atajos, los
    100 Hz y el tema de SDDM puesto. El menú, el portapapeles y el OSD se
    probaron en vivo el 2026-09-25. **No hay que repetir esa comprobación.**
 
@@ -58,6 +58,18 @@ pruebas: `lib/catalogo.py`, el dock sin juegos, `modo-gaming.py` + tarjeta
 (`SUPER+code:49`, Select+Start), el overlay de MangoHud y la cola de shaders.
 Falta medir el rendimiento con un juego de verdad y **probarlo todo en la
 sesión real**, que aún no se ha hecho: la lista está en `SIGUIENTE.md`.
+
+**Y su primo de trabajo, el MODO PROGRAMADOR (`SUPER+P`, 2026-10-27)**:
+`modo-programador.py` + `lib/programador.py` (catálogo de apps de trabajo por
+secciones) + `programador-inicio.py` (lanzador a pantalla completa) +
+`programador-menu.py` (menú rápido; hereda de `menu-rapido.py`, que le pasa el
+testigo con la misma tecla). Se apoya en `modo-gaming.py` (lo importa) y NO
+cierra nada: guarda lo ajeno en `special:modo-programador`. Su tema vive solo
+en `lib/programador.py` (`TEMA_FABRICA`), aparte de la paleta del repo a
+propósito. Los dos modos se excluyen. Prueba: `tests/unidad/modo-programador.sh`.
+Las pantallas tienen `--png RUTA`: se dibujan a un fichero sin crear ventana,
+que es como se mira su aspecto con la sesión ocupada. Pendiente: probarlo en la
+sesión real (lista en `SIGUIENTE.md`).
 
 **Aquí no se nombra al asistente del usuario** (la regla es de cuando el repo era público, y sigue). Él llama a
 `modo-gaming.py` y engancha lo suyo en `~/.config/celiuz/modo-gaming.d/`.
@@ -179,12 +191,16 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.config/celiuz/bluetooth.conf` | `cerrojo` y `auto` del demonio; lo escriben también los interruptores del panel (`Ajustes.guardar`, que respeta lo escrito a mano) |
 | `~/.config/celiuz/modo-gaming.json` | apps permitidas jugando, juegos a ocultar, `cerrar_terminales` |
 | `~/.config/celiuz/modo-gaming.d/` | ganchos de cada equipo al entrar y salir del modo gaming |
+| `~/.config/celiuz/modo-programador.json` y `modo-programador.d/` | el modo programador: apps añadidas, fijadas del menú, `no_molestar`, `apagar_fondo`, `tema`; y sus ganchos |
 | `~/.config/celiuz/teclados.conf` | la distribución de cada teclado que se contestó en la tarjeta de `teclados.py` (la relee `lua/teclados.lua`) |
 | `~/.cache/celiuz/mangohud.conf` | el overlay, rehecho con la paleta en cada entrada al modo |
 | `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
 | `~/.config/celiuz/remoto*` y `~/.local/state/celiuz/remoto/` | Celiuz Remoto: ajustes, clave de firma del APK, teléfonos emparejados (hashes), historial y registro |
 | `/etc/modprobe.d/{rtw88,btusb}-sin-ahorro.conf` y `/etc/NetworkManager/conf.d/wifi-sin-ahorro.conf` | wifi rtw88 y Bluetooth USB sin ahorro de energía (cortes): los COPIA `instalar.sh --radio` desde `sistema/radio/`, solo lo que el equipo tiene; la instalación normal avisa si falta (`tests/unidad/radio.sh`) |
+| `~/.config/celiuz/repetidor.conf` (0600) | el repetidor wifi: `encendido`, `nombre`, `clave`. En `~/.config` fijo (lo lee root) |
+| `/run/celiuz-repetidor/estado.json` | lo que está haciendo el repetidor, para el panel (sin la contraseña) |
+| `/usr/local/lib/celiuz-repetidor/`, `celiuz-repetidor@.service`, su polkit y su conf de NM | el repetidor: lo copia `instalar.sh --repetidor` desde `sistema/repetidor/` |
 | `/etc/systemd/logind.conf.d/celiuz-sin-sak.conf` | `HandleSecureAttentionKey=ignore`: Ctrl+Alt+Shift+Esc ya no saca SDDM encima del bloqueo. Lo COPIA `instalar.sh --sddm` desde `sistema/logind/`; la instalación normal avisa si falta |
 | `/etc/polkit-1/rules.d/50-celiuz-remoto.rules` y compañía | Celiuz Remoto tras reiniciar, con TU usuario dentro: lo copia `instalar.sh --remoto-sistema` (lista entera en `remoto/DISEÑO.md`) |
 
@@ -327,8 +343,18 @@ línea a un fichero generado: si el fichero incluido no existe, fuzzel **sale co
 - **El greeter corre como el usuario `sddm`**, que no puede entrar en
   `/home/<tú>` (está a 700). Nada de rutas a tu carpeta: el fondo se copia dentro
   del tema, y por eso no se actualiza solo al cambiar de wallpaper.
-- **Se instala aparte a propósito.** El resto del repo no pide contraseña nunca y
-  así debe seguir. `sddm_estado()` solo informa en la instalación normal.
+- **Entra en la instalación normal desde el 2026-11-05** (lo pidió el usuario:
+  quien instalaba el repo, a mano o con Claude Code, se quedaba sin pantalla de
+  inicio). `sddm_paso()` la pone si falta o la copia es vieja, pidiendo la
+  contraseña UNA vez (`pedir_permiso`: en la terminal con «¿lo hago ahora?», y
+  sin terminal pero con Wayland en la tarjeta `hypr/scripts/pedir-clave.py`,
+  un askpass de `sudo -A`). Al día no pide nada; `--sin-sddm` se la salta.
+  **Sigue siendo lo ÚNICO de la instalación normal que pide contraseña**: no
+  metas otro paso con root ahí sin hablarlo. Y un `raiz` nunca detrás de una
+  tubería (`algo | raiz tee`): sin terminal, sudo recuerda la contraseña por
+  proceso padre y un subproceso volvería a preguntar (de la documentación de
+  sudo, no medido; lo vigila `tests/unidad/instalar-sddm.sh`). La guía para
+  quien instala, con capturas, es `INSTALAR.md` (capturas en `docs/instalar/`).
 - **La función de bash NO se llama `sddm`**: se llama `sddm_instalar`, porque
   `command -v sddm` encontraría la función en vez del programa y la comprobación
   de "¿está instalado SDDM?" diría que sí hasta en un equipo sin él.
@@ -528,6 +554,15 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   `AQ_BACKENDS`, no `WLR_BACKENDS`: desde 0.5x el backend es aquamarine y la
   variable de wlroots la ignora en silencio. Sobre esta NVIDIA hace falta además
   `AQ_NO_MODIFIERS=1` o se queda en `bo null` sin monitor.
+- **El anidado SIEMPRE abre una ventana en la sesión de fuera: no hay modo
+  sin ventana.** `AQ_BACKENDS=headless` no hace nada (aquamarine 0.15 no
+  tiene esa variable: `strings libaquamarine.so | grep ^AQ_` no la lista, y el
+  anidado salió igual como `WAYLAND-1`, medido el 2026-10-27). Y esa ventana
+  es una ventana nueva para la sesión real: **con el modo gaming puesto fuera,
+  su vigilante la mueve de escritorio y se lleva al usuario detrás**. Con la
+  sesión ocupada, el aspecto se mira con el `--png` de las pantallas del modo
+  programador (Cairo a un fichero, sin superficie) o con `Gtk.OffscreenWindow`
+  para una de widgets; el flujo, con las pruebas de `hyprctl` falso.
 - **libwayland se APROPIA de un socket que no tenga su `.lock` al lado**: lo
   borra y se pone en su sitio. Se descubrió montando el anidado: el enlace al
   socket del padre se llamaba `wayland-1`, igual que fuera, y el compositor
@@ -1271,6 +1306,16 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
 - **kitty no se cierra al pedírselo si tiene algo corriendo: pregunta.** Es
   lo que se quiere (el modo gaming cierra pidiendo, no matando), pero en una
   prueba parece que el cierre «no funciona».
+- **Un «¿ya hay demonio?» que descarta a su PADRE no ve a quien le llama.**
+  `pids_de_esta_sesion_cmd` se saltaba `$PPID` (para no encontrarse a sí
+  mismo), y a `wallpaper.sh --only-mpv` lo llama justo `wallpaper-pause.py`:
+  lanzaba otro demonio, el nuevo mataba al viejo a mitad del relanzamiento
+  (`subprocess.run` mata a su hijo al morir), una pantalla quedaba sin fondo
+  y el nuevo volvía a relanzar. Bucle cada ~10 s: DP-1 sin fondo y HDMI
+  parpadeando (2026-11-02, al salir del modo gaming). Con una sola pantalla
+  no se notaba: el cambio de demonio era una vez y el fondo quedaba entero.
+  Se descartan `$$` y `$BASHPID`; lo vigila `unidad/canales` (10b). Síntoma:
+  el PID de `pgrep -f wallpaper-paus[e].py` cambia cada pocos segundos.
 - **`pgrep -f 'texto'` en una sonda casa con el propio shell que la lanzó** si
   su línea de órdenes contiene ese texto (pasó el 2026-09-26 con un
   `kill $(pgrep -f 'ventana.py juego')`: se mató la herramienta). El PID de
@@ -1320,6 +1365,21 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   principal, y eso **solo funciona con `focus_on_activate`** en su regla de
   ventana (sin ella Hyprland ignora el `present()`, también medido). Para
   cualquier otra app atascada así, SUPER+SHIFT+Q (`forzar-cierre.sh`).
+- **Para capturar con la sesión ocupada, una pantalla VIRTUAL** (2026-11-05,
+  las de `INSTALAR.md`). Un anidado en un escritorio que no se ve no pinta
+  (`grim` contra él se cuelga), pero sí si ese escritorio está en una salida
+  `headless`: `hyprctl output create headless GUIA` con una regla
+  `hl.monitor({ output = "GUIA", position = "20000x20000", ... })` (lejos: el
+  ratón no llega) y `hl.workspace_rule({ workspace = "8", monitor = "GUIA",
+  default = true })` ANTES de crearla; la ventana del anidado (clase
+  `aquamarine`) va con `workspace = "8 silent"`. Tres trampas medidas:
+  **`hl.dsp.workspace.move({ monitor = ... })` mueve el escritorio ACTIVO e
+  ignora el que le nombres** (se llevó el escritorio del usuario a la pantalla
+  invisible); waybar dentro del anidado necesita `dbus-run-session` (sin bus se
+  muere); y **al quitar la salida, su `mpvpaper` se queda vivo** (las barras sí
+  se van): mátalo por PID mirando que su socket lleva el nombre de la salida.
+  Lo que se instale ahí dentro, con un `$HOME` desechable, sin
+  `DBUS_SESSION_BUS_ADDRESS` y un `systemctl --user` de mentira.
 - **Con dos pantallas, cada una lleva SU fondo y SUS barras** (2026-11-02).
   Con un mpvpaper `ALL` y una waybar para todas, la pausa y el toggle eran uno
   solo y se decidían por el escritorio del FOCO: saltar a uno vacío en una
@@ -1416,6 +1476,45 @@ vacía los dos. Si añades otra forma de arrancar cosas, añádela ahí.
   sin la traza de Java que MIUI escupe en cada `svc`. Lo hace
   `remoto/servidor/celiuz_remoto/anclaje.py`, solo a celulares que ya dieron
   internet a esta PC y solo sin otra ruta por defecto.
+- **Compartir internet por wifi con la misma tarjeta (el repetidor, 2026-10-23,
+  MT7922)**: `iw list` dice si se puede (una combinación con `AP` y `managed`)
+  y el `#channels <= 1` obliga a emitir en el MISMO canal que el router. El
+  modo hotspot de NetworkManager no pasa de **20 MHz** (40 y 80: «Unable to
+  setup interface»); hostapd da 80 MHz y casi el triple. Un AP puesto ata la
+  tarjeta a su canal: si el router se mueve, el cliente no reconecta hasta
+  quitar el AP. **Por eso el wifi de la PC manda**: el AP solo vive en el
+  canal del cliente y se suelta 8 s después de que el cliente se caiga, HAYA
+  O NO internet por otro lado. «Suéltalo si no hay internet» no bastaba: el
+  2026-10-23, con el celular por USB, el router cambió de canal, el AP se fue
+  a un canal «libre» y el wifi pasó cinco horas en `ssid-not-found`. Elegir
+  canal sin cliente solo se hace si no hay NINGUNA red wifi guardada con
+  autoconexión (ni una conectándose a mano). **Y apagar el wifi con el AP
+  puesto CUELGA EL FIRMWARE de la MT7922**: hostapd aguanta el rfkill y
+  vuelve a encender ap0 al volver la radio; a los 3 s «ap0: failed to set
+  key (-110)» y luego «chip reset failed» en bucle, wlan0 `unavailable`
+  hasta `modprobe -r mt7921e && modprobe mt7921e` o apagar la PC (medido el
+  2026-10-23, por las malas). El demonio mira rfkill cada 0,5 s y quita
+  hostapd y ap0 al primer bloqueo. **No lo reproduzcas para probarlo.** Lo mismo al
+  suspender (`celiuz-repetidor-dormir.service`), y si aun asi se cuelga, el
+  demonio lo ve en `/dev/kmsg` («chip reset failed») y recarga el módulo, 3
+  veces como mucho.
+  Y con **ufw**
+  (INPUT y FORWARD a DROP) el celular se asocia, no recibe IP y se va a los
+  ~18 s. Todo en la cabecera de `sistema/repetidor/repetidor.py`.
+- **Picos de ping en el celular por el repetidor = el celular DURMIENDO.**
+  Jugando: 15 ms y cada ~10 s, 150. Ping de la PC al celular: cada 1 s, 119
+  ms de media; cada 20 ms, 2,6. El AP le guarda los paquetes hasta que
+  despierta. `dtim_period=1` (hostapd trae 2) y `despierto` (un ping cada 20
+  ms a cada conectado). Antes de culpar a la PC, mide PC → router por
+  separado (`ping -I wlan0`).
+- **Un celular con «wifi sin internet» SIGUE POR DATOS MÓVILES sin decirlo.**
+  Un speedtest ahí mide los datos, no el wifi: los primeros 4-7 Mbit/s del
+  repetidor eran eso (ap0 había movido 127 KB). Se mide con los datos
+  apagados y mirando los bytes de la interfaz en la PC.
+- **`open(f, "w").write(open(f).read()...)` vacía el fichero ANTES de leerlo**
+  (el `"w"` trunca primero). Mordió escribiendo `tests/unidad/repetidor.sh`: el
+  demonio veía un `iw dev` vacío y la prueba fallaba por otra cosa. Leer en
+  una variable y después escribir.
 - **`afirmar_contiene` usa `grep -E`**: un base64 (con `+`) o cualquier texto
   con metacaracteres no casa consigo mismo. Para buscar algo literal,
   `afirmar "..." grep -qF -- "$texto" fichero`.
