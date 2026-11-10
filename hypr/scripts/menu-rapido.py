@@ -92,6 +92,15 @@ def minutos_de(pid):
 
 
 class Menu(Gtk.Window):
+    # El menu del modo programador (programador-menu.py) hereda de este: cambia
+    # su capa, su catalogo y su dibujo, y se queda con lo de moverse, el scroll,
+    # el volumen por app y cerrar lo abierto.
+    ESPACIO = "menu-rapido"
+    MANDO_EXCLUSIVO = True
+
+    def cargar_catalogo(self):
+        return catalogo.catalogo()
+
     def __init__(self):
         super().__init__()
         self.imgs = dibujo.Imagenes()
@@ -104,10 +113,10 @@ class Menu(Gtk.Window):
         self.f, self.arriba, self.alto_visible, self.panel_x = 1.0, 140.0, 800.0, 0.0
         self.datos = {"abiertos": [], "musica": None, "micro": None}
         self.confirmar = None           # el juego que se va a cerrar (pregunta)
-        self.cat = catalogo.catalogo()
+        self.cat = self.cargar_catalogo()
 
         GtkLayerShell.init_for_window(self)
-        GtkLayerShell.set_namespace(self, "menu-rapido")
+        GtkLayerShell.set_namespace(self, self.ESPACIO)
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         for borde in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.BOTTOM,
                       GtkLayerShell.Edge.LEFT, GtkLayerShell.Edge.RIGHT):
@@ -127,7 +136,7 @@ class Menu(Gtk.Window):
         self.area.connect("scroll-event", self.rueda)
         self.add(self.area)
         self.connect("key-press-event", self.tecla)
-        self.mando = mando.Mando(self.boton, exclusivo=True).empezar()
+        self.mando = mando.Mando(self.boton, exclusivo=self.MANDO_EXCLUSIVO).empezar()
         signal.signal(signal.SIGTERM, lambda *_: GLib.idle_add(self.cerrar))
 
         self.refrescar()
@@ -984,7 +993,12 @@ def main():
         os.kill(otro, signal.SIGTERM)  # la misma tecla lo cierra
         return 0
     if not modo.leer_estado():
-        return 0                       # fuera del modo gaming no hay menú
+        # La misma tecla es la del menu del modo programador: si es ese el
+        # que esta puesto, se le pasa el testigo.
+        otro_menu = os.path.join(AQUI, "programador-menu.py")
+        if os.path.exists(otro_menu):
+            os.execv(sys.executable, [sys.executable, otro_menu])
+        return 0                       # fuera de los modos no hay menú
     if not Gtk.init_check(sys.argv)[0]:
         return 1
     with open(ruta_pid(), "w") as fh:

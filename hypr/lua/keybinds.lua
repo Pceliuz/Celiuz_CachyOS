@@ -347,9 +347,16 @@ accion(mainMod, "mouse:273", hl.dsp.window.resize(), "redimensionar la ventana",
 -- trabajando no puede hacerlo sin que lo digas. Lo que hace, en su cabecera.
 exec(mainMod, "G", S .. "modo-gaming.py toggle")
 
+-- Modo programador (scripts/modo-programador.py): el de trabajo. Tambien pregunta
+-- antes; dentro, SUPER+B abre su inicio en vez de fuzzel (lo cambia el propio
+-- modo) y la tecla del menu rapido de abajo abre el suyo. Con el modo gaming
+-- puesto no entra (lo dice).
+exec(mainMod, "P", S .. "modo-programador.py toggle")
+
 -- Menu rapido del modo gaming (scripts/menu-rapido.py), encima del juego: tus
 -- apps, la musica, el volumen por grupos, el micro. Va atado por CODIGO de
 -- tecla y no por simbolo: la tecla de al lado del 1 es `code:49` en cualquier
 -- teclado, pero su simbolo cambia con la distribucion (` en us, | en latam), y
--- este repo se usa con las dos. Fuera del modo gaming no hace nada.
+-- este repo se usa con las dos. En el modo programador abre el de ese modo
+-- (menu-rapido.py le pasa el testigo), y fuera de los dos no hace nada.
 exec(mainMod, "code:49", S .. "menu-rapido.py")

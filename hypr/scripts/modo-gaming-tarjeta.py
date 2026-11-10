@@ -4,6 +4,7 @@ hypr/scripts/modo-gaming-tarjeta.py — la pregunta antes de entrar o salir del
 modo gaming.
 
     modo-gaming-tarjeta.py entrar|salir|bloqueado ["aviso en ambar"]
+    modo-gaming-tarjeta.py --programador entrar|salir    (la del modo programador)
 
 Sale con 0 SOLO si se acepto (Enter, A en el mando o clic en el boton). Esc, clic en cancelar
 o dejar pasar CUENTA segundos sale con 1. Es a proposito asimetrico: el modo
@@ -44,6 +45,50 @@ TEXTOS = {
                   "Guarda la partida y cierra el juego antes de salir del modo gaming.",
                   None),
 }
+
+# La del modo programador (modo-programador.py): mismos botones y teclas, otro
+# texto y OTRO aspecto, el de una terminal con el tema de ese modo
+# (lib/programador.py), nada de violeta ni de brillos.
+TEXTOS_PROGRAMADOR = {
+    "entrar": ("¿Entrar al modo programador?",
+               "Lo que no es de trabajo se guarda (no se cierra nada); el dock y el "
+               "fondo en vídeo se van y los avisos esperan. La otra pantalla no se toca.",
+               "Entrar"),
+    "salir": ("¿Salir del modo programador?",
+              "Lo guardado vuelve a su escritorio, con el dock, el fondo y los avisos.",
+              "Salir"),
+}
+MARCA_PROGRAMADOR = {"entrar": "❯ modo-programador --on", "salir": "❯ modo-programador --off"}
+
+ESTILO_PROGRAMADOR = """
+* { font-family: "MesloLGS Nerd Font Mono", monospace; }
+window { background: transparent; }
+.tarjeta {
+    background: alpha(@p_fondo, 0.98);
+    border: 1px solid @p_borde;
+    border-top: 3px solid @p_verde;
+    border-radius: 6px;
+    padding: 24px 32px 18px 32px;
+    box-shadow: 0 12px 40px alpha(black, 0.6);
+}
+.marca { color: @p_verde; font-weight: 700; font-size: 13px; }
+.titulo { color: @p_texto; font-weight: 700; font-size: 21px; }
+.texto { color: @p_tenue; font-size: 13px; }
+.aviso { color: @p_amarillo; font-size: 13px; font-weight: 700; }
+.boton {
+    border-radius: 4px; padding: 8px 22px; font-weight: 700; font-size: 14px;
+    border: 1px solid @p_borde; background: @p_panel;
+    color: @p_texto; box-shadow: none; text-shadow: none;
+}
+.boton.si { background: @p_verde; border-color: @p_verde; color: @p_fondo; }
+.tecla {
+    font-size: 11px; color: @p_tenue; border: 1px solid @p_borde; border-radius: 3px;
+    padding: 0 5px; margin-left: 8px; background: @p_fondo;
+}
+.boton.si .tecla { color: @p_fondo; border-color: alpha(@p_fondo, 0.4); background: alpha(@p_fondo, 0.12); }
+progressbar trough { min-height: 2px; background: @p_borde; border-radius: 0; border: none; }
+progressbar progress { min-height: 2px; background: @p_verde; border-radius: 0; border: none; }
+"""
 
 ESTILO = """
 * { font-family: "MesloLGS Nerd Font Propo", sans-serif; }
@@ -94,10 +139,11 @@ def boton(texto, tecla, principal):
 
 
 class Tarjeta(Gtk.Window):
-    def __init__(self, accion, aviso):
+    def __init__(self, accion, aviso, programador=False):
         super().__init__()
         self.respuesta = 1
-        titulo, texto, si = TEXTOS[accion]
+        titulo, texto, si = (TEXTOS_PROGRAMADOR if programador else TEXTOS)[accion]
+        marca = MARCA_PROGRAMADOR[accion] if programador else "◆  MODO GAMING"
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "modo-gaming-tarjeta")
@@ -112,7 +158,7 @@ class Tarjeta(Gtk.Window):
         caja.get_style_context().add_class("tarjeta")
         caja.set_size_request(460, -1)
 
-        for texto_, clase in (("◆  MODO GAMING", "marca"), (titulo, "titulo"), (texto, "texto")):
+        for texto_, clase in ((marca, "marca"), (titulo, "titulo"), (texto, "texto")):
             etiqueta = Gtk.Label(label=texto_, xalign=0)
             etiqueta.set_line_wrap(True)
             etiqueta.set_max_width_chars(44)
@@ -191,13 +237,19 @@ def solo_wayland():
 
 
 def main(argv):
-    if not argv or argv[0] not in TEXTOS:
-        print("uso: modo-gaming-tarjeta.py entrar|salir|bloqueado [aviso]", file=sys.stderr)
+    programador = argv[:1] == ["--programador"]
+    if programador:
+        argv = argv[1:]
+    if not argv or argv[0] not in (TEXTOS_PROGRAMADOR if programador else TEXTOS):
+        print("uso: modo-gaming-tarjeta.py [--programador] entrar|salir|bloqueado [aviso]", file=sys.stderr)
         return 2
     if not solo_wayland() or not Gtk.init_check(sys.argv)[0]:
         return 1
-    cargar_estilo()
-    tarjeta = Tarjeta(argv[0], argv[1] if len(argv) > 1 else "")
+    if programador:
+        cargar_estilo_programador()
+    else:
+        cargar_estilo()
+    tarjeta = Tarjeta(argv[0], argv[1] if len(argv) > 1 else "", programador)
     tarjeta.show_all()
     Gtk.main()
     return tarjeta.respuesta
@@ -219,6 +271,16 @@ def cargar_estilo(extra=""):
                    "@define-color luz #e4c7ff; @define-color tenue #8a7aa8;"
                    "@define-color atencion #f6c177;")
     css.load_from_data((colores + ESTILO + extra).encode())
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
+                                             Gtk.STYLE_PROVIDER_PRIORITY_USER)
+
+
+def cargar_estilo_programador():
+    """El tema del modo programador como colores de GTK (@p_verde...)."""
+    import programador
+    colores = "".join("@define-color p_%s %s;" % (k, v) for k, v in programador.ajustes()["tema"].items())
+    css = Gtk.CssProvider()
+    css.load_from_data((colores + ESTILO_PROGRAMADOR).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
                                              Gtk.STYLE_PROVIDER_PRIORITY_USER)
 

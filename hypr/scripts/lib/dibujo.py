@@ -155,7 +155,10 @@ class Imagenes:
         if os.path.isabs(nombre):
             return self.cargar(nombre, tam, tam)
         if self._tema is None:
-            from gi.repository import Gtk
-            self._tema = Gtk.IconTheme.get_default() or Gtk.IconTheme.new()
+            from gi.repository import Gdk, Gtk
+            # Sin pantalla (al dibujar a un PNG) get_default() se queja con un
+            # Gtk-CRITICAL: un tema suelto encuentra los mismos iconos.
+            self._tema = (Gtk.IconTheme.get_default() if Gdk.Screen.get_default() else None) \
+                or Gtk.IconTheme.new()
         info = self._tema.lookup_icon(nombre, int(tam), 0)
         return self.cargar(info.get_filename(), tam, tam) if info else None

@@ -1341,6 +1341,18 @@ def esperar_video(proceso, ruta):
 
 
 # --- Entrar y salir --------------------------------------------------------------
+def programador_puesto():
+    """Si esta sesion esta en el modo programador (su estado, con la misma
+    firma). Los dos modos no se juntan: cada uno deshace lo suyo al salir y
+    se pisarian el fondo, las barras y los atajos."""
+    sig = canales.firma() or "sin-sesion"
+    try:
+        with open(os.path.join(canales.RUNTIME, "modo-programador.%s.json" % sig), encoding="utf-8") as fh:
+            return bool(json.load(fh).get("activo"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def entrar(sin_preguntar=False):
     """Todo lo pesado ocurre DETRAS del video de entrada (si lo hay), y la
     biblioteca se abre tambien detras: cuando el video acaba, ya esta ahi.
@@ -1349,6 +1361,12 @@ def entrar(sin_preguntar=False):
     if leer_estado():
         print("modo gaming: ya estaba puesto")
         return 0
+    if programador_puesto():
+        print("modo gaming: estás en el modo programador; sal de él primero (SUPER+P)", file=sys.stderr)
+        subprocess.Popen(["notify-send", "-a", "Modo gaming", "-c", "de-paso", "Estás en el modo programador",
+                          "Sal de él primero (SUPER+P) para entrar al modo gaming."],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return 1
     modo = hypr.modo()
     if not modo:
         print("modo gaming: no hay una sesion de Hyprland con la que hablar", file=sys.stderr)
