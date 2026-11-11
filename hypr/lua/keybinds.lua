@@ -353,6 +353,13 @@ exec(mainMod, "G", S .. "modo-gaming.py toggle")
 -- puesto no entra (lo dice).
 exec(mainMod, "P", S .. "modo-programador.py toggle")
 
+-- Modo estudio (scripts/modo-estudio.py): para estudiar, no para jugar ni para
+-- trabajar. Aparta el ocio (musica, video, chats, redes, juegos) al escritorio
+-- oculto en todas las pantallas y deja el editor, la terminal, el navegador y
+-- Celiuz. Tambien pregunta antes. Con los otros dos modos puestos no entra (lo
+-- dice), igual que el programador con el gaming.
+exec(mainMod, "E", S .. "modo-estudio.py toggle")
+
 -- Menu rapido del modo gaming (scripts/menu-rapido.py), encima del juego: tus
 -- apps, la musica, el volumen por grupos, el micro. Va atado por CODIGO de
 -- tecla y no por simbolo: la tecla de al lado del 1 es `code:49` en cualquier

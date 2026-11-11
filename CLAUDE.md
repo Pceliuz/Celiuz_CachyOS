@@ -35,7 +35,7 @@ lo que vayas a escribir tú.
 | GPU | **NVIDIA RTX 3050 6 GB** (GA107) | — |
 | Pantalla | **dos** (2026-11-02): Gigabyte GS27QCA en DP-1, 2560x1440 **@180 Hz**, a la izquierda y con el escritorio 1; TES TE-2412S en HDMI-A-1, 1920x1080 @100 Hz, a su derecha. Fijado en su `personal.lua` | + televisor a la derecha, escala 1.5 |
 | Teclado | `us,latam`, perfil «sin-altgr» (Ctrl derecho hace de AltGr) | el suyo |
-| Atajos | **68** (67 del repo + `SUPER+A` suyo, de `personal.lua`; 9 escritorios desde el 2026-10-22, `SUPER+SHIFT+Q` desde el 24, `SUPER+P` desde el 27) | 72 |
+| Atajos | **69** (68 del repo + `SUPER+A` suyo, de `personal.lua`; 9 escritorios desde el 2026-10-22, `SUPER+SHIFT+Q` desde el 24, `SUPER+P` desde el 27, modo estudio desde el 10 de noviembre) | 73 |
 
 ## El estado, en cuatro frases
 
