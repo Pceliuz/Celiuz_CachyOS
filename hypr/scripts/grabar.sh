@@ -50,15 +50,17 @@ avisar() {
 
 # --- Lo primero: saber si ya se esta grabando --------------------------------
 
-PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; TRAMOS=""
+PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; TRAMOS=""; ZONA_VIVA=""
 if [ -r "$ESTADO" ]; then
-    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO TRAMOS < "$ESTADO"
+    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO TRAMOS ZONA_VIVA < "$ESTADO"
     PAUSADO="${PAUSADO:-0}"; PAUSA_ACUM="${PAUSA_ACUM:-0}"; PAUSA_INICIO="${PAUSA_INICIO:-0}"
 fi
 # Que el numero siga siendo NUESTRO wf-recorder y no un proceso cualquiera que
 # haya heredado el PID despues: los PIDs se reciclan, y un `kill` a ciegas sobre
 # un numero viejo mata a quien no toca.
-if [ -n "$PID_VIVO" ] && [ "$(cat "/proc/$PID_VIVO/comm" 2>/dev/null)" != "wf-recorder" ]; then
+# En pausa el wf-recorder murio a proposito (el SIGINT cierra el tramo): un
+# PID muerto aqui NO invalida el estado, o pausar borraria la propia grabacion.
+if [ -n "$PID_VIVO" ] && [ "$PAUSADO" != "1" ] && [ "$(cat "/proc/$PID_VIVO/comm" 2>/dev/null)" != "wf-recorder" ]; then
     PID_VIVO=""; RUTA_VIVA=""; INICIO=""
     rm -f "$ESTADO"
 fi
@@ -99,8 +101,13 @@ estado_json() {
         reloj=$(printf '%02d:%02d' $((seg / 60)) $((seg % 60)))
         if [ "$pausado" = "True" ]; then text="⏸ $reloj"; else text="🔴 $reloj"; fi
     fi
+    # JSON de verdad: true/false en minuscula. Python los lee como bool y bash
+    # los compara como texto; con True/False de bash, waybar no podria leerlo.
+    local gjson=false pjson=false
+    [ "$grabando" = "True" ] && gjson=true
+    [ "$pausado" = "True" ] && pjson=true
     printf '{"grabando": %s, "pausado": %s, "pid": "%s", "ruta": "%s", "transcurrido": %s, "text": "%s"}\n' \
-        "$grabando" "$pausado" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text"
+        "$gjson" "$pjson" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text"
 }
 
 if [ "${1:-}" = "--estado" ]; then
@@ -146,9 +153,65 @@ parar() {
     exit 0
 }
 
-[ -n "$PID_VIVO" ] && parar
+# --pausar NO para: cierra el tramo y sigue viva la grabacion (se atiende mas
+# abajo, cuando ya existen nombre_libre() y DESTINO).
+if [ -n "$PID_VIVO" ] && [ "${1:-}" != "--pausar" ]; then
+    parar
+fi
 
-# --- A partir de aqui, no habia nada grabando --------------------------------
+# --- A partir de aqui, no habia nada grabando (o se solicita pausar/reanudar) -
+
+if [ "${1:-}" = "--pausar" ]; then
+    if [ -z "$PID_VIVO" ]; then
+        avisar "No hay ninguna grabación para pausar"
+        exit 0
+    fi
+    if [ "$PAUSADO" -eq 1 ]; then
+        # Reanudar: arrancar un nuevo tramo con los mismos argumentos
+        kill -INT "$PID_VIVO" 2>/dev/null
+        n=0
+        while [ -e "/proc/$PID_VIVO" ] && [ "$n" -lt 100 ]; do
+            sleep 0.1
+            n=$((n + 1))
+        done
+        # El tramo que cierra se apunta con los ya cerrados, uno por linea.
+        if [ -n "$TRAMOS" ]; then
+            TRAMOS="$TRAMOS
+$RUTA_VIVA"
+        else
+            TRAMOS="$RUTA_VIVA"
+        fi
+        ARCHIVO=$(nombre_libre "$MODO")
+        RUTA_VIVA="$ARCHIVO"
+        # La misma zona que se guardo al empezar: en este proceso nuevo DONDE no
+        # existe, lo que hay es ZONA_VIVA leido del estado.
+        OPCIONES=("${ZONA_VIVA[@]}")
+        [ "$AUDIO" -eq 1 ] && OPCIONES+=(-a)
+        wf-recorder "$@" "${OPCIONES[@]}" -f "$ARCHIVO" >"$REGISTRO" 2>&1 < /dev/null &
+        PID_VIVO=$!
+        sleep 0.5
+        PAUSADO=0
+        PAUSA_INICIO=0
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$TRAMOS" "${ZONA_VIVA[*]}" > "$ESTADO"
+        avisar "Grabación reanudada" media-record
+        exit 0
+    else
+        # Pausar: cerrar el tramo actual con SIGINT y marcar pausado
+        kill -INT "$PID_VIVO" 2>/dev/null
+        n=0
+        while [ -e "/proc/$PID_VIVO" ] && [ "$n" -lt 100 ]; do
+            sleep 0.1
+            n=$((n + 1))
+        done
+        PAUSADO=1
+        PAUSA_INICIO=$(date +%s)
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$TRAMOS" "${ZONA_VIVA[*]}" > "$ESTADO"
+        avisar "Grabación pausada" media-pause "SUPER+R o clic para parar; clic derecho para reanudar"
+        exit 0
+    fi
+fi
 
 MODO=zona
 AUDIO=0
@@ -160,7 +223,7 @@ for arg in "$@"; do
             avisar "No hay ninguna grabación en curso"
             exit 0 ;;
         *)
-            echo "uso: $(basename "$0") [--full] [--audio] | --parar" >&2
+            echo "uso: $(basename "$0") [--full] [--audio] | --parar | --pausar" >&2
             exit 2 ;;
     esac
 done
@@ -257,8 +320,12 @@ if [ ! -e /dev/dri/renderD128 ] || ! arrancar -c h264_vaapi -d /dev/dri/renderD1
     COMO="por CPU"
 fi
 
-printf '%s\t%s\t%s\n' "$PID" "$ARCHIVO" "$(date +%s)" > "$ESTADO"
+# El estado lleva ademas la zona (DONDE) y los tramos ya cerrados: es lo que
+# permite reanudar en el mismo sitio y unirlos al final. Ocho campos por tab:
+# pid, ruta, inicio, pausado, pausa_acum, pausa_inicio, tramos, donde.
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$PID" "$ARCHIVO" "$(date +%s)" 0 0 0 "" "${DONDE[*]}" > "$ESTADO"
 
 DETALLE="$COMO"
 [ "$AUDIO" -eq 1 ] && DETALLE="$DETALLE · con sonido"
-avisar "Grabando ($MODO)" media-record "$DETALLE · vuelve a pulsar el atajo para parar"
+avisar "Grabando ($MODO)" media-record "$DETALLE · SUPER+R o clic en el punto rojo para parar; clic derecho para pausar"

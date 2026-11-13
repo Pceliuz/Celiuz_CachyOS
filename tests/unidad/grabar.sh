@@ -18,6 +18,9 @@ SCRIPT="$REPO/hypr/scripts/grabar.sh"
 # script, que es quien sabe que PID lanzo.
 cat > "$FALSOS/wf_falso" <<'FIN'
 #!/usr/bin/env bash
+# El script de verdad comprueba /proc/PID/comm antes de fiarse del PID (§ E-43);
+# este falso es bash, asi que se pone el nombre para que esa comprobacion valga.
+printf 'wf-recorder' > "/proc/$$/comm" 2>/dev/null || true
 archivo=""
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
