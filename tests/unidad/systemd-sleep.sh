@@ -41,13 +41,20 @@ correr() {
 }
 
 REINIT='xhci_hcd 0000:02:00.0: xHC error in resume, USBSTS 0x401, Reinit'
+# Las marcas del kernel tal como las escribe en el diario real (2026-11-13).
+ENTRADA_SUSPEND='PM: suspend entry (deep)'
+ENTRADA_HIBERNAR='PM: hibernation: hibernation entry'
+SALIDA_SUSPEND='PM: suspend exit'
 
 # --- 1. Con el rastro del Reinit, recupera el controlador del teclado ---------
 
 titulo "1. Con el rastro del Reinit, vuelve a enlazar el controlador del teclado"
 preparar_sysfs
 binario_falso logger
-printf '%s\n' "$REINIT" > "$TRAZA"
+{
+    printf '%s\n' "$ENTRADA_SUSPEND"
+    printf '%s\n' "$REINIT"
+} > "$TRAZA"
 correr post suspend
 codigo=$?
 afirmar_igual "0" "$codigo" "termina bien"
@@ -59,7 +66,10 @@ afirmar_contiene "$REGISTRO/logger.log" "0000:02:00.0" "deja rastro en el diario
 
 titulo "2. Al volver de hibernar hace lo mismo"
 preparar_sysfs
-printf '%s\n' "$REINIT" > "$TRAZA"
+{
+    printf '%s\n' "$ENTRADA_HIBERNAR"
+    printf '%s\n' "$REINIT"
+} > "$TRAZA"
 correr post hibernate
 afirmar_contiene "$DRIVER/bind" "0000:02:00.0" "hibernar: lo vuelve a enlazar"
 
@@ -111,12 +121,15 @@ afirmar "no enlaza nada" test ! -s "$DRIVER/bind"
 # reenlazaria el controlador aunque haya vuelto bien: se cortarian la camara,
 # el mando y el receptor sin motivo.
 
-titulo "7. Un Reinit viejo, antes de la ultima salida, no se toca"
+titulo "7. Un Reinit de un ciclo viejo no se toca"
 preparar_sysfs
 {
+    printf '%s\n' "$ENTRADA_SUSPEND"
     printf '%s\n' "$REINIT"
-    printf '%s\n' 'PM: suspend exit 2026-11-13 14:33:11'
+    printf '%s\n' "$SALIDA_SUSPEND"
+    printf '%s\n' "$ENTRADA_SUSPEND"
     printf '%s\n' 'usb 1-1: new low-speed USB device number 3 using xhci_hcd'
+    printf '%s\n' "$SALIDA_SUSPEND"
 } > "$TRAZA"
 correr post suspend
 codigo=$?
@@ -125,14 +138,15 @@ afirmar "no desenlaza nada" test ! -s "$DRIVER/unbind"
 afirmar "no enlaza nada" test ! -s "$DRIVER/bind"
 
 # --- 8. El Reinit de ESTE despertar si se toca -------------------------------
+# El orden real del diario del 2026-11-13: la entrada, el error y la salida.
 
-titulo "8. El Reinit de este despertar (tras la salida) si se toca"
+titulo "8. El Reinit de este despertar (entre la entrada y la salida) si se toca"
 preparar_sysfs
 binario_falso logger
 {
+    printf '%s\n' "$ENTRADA_SUSPEND"
     printf '%s\n' "$REINIT"
-    printf '%s\n' 'PM: suspend exit 2026-11-13 14:33:11'
-    printf '%s\n' "$REINIT"
+    printf '%s\n' "$SALIDA_SUSPEND"
 } > "$TRAZA"
 correr post suspend
 codigo=$?

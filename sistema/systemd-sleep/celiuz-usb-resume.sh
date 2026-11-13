@@ -37,18 +37,25 @@ DIARIO_KERNEL="${DIARIO_KERNEL:-}"
 
 # El rastro del fallo: del diario de mentira si se dio (pruebas), del diario
 # del kernel de este arranque si no.
+#
+# La ventana es ESTE despertar: desde la ultima marca de ENTRADA del kernel
+# (suspender o hibernar) hasta el final. En el diario real el fallo del xHCI
+# va entre la entrada y la salida (2026-11-13: 09:07:01 «PM: suspend entry
+# (deep)» -> 14:33:11 «xHC error in resume» -> 14:33:14 «PM: suspend exit»),
+# asi que cortar por la salida dejaria fuera justo el error. Sin marca de
+# entrada no hay ventana y no se toca nada (fail-closed).
 rastro_kernel() {
     if [ -n "$DIARIO_KERNEL" ]; then
         cat "$DIARIO_KERNEL" 2>/dev/null
     else
         journalctl -b 0 -k --no-pager 2>/dev/null
-    fi | awk '/PM: (suspend|hibernation) exit|PM: restore/ { buf = ""; next }
+    fi | awk '/PM: (suspend|hibernation)(: hibernation)? entry|PM: restore/ { buf = ""; next }
               { buf = buf $0 "\n" }
               END { printf "%s", buf }'
 }
 
 # Solo se toca si el kernel dijo que ESTE controlador tuvo el Reinit
-# EN ESTE DESPERTAR (después de la última salida de suspensión/hibernación).
+# EN ESTE DESPERTAR (desde la última entrada de suspensión/hibernación).
 rastro_kernel | grep -Fq "xhci_hcd $DISPOSITIVO: xHC error in resume" || exit 0
 
 # El driver es el enlace `driver` del dispositivo, como en el sysfs de verdad.
