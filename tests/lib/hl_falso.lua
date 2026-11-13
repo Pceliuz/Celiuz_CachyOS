@@ -60,12 +60,27 @@ hl = {
         local f = os.getenv("HL_PANTALLAS")
         return f and dofile(f) or {}
     end,
+    -- Ventanas: HL_VENTANAS nombra un fichero Lua que devuelve una lista de
+    -- ventanas de mentira ({ address, at, size, floating, ... }). Cada una se
+    -- «abre» (window.open) tras cargar la config. Si trae `luego`, esa es la
+    -- ventana que devuelve get_window despues de abrirse (una app que se
+    -- recoloca sola). Lo que se despacha queda en R.despachos.
+    get_window = function(selector)
+        local w = VENTANAS[selector:gsub("^address:", "")]
+        if not w then return nil end
+        return (w._abierta and w.luego) or w
+    end,
+    dispatch = function(d) R.despachos[#R.despachos + 1] = d end,
+    -- Los temporizadores disparan al terminar de abrir cada ventana, en orden.
+    timer = function(fn, opts) TEMPORIZADORES[#TEMPORIZADORES + 1] = fn; return {} end,
     dsp = {
         exec_cmd = dsp("exec_cmd"), dpms = dsp("dpms"), focus = dsp("focus"), exit = dsp("exit"),
         window = { close = dsp("window.close"), float = dsp("window.float"), move = dsp("window.move"),
-                   drag = dsp("window.drag"), resize = dsp("window.resize") },
+                   drag = dsp("window.drag"), resize = dsp("window.resize"), center = dsp("window.center") },
     },
 }
+R.despachos = {}
+VENTANAS, TEMPORIZADORES = {}, {}
 
 dofile(HOME .. "/.config/hypr/hyprland.lua")
 
@@ -73,6 +88,24 @@ dofile(HOME .. "/.config/hypr/hyprland.lua")
 local arranques = 0
 for _, e in ipairs(R.eventos) do
     if e.ev == "hyprland.start" then arranques = arranques + 1; e.fn() end
+end
+
+-- Las ventanas que se abren (HL_VENTANAS): window.open, y luego sus temporizadores.
+local fv = os.getenv("HL_VENTANAS")
+for _, w in ipairs(fv and dofile(fv) or {}) do
+    if w.mapped == nil then w.mapped = true end
+    if w.fullscreen == nil then w.fullscreen = 0 end
+    if w.luego then
+        for k, v in pairs(w) do if w.luego[k] == nil and k ~= "luego" then w.luego[k] = v end end
+    end
+    VENTANAS[w.address] = w
+    for _, e in ipairs(R.eventos) do
+        if e.ev == "window.open" then e.fn(w) end
+    end
+    w._abierta = true
+    local t = TEMPORIZADORES
+    TEMPORIZADORES = {}
+    for _, fn in ipairs(t) do fn() end
 end
 
 -- JSON a mano, suficiente para tablas de cadenas, numeros y booleanos.

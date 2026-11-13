@@ -23,6 +23,72 @@ hl.window_rule({
     suppress_event = "maximize",
 })
 
+-- --- Ninguna ventana se queda FUERA de las pantallas ---
+-- (2026-11-13) El launcher de Wuthering Waves (Steam, XWayland) se abria SIEMPRE
+-- en x = -1614, a la izquierda de DP-1, donde no hay pantalla: Steam lo daba
+-- por «corriendo» y se veia negro, y en el modo gaming peor, porque el
+-- vigilante cierra la biblioteca al ver la ventana del juego y quedaba el
+-- escritorio vacio. Con dos pantallas, una app de Windows puede calcular su
+-- sitio en coordenadas que aqui no existen; nadie avisa.
+--
+-- Por eso no es una regla para ESE juego, sino para todas las ventanas
+-- flotantes: si al abrirse mas de la mitad de la ventana cae fuera de toda
+-- pantalla, se centra en la suya. Una ventana que esta a la vista no se toca
+-- nunca (ni las que tu arrastras: solo se mira al abrirse). Se vuelve a mirar
+-- a los 0,3, 1,5 y 4 s porque una app puede colocarse DESPUES de abrirse, y
+-- al abrirse Hyprland aun no la ha colocado (medido: una flotante sale en la
+-- esquina de la pantalla y luego se centra).
+--
+-- `hl.get_monitor_at` NO sirve para preguntar «¿hay pantalla aqui?»: devuelve
+-- la MAS CERCANA (medido: en -960,540 contesta DP-1). Se mide el area a mano.
+-- Las de menos de 50 px se dejan: Wine crea ventanitas auxiliares que no son
+-- para verse. Lo vigila tests/unidad/config-lua.sh (seccion 9).
+local function area_a_la_vista(at, size)
+    local total = 0
+    for _, m in ipairs(hl.get_monitors()) do
+        local escala = m.scale or 1
+        local ancho = math.min(at.x + size.x, m.x + m.width / escala) - math.max(at.x, m.x)
+        local alto = math.min(at.y + size.y, m.y + m.height / escala) - math.max(at.y, m.y)
+        if ancho > 0 and alto > 0 then
+            total = total + ancho * alto
+        end
+    end
+    return total
+end
+
+local function rescatar(direccion)
+    local ok, w = pcall(hl.get_window, "address:" .. direccion)
+    if not ok or not w or not w.mapped or not w.floating or w.fullscreen ~= 0 then
+        return
+    end
+    local at, size = w.at, w.size
+    if type(at) ~= "table" or type(size) ~= "table" or size.x < 50 or size.y < 50 then
+        return
+    end
+    if area_a_la_vista(at, size) * 2 >= size.x * size.y then
+        return
+    end
+    hl.dispatch(hl.dsp.window.center({ window = "address:" .. direccion }))
+end
+
+-- Los temporizadores se guardan hasta que disparan: son objetos con __gc, y
+-- uno que nadie referencia podria recogerse antes de tiempo.
+local pendientes = {}
+hl.on("window.open", function(w)
+    local direccion = w and w.address
+    if not direccion then
+        return
+    end
+    rescatar(direccion)
+    for _, ms in ipairs({ 300, 1500, 4000 }) do
+        local clave = direccion .. "@" .. ms
+        pendientes[clave] = hl.timer(function()
+            pendientes[clave] = nil
+            rescatar(direccion)
+        end, { timeout = ms, type = "oneshot" })
+    end
+end)
+
 -- --- El wallpaper NITIDO detras de las apps con fondo translucido ---
 -- (2026-11-02) kitty (kitty/celiuz-transparencia.conf) y las apps Qt con el
 -- tema Kvantum «Celiuz» (scripts/gen-kvantum.py) dejan ver el fondo. Con el

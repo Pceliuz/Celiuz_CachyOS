@@ -179,5 +179,41 @@ afirmar_igual "preferred" "$(modo_de HDMI-A-2 -1)" "y lo de personal.lua llega D
 afirmar_igual "1" "$(consulta "$TMP/pc.json" "len(R['monitores'])")" \
     "sin pantallas (la primera carga de la sesion) solo queda la generica"
 
+titulo "9. Ninguna ventana se queda fuera de las pantallas (lua/windowrules.lua)"
+# 2026-11-13: el launcher de Wuthering Waves se abria en x = -1614, a la
+# izquierda de DP-1: pantalla negra, en el escritorio y en el modo gaming.
+cat > "$TMP/dos-pantallas.lua" <<'EOF'
+return {
+    { name = "DP-1", x = 0, y = 0, width = 2560, height = 1440, scale = 1, available_modes = {} },
+    { name = "HDMI-A-1", x = 2560, y = 0, width = 1920, height = 1080, scale = 1, available_modes = {} },
+}
+EOF
+cat > "$TMP/ventanas.lua" <<'EOF'
+local function v(dir, x, y, w, h, extra)
+    local t = { address = dir, at = { x = x, y = y }, size = { x = w, y = h }, floating = true }
+    for k, val in pairs(extra or {}) do t[k] = val end
+    return t
+end
+return {
+    v("0xwuwa", -1614, 148, 1308, 784),                    -- el launcher, tal cual salio
+    v("0xbien", 600, 300, 1308, 784),                      -- a la vista: no se toca
+    v("0xhdmi", 3000, 200, 800, 600),                      -- en la otra pantalla: tampoco
+    v("0xbajo", 2000, 1200, 800, 600),                     -- bajo HDMI (solo mide 1080): casi toda fuera
+    v("0xmosaico", -1614, 148, 1308, 784, { floating = false }),   -- en mosaico: lo coloca el layout
+    v("0xcompleta", -1614, 148, 1308, 784, { fullscreen = 2 }),    -- a pantalla completa: no
+    v("0xmini", -32000, -32000, 1, 1),                     -- ventanita auxiliar de Wine
+    v("0xtarde", 600, 300, 1308, 784, { luego = { at = { x = -1614, y = 148 } } }),  -- se va DESPUES de abrirse
+}
+EOF
+HL_PANTALLAS="$TMP/dos-pantallas.lua" HL_VENTANAS="$TMP/ventanas.lua" cargar "$TMP/ventanas.json"; codigo=$?
+afirmar_igual "0" "$codigo" "carga y abre las ventanas sin error"
+afirmar "   sin nada por stderr" test ! -s "$TMP/ventanas.json.err"
+[ -s "$TMP/ventanas.json.err" ] && sed 's/^/      /' "$TMP/ventanas.json.err"
+centradas() { consulta "$TMP/ventanas.json" "' '.join(sorted({d['args'][0]['window'] for d in R['despachos'] if d['dsp']=='window.center'}))"; }
+afirmar_igual "address:0xbajo address:0xtarde address:0xwuwa" "$(centradas)" \
+    "se centran SOLO las que caen fuera: el launcher, la de abajo y la que se fue despues"
+afirmar_igual "0" "$(consulta "$TMP/ventanas.json" "len([d for d in R['despachos'] if d['dsp']!='window.center'])")" \
+    "   y no se despacha nada mas (ni foco, ni mover de escritorio)"
+
 afirmar_intacta_la_casa_real
 resumen

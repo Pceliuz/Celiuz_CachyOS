@@ -5,7 +5,115 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-11-05**, en la **PC**.
+Última sesión: **2026-11-13**, en la **PC**.
+
+---
+
+## 2026-11-13 (PC): Wuthering Waves «no arranca» — pantalla negra en el modo gaming
+
+No era un fallo del repo ni de Proton (se probaron GE-Proton y dw-proton, y
+daba igual). Eran **dos cosas a la vez**, y ninguna se parecía al síntoma.
+Lo apunto entero para Celiuz, porque el camino para encontrarlo vale para
+cualquier juego que «no carga».
+
+**1. La actualización de Steam BORRÓ el juego.** El 2026-11-12 a las 18:53
+Kuro cambió la versión de Steam: ahora Steam solo trae un launcher (~800 MB,
+versión 3.0.2.0) y es el launcher quien descarga el juego (~82 GB). Steam,
+al aplicar el depot nuevo, quitó lo que el viejo traía:
+
+```
+~/.local/share/Steam/logs/content_log.txt
+AppID 3513350 starting commit ... "Wuthering Waves" : 739 updated, 8 moved, 827 deleted files
+```
+
+En la carpeta ya no estaban `Client/Binaries/Win64/Client-Win64-Shipping.exe`
+ni `Client/Content`; solo quedaban los parches de `Client/Saved/Resources`
+(22 GB) y el último `Client.log` era del día 8. **El espacio SÍ se liberó**:
+`/home` es el subvolumen `@home` de btrfs y snapper solo tiene configuración
+para `/` (`/etc/snapper/configs/root`), así que ninguna instantánea retiene
+lo borrado. Ojo aparte: `steamapps/shadercache/3513350/transcoded_video.foz`
+pesa **52 GB** (los vídeos del juego recodificados por Steam para Proton).
+
+**2. La «pantalla negra» era el launcher, fuera de la pantalla.** Steam lo daba
+por «corriendo» y no se veía nada. `hyprctl clients -j` lo enseñó: la ventana
+de verdad (`steam_app_3513350`, título «Wuthering Waves», 1308x784) estaba en
+**x = -1614**, a la izquierda de DP-1, donde no hay pantalla. Lo único visible
+era una ventanita suya de 160x20 (la «barrita gris»). Se trajo con:
+
+```sh
+hyprctl eval 'hl.dispatch(hl.dsp.window.move({ x = 600, y = 300, window = "address:0x..." }))'
+```
+
+(`despachar.sh movewindowpixel` no sirve: `lib/hypr.sh` no sabe traducir ese
+dispatcher.) Lo probable es que el launcher calcule su sitio mal por XWayland
+con dos pantallas; no está medido.
+
+**Cómo se llegó, por si vuelve a pasar con otro juego:**
+
+- `content_log.txt` de Steam dice qué hizo cada actualización (borrados
+  incluidos) y en qué carpeta.
+- Los registros del launcher de Kuro están en
+  `compatdata/3513350/pfx/drive_c/users/steamuser/AppData/Roaming/KRLauncher/C50019/log/`
+  y van **cifrados con XOR 9** (cada byte `^ 9`). Descifrados decían
+  `button_states: "download"` y `UsingVersion: ""`: el launcher sabía que no
+  había juego. Los errores `WmiNetUtilsHelper` y `DiskInfo Get Fail` son de
+  Wine (no tiene WMI) y no impiden nada; por eso el launcher dice «Failed to
+  retrieve space info».
+- Antes de culpar a Proton: **¿hay ventana y dónde está?** (`hyprctl clients`).
+- Se puso `"disableGpu": true` en `kr_game_cache/webview_config.json` creyendo
+  que el negro era el WebView; no era eso. El original quedó en
+  `webview_config.json.antes`; se puede devolver.
+
+**Dónde instalarlo:** el launcher solo ve las letras del prefijo de Wine
+(`pfx/dosdevices`): `C:`, `S:` (= `~/.local/share/Steam`, el NVMe del
+sistema) y `Z:` (= `/`). **Por `Z:` NO vale**: el launcher mide el espacio
+de la RAÍZ de la letra, no de la carpeta elegida, y dentro del contenedor de
+Steam (Steam Linux Runtime) la `/` da 16,7 GB. Eligiendo
+`Z:\mnt\datos\...` decía «Insufficient disk space» con 728 GB libres (en el
+registro: `DriveLetter = Z ... AvailableSize = 16706105344`). Lo arregla una
+letra propia para ese disco:
+
+```sh
+ln -s /mnt/datos/SteamLibrary \
+  ~/.local/share/Steam/steamapps/compatdata/3513350/pfx/dosdevices/e:
+```
+
+Apunta a la BIBLIOTECA de Steam y no a `/mnt/datos` a secas a propósito: el
+contenedor de Steam monta las bibliotecas, y otra carpeta del disco puede no
+verse dentro. Después se cierra el launcher del todo y se elige
+`E:\steamapps\common\Wuthering Waves Game`. Se pierde si se borra el prefijo
+(`compatdata/3513350`).
+
+**Hecho: ninguna ventana se queda fuera de las pantallas** (`lua/windowrules.lua`,
+«Ninguna ventana se queda FUERA»). Al reabrirlo volvió a salir en x = -1614,
+así que no fue casualidad. No es una regla para ese juego: vale para TODA
+ventana flotante, de cualquier app o juego, dentro y fuera del modo gaming.
+Cómo está hecho, para que Celiuz lo entienda:
+
+- `hl.on("window.open", ...)` recibe la ventana recién abierta (medido con
+  una ventanita de prueba en el escritorio 8). Si más de la mitad cae fuera
+  de todas las pantallas, `hl.dsp.window.center` la lleva al centro de la
+  suya. Se vuelve a mirar a los 0,3, 1,5 y 4 s (`hl.timer`), porque una app
+  puede colocarse DESPUÉS de abrirse.
+- No toca: las que están a la vista, las de mosaico, las de pantalla
+  completa (el juego), las de menos de 50 px (ventanitas auxiliares de Wine)
+  ni las que arrastras tú (solo mira al abrirse).
+- Trampa medida: **`hl.get_monitor_at(x, y)` devuelve la pantalla MÁS
+  CERCANA**, no «nada» si no hay pantalla ahí (en -960,540 dijo DP-1). Por eso
+  se mide el área a mano con `hl.get_monitors()`.
+- En el modo gaming no hizo falta tocar `modo-gaming.py`: el vigilante ya
+  trata la ventana del launcher como del juego (la lleva al escritorio 1 y
+  cierra la biblioteca, como con Warframe); lo que fallaba era solo que
+  estuviera fuera de la pantalla.
+- Probado en vivo: una ventana movida a -1614 volvió al centro sola. La
+  prueba es `tests/unidad/config-lua.sh`, sección 9 (con un `hl` de mentira
+  que ahora sabe abrir ventanas: `HL_VENTANAS` en `tests/lib/hl_falso.lua`).
+
+Pendiente:
+- [ ] Ver de verdad el launcher de Wuthering Waves abrirse centrado (en el
+      escritorio y en el modo gaming) y descargar el juego en `E:`.
+- [ ] `lib/hypr.sh` no sabe traducir `movewindowpixel` (`despachar.sh` lo
+      rechaza): enseñárselo, o dejar escrito por qué no.
 
 ---
 

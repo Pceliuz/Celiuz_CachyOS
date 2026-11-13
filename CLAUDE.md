@@ -113,6 +113,15 @@ eso se versiona aquí: **se pierde al reinstalar el sistema.** Si un mando «dej
 de funcionar», corre `mando-check` antes de sospechar del repo, y mide **qué
 enumera SDL**, no si el device existe.
 
+**Y otra de juegos, también fuera del repo (2026-11-13):** «pantalla negra y
+no carga» puede ser una ventana **fuera de la pantalla** (Wuthering Waves:
+su launcher salía en x = -1614) o un juego que **Steam borró al actualizar**.
+Antes de culpar a Proton, `hyprctl clients -j` (¿hay ventana y dónde está?) y
+`~/.local/share/Steam/logs/content_log.txt` (busca `deleted files`). Lo de la
+ventana fuera ya lo corrige `lua/windowrules.lua` para toda flotante (y ojo:
+`hl.get_monitor_at` devuelve la pantalla MÁS CERCANA, no nil). La historia
+entera, en `SIGUIENTE.md`.
+
 ---
 
 ## Y también: CELIUZ REMOTO (`remoto/`), las 8 fases hechas
