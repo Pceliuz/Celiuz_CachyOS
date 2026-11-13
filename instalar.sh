@@ -1208,6 +1208,55 @@ sddm_estado() {
     fi
 }
 
+# --- 8b. Gancho del USB al despertar ----------------------------------------
+#
+# El controlador xHCI del chipset AMD 500 (0000:02:00.0) es el de los puertos
+# de atras, donde esta el receptor del teclado inalambrico 2.4G. Al despertar el
+# kernel lo reinicia y el receptor no vuelve solo: hay que desenchufarlo y
+# volverlo a enchufar (2026-11-13). Un gancho de systemd-sleep lo recupera solo
+# en cada despertar, y cuando el fallo no aparece no toca nada (mira el diario
+# antes de actuar). Es sistema/systemd-sleep/celiuz-usb-resume.sh.
+
+SLEEP_DIR="/etc/systemd/system-sleep"
+GANCHO_USB="$REPO/sistema/systemd-sleep/celiuz-usb-resume.sh"
+GANCHO_USB_PUESTO="$SLEEP_DIR/celiuz-usb-resume.sh"
+
+usb_pendiente() {
+    cmp -s "$GANCHO_USB" "$GANCHO_USB_PUESTO" && return 1
+    return 0
+}
+
+usb_instalar() {
+    titulo "8b. Teclado USB al volver de suspender o hibernar"
+    raiz install -D -m 755 -o root -g root "$GANCHO_USB" "$GANCHO_USB_PUESTO"
+    hecho "  puesto $GANCHO_USB_PUESTO"
+    gris "  si el controlador 0000:02:00.0 se reinicia al despertar, lo vuelve a"
+    gris "  enlazar solo: el teclado inalambrico ya no hay que reconectarlo"
+}
+
+# El paso 8b de la instalacion normal: si hay algo que poner, se pide la
+# contraseña y se pone; si no (o dijiste que no), se dice como esta.
+usb_paso() {
+    if [ "$SOLO_REVISAR" -eq 0 ] && usb_pendiente; then
+        if pedir_permiso "el gancho del teclado USB al despertar"; then
+            usb_instalar
+            return
+        fi
+        gris "  sin contraseña no se toca: el resto se instala igual"
+    fi
+    usb_estado
+}
+
+usb_estado() {
+    if [ ! -f "$GANCHO_USB_PUESTO" ]; then
+        aviso "el teclado inalambrico puede no volver al despertar: lo arregla ./instalar.sh (pide tu contraseña)"
+    elif ! cmp -s "$GANCHO_USB" "$GANCHO_USB_PUESTO"; then
+        aviso "el gancho del USB al despertar es una copia vieja: lo pone ./instalar.sh (pide tu contraseña)"
+    else
+        gris "  teclado USB al despertar: gancho puesto"
+    fi
+}
+
 # --- 9. Celiuz Remoto --------------------------------------------------------
 #
 # Se deja TODO puesto (la CLI, la app de la PC, su icono y la unidad de
@@ -1572,6 +1621,7 @@ else
     fondo
     pantalla
     sddm_paso
+    usb_paso
     remoto
     radio_estado
     recargar_sesion

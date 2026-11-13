@@ -45,7 +45,7 @@ correr() { salida="$(bash "$SCRIPT" 2>&1)"; codigo=$?; }
 
 # --- 1. Lo peligroso pide confirmacion, y Enter la rechaza ----------------------
 
-for caso in "2:cerrar sesión" "3:reiniciar" "4:apagar"; do
+for caso in "3:cerrar sesión" "4:reiniciar" "5:apagar"; do
     idx="${caso%%:*}"; verbo="${caso#*:}"
     titulo "1. «$verbo» con Enter en la pregunta (primera linea) no hace nada"
     limpiar; responder "$idx" "0"; correr
@@ -68,17 +68,17 @@ done
 # --- 2. Confirmado, hace lo que dice -------------------------------------------
 
 titulo "2. Confirmado, cada opcion hace lo suyo"
-limpiar; responder 4 1; correr
+limpiar; responder 5 1; correr
 afirmar_contiene "$REGISTRO/systemctl.log" "^poweroff$" "apagar -> systemctl poweroff"
-limpiar; responder 3 1; correr
+limpiar; responder 4 1; correr
 afirmar_contiene "$REGISTRO/systemctl.log" "^reboot$" "reiniciar -> systemctl reboot"
-limpiar; responder 2 1; correr
+limpiar; responder 3 1; correr
 afirmar_contiene "$REGISTRO/uwsm.log" "^stop$" "cerrar sesion con uwsm -> uwsm stop"
 afirmar "y no se mata a Hyprland a pelo" test ! -f "$REGISTRO/hyprctl.log"
 
 titulo "2b. Sin uwsm, cerrar sesion es el exit de Hyprland"
 binario_falso uwsm 1
-limpiar; responder 2 1; correr
+limpiar; responder 3 1; correr
 afirmar_contiene "$REGISTRO/hyprctl.log" "dispatch exit" "-> hyprctl dispatch exit"
 binario_falso uwsm 0
 
@@ -97,6 +97,49 @@ limpiar; responder ""; correr
 afirmar_igual "0" "$codigo" "termina bien"
 afirmar "nada de systemctl" test ! -f "$REGISTRO/systemctl.log"
 afirmar "nada de lock" test ! -f "$REGISTRO/lock.log"
+
+# --- 5. Hibernar: solo si lo usado cabe en la swap libre ------------------------
+#
+# Con 31 GB de RAM y 16 GB de swap, hibernar cuando la memoria usada no cabe NO
+# se queda a medias: el kernel aborta y la sesion se pierde (2026-11-13).
+# sesion.sh lee /proc/meminfo; aqui se le da uno de mentira con MEMINFO.
+
+# Usado 9 GiB (32499712 - 23062528 kB) en una swap libre de 16 GiB: cabe.
+cabe() {
+    cat > "$TMP/meminfo" <<'EOF'
+MemTotal:       32499712 kB
+MemAvailable:   23062528 kB
+SwapFree:       16777216 kB
+EOF
+}
+# Usado 29 GiB en una swap libre de 16 GiB: no cabe.
+no_cabe() {
+    cat > "$TMP/meminfo" <<'EOF'
+MemTotal:       32499712 kB
+MemAvailable:    2097152 kB
+SwapFree:       16777216 kB
+EOF
+}
+
+correr_meminfo() { salida="$(MEMINFO="$1" bash "$SCRIPT" 2>&1)"; codigo=$?; }
+
+titulo "5. Hibernar con la memoria que cabe: hiberna"
+limpiar; cabe; responder 2; correr_meminfo "$TMP/meminfo"
+afirmar_igual "0" "$codigo" "termina bien"
+afirmar_igual "1" "$(veces_llamado fuzzel)" "hibernar no pregunta: un solo menu"
+afirmar_contiene "$REGISTRO/systemctl.log" "^hibernate$" "hibernar -> systemctl hibernate"
+
+titulo "5b. Hibernar con la memoria que NO cabe: no hiberna y lo dice"
+limpiar; no_cabe; responder 2; correr_meminfo "$TMP/meminfo"
+afirmar_igual "0" "$codigo" "termina bien"
+afirmar "no hiberna" test ! -f "$REGISTRO/systemctl.log"
+afirmar_contiene "$REGISTRO/notify-send.log" "No cabe en la swap" "avisa de que no cabe"
+
+titulo "5c. Sin poder leer la memoria: no hiberna (fail-closed)"
+limpiar; responder 2; correr_meminfo "$TMP/no-existe"
+afirmar_igual "0" "$codigo" "termina bien"
+afirmar "no hiberna" test ! -f "$REGISTRO/systemctl.log"
+afirmar_contiene "$REGISTRO/notify-send.log" "No hiberno" "avisa de que no puede comprobarlo"
 
 afirmar_intacta_la_casa_real
 resumen

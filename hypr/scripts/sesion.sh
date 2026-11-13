@@ -58,9 +58,31 @@ if ! command -v fuzzel >/dev/null 2>&1; then
     exit 1
 fi
 
+# hibernar — hiberna SOLO si la memoria usada cabe en la swap libre que queda:
+# si no cabe, el kernel aborta a medio camino y la sesion se pierde (2026-11-13).
+# Fail-closed: si no se puede leer /proc/meminfo, no hiberna y lo dice.
+# MEMINFO se puede apuntar a otro archivo para las pruebas (tests/unidad/sesion.sh).
+hibernar() {
+    local meminfo="${MEMINFO:-/proc/meminfo}" usado_kb swap_kb
+    usado_kb="$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{if (t=="" || a=="") exit 1; print t-a}' "$meminfo")" || usado_kb=""
+    swap_kb="$(awk '/^SwapFree:/{print $2}' "$meminfo")" || swap_kb=""
+    if [ -z "$usado_kb" ] || [ -z "$swap_kb" ]; then
+        notify-send -a Sesión "No hiberno" \
+            "No pude leer la memoria usada y la swap libre" 2>/dev/null
+        return 1
+    fi
+    if [ "$usado_kb" -gt "$swap_kb" ]; then
+        notify-send -a Sesión "No cabe en la swap" \
+            "Hibernar necesita más swap libre ($((swap_kb / 1024)) MB) que la memoria usada ($((usado_kb / 1024)) MB): no hiberno." 2>/dev/null
+        return 1
+    fi
+    exec systemctl hibernate
+}
+
 OPCIONES=(
     "󰌾  Bloquear"
     "󰤄  Suspender"
+    "󰒲  Hibernar"
     "󰍃  Cerrar sesión"
     "󰜉  Reiniciar"
     "󰐥  Apagar"
@@ -69,8 +91,9 @@ OPCIONES=(
 case "$(elegir "󰐥  " "${OPCIONES[@]}")" in
     0) exec "$DIR/lock.sh" ;;
     1) exec systemctl suspend ;;          # el bloqueo lo pone hypridle (before_sleep_cmd)
-    2) confirmar "cerrar sesión" && cerrar_sesion ;;
-    3) confirmar "reiniciar" && exec systemctl reboot ;;
-    4) confirmar "apagar" && exec systemctl poweroff ;;
+    2) hibernar ;;                        # tambien bloquea antes: lo pone hypridle
+    3) confirmar "cerrar sesión" && cerrar_sesion ;;
+    4) confirmar "reiniciar" && exec systemctl reboot ;;
+    5) confirmar "apagar" && exec systemctl poweroff ;;
 esac
 exit 0
