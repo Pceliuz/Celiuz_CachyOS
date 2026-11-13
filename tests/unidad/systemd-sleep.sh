@@ -104,5 +104,41 @@ codigo=$?
 afirmar_igual "0" "$codigo" "termina bien sin el dispositivo"
 afirmar "no enlaza nada" test ! -s "$DRIVER/bind"
 
+# --- 7. Un Reinit de un despertar ANTERIOR no se toca ------------------------
+# rastro_kernel mira solo lo posterior a la ultima salida de suspender/hibernar.
+# Si mirara todo el arranque, tras el primer despertar con fallo el
+# 'xHC error in resume' se queda en el diario y cada despertar siguiente
+# reenlazaria el controlador aunque haya vuelto bien: se cortarian la camara,
+# el mando y el receptor sin motivo.
+
+titulo "7. Un Reinit viejo, antes de la ultima salida, no se toca"
+preparar_sysfs
+{
+    printf '%s\n' "$REINIT"
+    printf '%s\n' 'PM: suspend exit 2026-11-13 14:33:11'
+    printf '%s\n' 'usb 1-1: new low-speed USB device number 3 using xhci_hcd'
+} > "$TRAZA"
+correr post suspend
+codigo=$?
+afirmar_igual "0" "$codigo" "termina bien"
+afirmar "no desenlaza nada" test ! -s "$DRIVER/unbind"
+afirmar "no enlaza nada" test ! -s "$DRIVER/bind"
+
+# --- 8. El Reinit de ESTE despertar si se toca -------------------------------
+
+titulo "8. El Reinit de este despertar (tras la salida) si se toca"
+preparar_sysfs
+binario_falso logger
+{
+    printf '%s\n' "$REINIT"
+    printf '%s\n' 'PM: suspend exit 2026-11-13 14:33:11'
+    printf '%s\n' "$REINIT"
+} > "$TRAZA"
+correr post suspend
+codigo=$?
+afirmar_igual "0" "$codigo" "termina bien"
+afirmar_contiene "$DRIVER/unbind" "0000:02:00.0" "desenlaza el 0000:02:00.0"
+afirmar_contiene "$DRIVER/bind" "0000:02:00.0" "lo vuelve a enlazar"
+
 afirmar_intacta_la_casa_real
 resumen

@@ -41,12 +41,14 @@ rastro_kernel() {
     if [ -n "$DIARIO_KERNEL" ]; then
         cat "$DIARIO_KERNEL" 2>/dev/null
     else
-        journalctl -b 0 -k --no-pager 2>/dev/null | tail -n 500
-    fi
+        journalctl -b 0 -k --no-pager 2>/dev/null
+    fi | awk '/PM: (suspend|hibernation) exit|PM: restore/ { buf = ""; next }
+              { buf = buf $0 "\n" }
+              END { printf "%s", buf }'
 }
 
-# Solo se toca si el kernel dijo que ESTE controlador tuvo el Reinit. Un
-# unbind/bind a ciegas en cada resume remataria un teclado que estaba bien.
+# Solo se toca si el kernel dijo que ESTE controlador tuvo el Reinit
+# EN ESTE DESPERTAR (después de la última salida de suspensión/hibernación).
 rastro_kernel | grep -Fq "xhci_hcd $DISPOSITIVO: xHC error in resume" || exit 0
 
 # El driver es el enlace `driver` del dispositivo, como en el sysfs de verdad.
