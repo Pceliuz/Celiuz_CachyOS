@@ -316,6 +316,22 @@
         "escape": true
     },
 
+    // --- DERECHA: Grabación de pantalla (hypr/scripts/grabar.sh) ---
+    // Solo se ve mientras se graba: grabar.sh --estado no devuelve texto si no
+    // hay grabación, y waybar esconde un custom module vacío. El estado lo dice
+    // grabar.sh —único dueño del fichero de estado—; aquí NO se adivina con
+    // pgrep. Clic izquierdo para (lo mismo que SUPER+R otra vez); clic derecho
+    // pausa o reanuda (por tramos, lo explica grabar.sh).
+    "custom/grabacion": {
+        "exec": "$HOME/.config/hypr/scripts/grabar.sh --estado",
+        "return-type": "json",
+        "interval": 1,
+        "format": "{}",
+        "on-click": "$HOME/.config/hypr/scripts/grabar.sh",
+        "on-click-right": "$HOME/.config/hypr/scripts/grabar.sh --pausa",
+        "escape": true
+    },
+
     "tray": {
         // Los iconos del tray son imagenes, no glifos: no les llega el <span>.
         // Va a mano a la par de ellos: 20 cuando el <span> estaba al 130%, 23
