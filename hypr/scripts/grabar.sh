@@ -50,9 +50,10 @@ avisar() {
 
 # --- Lo primero: saber si ya se esta grabando --------------------------------
 
-PID_VIVO=""; RUTA_VIVA=""; INICIO=""
+PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; TRAMOS=""
 if [ -r "$ESTADO" ]; then
-    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO < "$ESTADO"
+    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO TRAMOS < "$ESTADO"
+    PAUSADO="${PAUSADO:-0}"; PAUSA_ACUM="${PAUSA_ACUM:-0}"; PAUSA_INICIO="${PAUSA_INICIO:-0}"
 fi
 # Que el numero siga siendo NUESTRO wf-recorder y no un proceso cualquiera que
 # haya heredado el PID despues: los PIDs se reciclan, y un `kill` a ciegas sobre
@@ -67,6 +68,44 @@ fi
 # proceso; sin fichero no se sabe donde estaba grabando, pero se puede parar.
 if [ -z "$PID_VIVO" ]; then
     PID_VIVO="$(pids_de_esta_sesion wf-recorder | head -1)"
+fi
+
+# --- --estado: lo que waybar necesita saber, y nada mas ----------------------
+#
+# Waybar no adivina nada: pregunta aqui y aqui se contesta con el fichero de
+# estado que este mismo script escribe. Un solo dueño del estado.
+
+segundos_grabados() {
+    [ -n "$INICIO" ] || { printf '0'; return; }
+    # En pausa el reloj se para en el instante en que se pauso: el tiempo
+    # transcurrido no avanza mientras el tramo cerrado no forme parte del video.
+    local fin
+    if [ "$PAUSADO" = "1" ]; then fin="$PAUSA_INICIO"; else fin="$(date +%s)"; fi
+    local seg=$(( fin - INICIO - PAUSA_ACUM ))
+    [ "$seg" -lt 0 ] && seg=0
+    printf '%s' "$seg"
+}
+
+# El JSON se arma a mano en vez de con python3: waybar lo pregunta cada segundo
+# y arrancar un interprete por segundo para esto sobra. La ruta la pone
+# nombre_libre(), que nunca mete comillas; el resto son numeros y booleanos.
+estado_json() {
+    local grabando=False pausado=False text="" seg
+    [ -n "$PID_VIVO" ] && grabando=True
+    [ "$grabando" = "True" ] && [ "$PAUSADO" = "1" ] && pausado=True
+    seg="$(segundos_grabados)"
+    if [ "$grabando" = "True" ]; then
+        local reloj
+        reloj=$(printf '%02d:%02d' $((seg / 60)) $((seg % 60)))
+        if [ "$pausado" = "True" ]; then text="⏸ $reloj"; else text="🔴 $reloj"; fi
+    fi
+    printf '{"grabando": %s, "pausado": %s, "pid": "%s", "ruta": "%s", "transcurrido": %s, "text": "%s"}\n' \
+        "$grabando" "$pausado" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text"
+}
+
+if [ "${1:-}" = "--estado" ]; then
+    estado_json
+    exit 0
 fi
 
 parar() {
