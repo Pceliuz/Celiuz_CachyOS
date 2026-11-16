@@ -181,19 +181,21 @@ exec(mainMod .. " SHIFT", "S", S .. "screenshot.sh --full")
 -- la practica no existia.
 exec(mainMod .. " ALT", "S", S .. "screenshot.sh --ventana")
 
--- Grabar la pantalla en video. Mismo reparto que las capturas y con la tecla de
--- al lado: SUPER+R graba la zona que elijas, SUPER+ALT+R el monitor entero.
+-- Grabar la pantalla en video, con su sonido. SUPER+R abre una tarjeta que
+-- pregunta que: la pantalla completa, una zona o UNA VENTANA (que se graba
+-- aunque te vayas a otra, y con solo el sonido de esa app); tiene un
+-- interruptor para grabar sin sonido. SUPER+ALT+R es el atajo directo al
+-- monitor entero, sin preguntar.
 --
--- Son INTERRUPTORES: el mismo atajo que empieza es el que para. Dos atajos
--- distintos —uno para empezar y otro para parar— es justo lo que no se recuerda
--- con la grabacion ya corriendo, que es cuando hace falta.
+-- Son INTERRUPTORES: con una grabacion en marcha, cualquiera de los dos la para.
+-- Dos atajos distintos —uno para empezar y otro para parar— es justo lo que no
+-- se recuerda con la grabacion ya corriendo, que es cuando hace falta.
 --
 -- SUPER+SHIFT+R no se usa aqui: ya es "recargar la configuracion" (mas arriba), y
 -- de las tres es la que peor sienta pulsada por error en mitad de una grabacion.
 --
--- El sonido va aparte, con --audio, y sin atajo a proposito: grabar la pantalla
--- es lo de todos los dias y grabar ademas lo que suena es la excepcion, no al
--- reves. Para eso: grabar.sh --audio  (o --full --audio).
+-- El sonido va POR DEFECTO desde el 2026-11-16 (antes era la excepcion, con
+-- --audio): grabando una ventana el sonido es solo el suyo, y se pidio asi.
 exec(mainMod, "R", S .. "grabar.sh")
 exec(mainMod .. " ALT", "R", S .. "grabar.sh --full")
 

@@ -442,6 +442,24 @@ window#waybar.waybar-trigger {
     box-shadow: 0 0 8px 1px alpha(@amatista, 0.35);
 }
 
+/* Grabando (grabar.sh --estado-tirador): la linea se pone roja y late. Con una
+ * app abierta la barra esta escondida, y sin esto no habia NADA en pantalla que
+ * dijera que se esta grabando (2026-11-16: se grabaron 7 minutos sin saberlo).
+ * En pausa, ambar y quieta: lo que espera, no lo que pasa. */
+@keyframes grabando-late {
+    from { background-color: @rojo_neon; box-shadow: 0 0 8px 1px alpha(@rojo_neon, 0.6); }
+    to   { background-color: alpha(@rojo_neon, 0.45); box-shadow: none; }
+}
+
+#custom-handle.grabando {
+    background-color: @rojo_neon;
+    animation: grabando-late 1s ease-in-out infinite alternate;
+}
+
+#custom-handle.pausado {
+    background-color: @atencion;
+}
+
 /* --- El dock (dock.jsonc) --- */
 /* Barra inferior de acceso rapido. Mismo concepto que la de arriba: la barra no
  * existe visualmente, solo los glifos flotando, y la pastilla violeta aparece

@@ -148,12 +148,14 @@ comprobar_dependencias() {
         gris "    sudo pacman -S ${sin_teclas[*]}"
     fi
 
-    # Y lo mismo con la grabacion de pantalla: SUPER+R esta puesto en
-    # keybinds.conf, pero sin wf-recorder ese bind es una tecla que no hace nada.
+    # Y lo mismo con la grabacion de pantalla: SUPER+R esta puesto en los
+    # atajos, pero sin gpu-screen-recorder no graba (grabar.sh lo dice al
+    # pulsarlo, pero solo si hay demonio de notificaciones). Antes era
+    # wf-recorder; el porque del cambio, en la cabecera de grabar.sh.
     # El escritorio arranca igual, de ahi que sea un aviso y no un error.
-    if ! command -v wf-recorder >/dev/null 2>&1; then
-        aviso "SUPER+R (grabar la pantalla) no hara nada sin: wf-recorder"
-        gris "    sudo pacman -S wf-recorder"
+    if ! command -v gpu-screen-recorder >/dev/null 2>&1; then
+        aviso "SUPER+R (grabar la pantalla) no hara nada sin: gpu-screen-recorder"
+        gris "    sudo pacman -S gpu-screen-recorder"
     fi
 
     # El overlay de FPS del modo gaming (Supr en la PC, Insert en un portatil) lo

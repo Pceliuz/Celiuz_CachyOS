@@ -1512,9 +1512,15 @@ pendiente. Steam pausa ese trabajo con un juego abierto.
 
 ## Queda por probar a mano (de antes)
 
-- **`grabar.sh` (SUPER+R)**: es la única pieza sin prueba automática. En la PC
-  **sí está `wf-recorder`**, así que aquí se puede probar; en la laptop falta
-  (`sudo pacman -S wf-recorder`).
+- **`grabar.sh` (SUPER+R), desde el 2026-11-16 con `gpu-screen-recorder`**:
+  tarjeta para elegir pantalla / zona / ventana, sonido por defecto (con una
+  ventana, solo el de su app) y la linea-tirador roja mientras graba. Probado
+  en la PC: pantalla completa por NVENC con sonido y pausa; una ventana en un
+  escritorio sin ver, por el portal; el sonido de una sola app con un tono.
+  Prueba: `tests/unidad/grabar.sh` (48). **Falta**: la tarjeta en pantalla con
+  el teclado real, y en la laptop instalar `gpu-screen-recorder` y reiniciar el
+  portal (`systemctl --user restart xdg-desktop-portal-hyprland`) para que lea
+  el selector nuevo de `hypr/xdph.conf`.
 - Un `SUPER+S` real, para confirmar que la captura ya no trae el recuadro
   (arreglado el 2026-09-23).
 - Los tres clics del módulo Bluetooth, y renombrar uno de los dos TWS, que se

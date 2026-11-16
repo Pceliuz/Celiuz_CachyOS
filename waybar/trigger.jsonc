@@ -33,6 +33,16 @@
     "custom/handle": {
         // La linea se dibuja con CSS (ver #custom-handle en style.css), no con
         // un caracter: asi el grosor no depende del tamano de fuente.
+        //
+        // Y es tambien el aviso de que se esta grabando: con una app abierta la
+        // barra se esconde, y con ella el punto rojo de custom/grabacion; esta
+        // linea es lo unico que queda a la vista. grabar.sh le pone la clase
+        // (grabando / pausado) y la avisa con la senal 11 en cuanto cambia, asi
+        // que no hace falta preguntar cada segundo.
+        "exec": "$HOME/.config/hypr/scripts/grabar.sh --estado-tirador",
+        "return-type": "json",
+        "interval": "once",
+        "signal": 11,
         "format": " ",
         "tooltip": false,
         // La ruta del canal lleva la firma de la sesion (ver lib/canales.py), asi

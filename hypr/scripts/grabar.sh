@@ -1,32 +1,42 @@
 #!/usr/bin/env bash
 # ~/dotfiles/hypr/scripts/grabar.sh
 #
-# Grabar la pantalla en video.
+# Grabar la pantalla en video, con su sonido.
 #
-#   grabar.sh            graba la zona que elijas con el raton (lo normal)
-#   grabar.sh --full     graba entero el monitor que tengas delante
-#   grabar.sh --audio    ademas del video, el sonido que este saliendo
-#   grabar.sh --parar    para la grabacion que haya en curso
+#   grabar.sh                  abre la tarjeta para elegir que grabar (SUPER+R)
+#   grabar.sh --full           el monitor que tengas delante (SUPER+ALT+R)
+#   grabar.sh --zona           la zona que marques con el raton
+#   grabar.sh --ventana DIR    una ventana (DIR = su direccion en hyprctl clients),
+#                              aunque te vayas a otra: se graba ELLA, no la pantalla
+#   ... --sin-audio            sin sonido (por defecto se graba)
+#   grabar.sh --pausar         pausa o reanuda la grabacion en curso
+#   grabar.sh --parar          la para y la guarda
+#   grabar.sh --estado         JSON para el modulo de waybar
+#   grabar.sh --estado-tirador JSON para la linea-tirador (roja mientras graba)
 #
-# Es un INTERRUPTOR: mientras haya una grabacion viva, cualquiera de las formas
-# de arriba la para en vez de empezar otra. Un atajo para empezar y otro distinto
-# para parar se olvida justo cuando hace falta —con la grabacion corriendo y la
-# pantalla llena de lo que estabas grabando—, asi que el mismo atajo hace las dos
-# cosas.
+# El SONIDO depende de lo que se grabe: con la pantalla o una zona, todo lo que
+# suena en el equipo; con una ventana, SOLO lo de esa app (el porque y su
+# limite, en lib/grabacion.py).
 #
-# El video queda en ~/Videos/grabaciones/. A diferencia de screenshot.sh, al
-# portapapeles NO va el fichero sino su RUTA en texto: un mp4 de varios minutos
-# pegado no lo acepta casi ningun sitio, y la ruta se pega en cualquiera.
+# Es un INTERRUPTOR: mientras haya una grabacion viva, SUPER+R (o cualquier
+# forma de arriba que empiece una) la para en vez de empezar otra. Un atajo
+# para empezar y otro para parar se olvida justo cuando hace falta.
 #
-# Se apoya en wf-recorder (repo oficial, nada de AUR) y en slurp, que ya estaba
-# aqui para las capturas.
+# El video queda en ~/Videos/grabaciones/. Al portapapeles va su RUTA en texto,
+# no el fichero: un mp4 de varios minutos pegado no lo acepta casi nadie.
+#
+# Se apoya en gpu-screen-recorder (repo oficial `extra`, nada de AUR). Antes era
+# wf-recorder, y se cambio el 2026-11-16 por tres cosas que wf-recorder no hace:
+# grabar una ventana suelta, grabar el sonido de una sola app, y codificar en la
+# GPU con NVIDIA (wf-recorder solo sabe VAAPI, que la NVIDIA no tiene, y caia a
+# la CPU a 2560x1440). Y pausa de verdad, con una senal, sin cortar en tramos.
 
 set -uo pipefail
 
 DIR="$(dirname "$(readlink -f "$BASH_SOURCE")")"
 
 # El `source` se comprueba a proposito: en bash uno que falla NO corta el script,
-# y seguir sin estas funciones dejaria el interruptor contando wf-recorders por
+# y seguir sin estas funciones dejaria el interruptor contando grabadores por
 # nombre — el `pgrep -x` global que este repo ya se quito de encima una vez.
 if ! . "$DIR/lib/canales.sh" 2>/dev/null || ! declare -F pids_de_esta_sesion >/dev/null; then
     echo "grabar: no encuentro lib/canales.sh; me paro antes de tocar nada" >&2
@@ -41,6 +51,15 @@ DESTINO="$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Vídeos")/grabaciones"
 ESTADO="$(canal grabar estado)"
 REGISTRO="${XDG_RUNTIME_DIR:-/tmp}/grabar.log"
 
+# El nombre del proceso tal como sale en /proc/PID/comm: el kernel lo corta a
+# 15 caracteres, asi que «gpu-screen-recorder» ahi se llama asi.
+COMM="gpu-screen-reco"
+
+# La senal con que waybar repinta los dos indicadores al momento (el modulo de
+# la barra y la linea-tirador; "signal": 11 en sus configs). Sin ella, la
+# linea tardaria en enterarse de que se empezo a grabar.
+SENAL_BARRA=11
+
 avisar() {
     # Mismo patron que screenshot.sh: notificacion si hay demonio, y ademas al
     # log de Hyprland, que es donde se puede leer cuando no lo hay.
@@ -48,28 +67,42 @@ avisar() {
     echo "grabar: $1 ${3:-}" >&2
 }
 
+repintar_barra() {
+    local p
+    for p in $(pids_de_esta_sesion waybar); do
+        kill -s "RTMIN+$SENAL_BARRA" "$p" 2>/dev/null
+    done
+    return 0
+}
+
+guardar_estado() {
+    # Siete campos por tab: pid, ruta, inicio, pausado, pausa_acum (segundos
+    # ya pausados), pausa_inicio (cuando empezo la pausa actual), modo.
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$MODO_VIVO" > "$ESTADO"
+}
+
 # --- Lo primero: saber si ya se esta grabando --------------------------------
 
-PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; TRAMOS=""; ZONA_VIVA=""
+PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; MODO_VIVO=""
 if [ -r "$ESTADO" ]; then
-    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO TRAMOS ZONA_VIVA < "$ESTADO"
+    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO MODO_VIVO < "$ESTADO"
     PAUSADO="${PAUSADO:-0}"; PAUSA_ACUM="${PAUSA_ACUM:-0}"; PAUSA_INICIO="${PAUSA_INICIO:-0}"
 fi
-# Que el numero siga siendo NUESTRO wf-recorder y no un proceso cualquiera que
-# haya heredado el PID despues: los PIDs se reciclan, y un `kill` a ciegas sobre
-# un numero viejo mata a quien no toca.
-# En pausa el wf-recorder murio a proposito (el SIGINT cierra el tramo): un
-# PID muerto aqui NO invalida el estado, o pausar borraria la propia grabacion.
-if [ -n "$PID_VIVO" ] && [ "$PAUSADO" != "1" ] && [ "$(cat "/proc/$PID_VIVO/comm" 2>/dev/null)" != "wf-recorder" ]; then
-    PID_VIVO=""; RUTA_VIVA=""; INICIO=""
+# Que el numero siga siendo NUESTRO grabador y no un proceso cualquiera que haya
+# heredado el PID despues: los PIDs se reciclan, y un `kill` a ciegas sobre un
+# numero viejo mata a quien no toca (asi llego a cerrarse una sesion entera).
+# En pausa el grabador sigue vivo, asi que vale igual.
+if [ -n "$PID_VIVO" ] && [ "$(cat "/proc/$PID_VIVO/comm" 2>/dev/null)" != "$COMM" ]; then
+    PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0
     rm -f "$ESTADO"
 fi
-# Y si no hay fichero de estado utilizable todavia puede quedar un wf-recorder
+# Y si no hay fichero de estado utilizable todavia puede quedar un grabador
 # huerfano de ESTA sesion (el script matado a medias, el fichero borrado a mano).
 # Se busca por la firma de la instancia, que si distingue de que sesion es cada
 # proceso; sin fichero no se sabe donde estaba grabando, pero se puede parar.
 if [ -z "$PID_VIVO" ]; then
-    PID_VIVO="$(pids_de_esta_sesion wf-recorder | head -1)"
+    PID_VIVO="$(pids_de_esta_sesion "$COMM" | head -1)"
 fi
 
 # --- --estado: lo que waybar necesita saber, y nada mas ----------------------
@@ -79,8 +112,7 @@ fi
 
 segundos_grabados() {
     [ -n "$INICIO" ] || { printf '0'; return; }
-    # En pausa el reloj se para en el instante en que se pauso: el tiempo
-    # transcurrido no avanza mientras el tramo cerrado no forme parte del video.
+    # En pausa el reloj se para en el instante en que se pauso.
     local fin
     if [ "$PAUSADO" = "1" ]; then fin="$PAUSA_INICIO"; else fin="$(date +%s)"; fi
     local seg=$(( fin - INICIO - PAUSA_ACUM ))
@@ -92,31 +124,39 @@ segundos_grabados() {
 # y arrancar un interprete por segundo para esto sobra. La ruta la pone
 # nombre_libre(), que nunca mete comillas; el resto son numeros y booleanos.
 estado_json() {
-    local grabando=False pausado=False text="" seg
-    [ -n "$PID_VIVO" ] && grabando=True
-    [ "$grabando" = "True" ] && [ "$PAUSADO" = "1" ] && pausado=True
+    local gjson=false pjson=false text="" clase="" seg
     seg="$(segundos_grabados)"
-    if [ "$grabando" = "True" ]; then
+    if [ -n "$PID_VIVO" ]; then
+        gjson=true; clase="grabando"
         local reloj
         reloj=$(printf '%02d:%02d' $((seg / 60)) $((seg % 60)))
-        if [ "$pausado" = "True" ]; then text="⏸ $reloj"; else text="🔴 $reloj"; fi
+        if [ "$PAUSADO" = "1" ]; then
+            pjson=true; clase="pausado"; text="⏸ $reloj"
+        else
+            text="🔴 $reloj"
+        fi
     fi
-    # JSON de verdad: true/false en minuscula. Python los lee como bool y bash
-    # los compara como texto; con True/False de bash, waybar no podria leerlo.
-    local gjson=false pjson=false
-    [ "$grabando" = "True" ] && gjson=true
-    [ "$pausado" = "True" ] && pjson=true
-    printf '{"grabando": %s, "pausado": %s, "pid": "%s", "ruta": "%s", "transcurrido": %s, "text": "%s"}\n' \
-        "$gjson" "$pjson" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text"
+    printf '{"grabando": %s, "pausado": %s, "pid": "%s", "ruta": "%s", "transcurrido": %s, "text": "%s", "class": "%s"}\n' \
+        "$gjson" "$pjson" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text" "$clase"
 }
 
-if [ "${1:-}" = "--estado" ]; then
-    estado_json
-    exit 0
-fi
+case "${1:-}" in
+    --estado)
+        estado_json
+        exit 0 ;;
+    --estado-tirador)
+        # La linea-tirador no lleva texto (es una raya dibujada con CSS): solo
+        # cambia de clase, y con ella de color.
+        clase=""
+        if [ -n "$PID_VIVO" ]; then
+            if [ "$PAUSADO" = "1" ]; then clase="pausado"; else clase="grabando"; fi
+        fi
+        printf '{"text": " ", "class": "%s"}\n' "$clase"
+        exit 0 ;;
+esac
 
 parar() {
-    # SIGINT, nunca SIGKILL: wf-recorder cierra el contenedor al recibirlo, y un
+    # SIGINT, nunca SIGKILL: el grabador cierra el contenedor al recibirlo, y un
     # mp4 sin cerrar no tiene indice — no lo abre ningun reproductor. Matarlo a
     # lo bruto no pierde el ultimo segundo, pierde la grabacion entera.
     kill -INT "$PID_VIVO" 2>/dev/null
@@ -129,6 +169,7 @@ parar() {
         n=$((n + 1))
     done
     rm -f "$ESTADO"
+    repintar_barra
 
     if [ -e "/proc/$PID_VIVO" ]; then
         avisar "La grabación no se cierra" dialog-error "sigue viva en el PID $PID_VIVO"
@@ -139,102 +180,109 @@ parar() {
         exit 1
     fi
 
-    # Cuanto duro y cuanto ocupa, que es lo que uno quiere saber al parar.
+    # Cuanto duro y cuanto ocupa, que es lo que uno quiere saber al parar. La
+    # duracion SIN las pausas: es lo que dura el video.
     local detalle="$(basename "$RUTA_VIVA")"
     local tam="$(du -h "$RUTA_VIVA" 2>/dev/null | cut -f1)"
     if [ -n "$INICIO" ]; then
-        local seg=$(( $(date +%s) - INICIO ))
+        local seg
+        seg="$(segundos_grabados)"
         detalle="$detalle · $((seg / 60))m $((seg % 60))s"
     fi
     [ -n "$tam" ] && detalle="$detalle · $tam"
 
-    printf '%s' "$RUTA_VIVA" | wl-copy
+    printf '%s' "$RUTA_VIVA" | wl-copy 2>/dev/null
     avisar "Grabación guardada" camera-video "$detalle"
     exit 0
 }
 
-# --pausar NO para: cierra el tramo y sigue viva la grabacion (se atiende mas
-# abajo, cuando ya existen nombre_libre() y DESTINO).
-if [ -n "$PID_VIVO" ] && [ "${1:-}" != "--pausar" ]; then
+pausar() {
+    # gpu-screen-recorder pausa y reanuda con SIGUSR2, sin cerrar el fichero:
+    # sale UN video, sin tramos que unir despues. Aqui solo se lleva la cuenta
+    # del tiempo, para que el reloj de la barra se pare mientras tanto.
+    kill -USR2 "$PID_VIVO" 2>/dev/null || { avisar "No pude pausar la grabación" dialog-error; exit 1; }
+    local ahora
+    ahora="$(date +%s)"
+    if [ "$PAUSADO" = "1" ]; then
+        PAUSA_ACUM=$(( PAUSA_ACUM + ahora - PAUSA_INICIO ))
+        PAUSADO=0; PAUSA_INICIO=0
+        guardar_estado
+        repintar_barra
+        avisar "Grabación reanudada" media-record
+    else
+        PAUSADO=1; PAUSA_INICIO="$ahora"
+        guardar_estado
+        repintar_barra
+        avisar "Grabación en pausa" media-playback-pause "SUPER+R para terminar; clic derecho en el punto rojo para seguir"
+    fi
+    exit 0
+}
+
+# --- Con una grabacion viva: pausar o parar, nunca empezar otra --------------
+
+if [ -n "$PID_VIVO" ]; then
+    if [ "${1:-}" = "--pausar" ]; then
+        if [ -z "$INICIO" ]; then
+            # Un huerfano sin fichero de estado: se puede parar, pero no se sabe
+            # ni cuando empezo; pausar a ciegas dejaria el reloj inventado.
+            avisar "No sé pausar esa grabación" dialog-error "SUPER+R la para"
+            exit 1
+        fi
+        pausar
+    fi
     parar
 fi
 
-# --- A partir de aqui, no habia nada grabando (o se solicita pausar/reanudar) -
-
-if [ "${1:-}" = "--pausar" ]; then
-    if [ -z "$PID_VIVO" ]; then
+case "${1:-}" in
+    --pausar)
         avisar "No hay ninguna grabación para pausar"
-        exit 0
-    fi
-    if [ "$PAUSADO" -eq 1 ]; then
-        # Reanudar: arrancar un nuevo tramo con los mismos argumentos
-        kill -INT "$PID_VIVO" 2>/dev/null
-        n=0
-        while [ -e "/proc/$PID_VIVO" ] && [ "$n" -lt 100 ]; do
-            sleep 0.1
-            n=$((n + 1))
-        done
-        # El tramo que cierra se apunta con los ya cerrados, uno por linea.
-        if [ -n "$TRAMOS" ]; then
-            TRAMOS="$TRAMOS
-$RUTA_VIVA"
-        else
-            TRAMOS="$RUTA_VIVA"
-        fi
-        ARCHIVO=$(nombre_libre "$MODO")
-        RUTA_VIVA="$ARCHIVO"
-        # La misma zona que se guardo al empezar: en este proceso nuevo DONDE no
-        # existe, lo que hay es ZONA_VIVA leido del estado.
-        OPCIONES=("${ZONA_VIVA[@]}")
-        [ "$AUDIO" -eq 1 ] && OPCIONES+=(-a)
-        wf-recorder "$@" "${OPCIONES[@]}" -f "$ARCHIVO" >"$REGISTRO" 2>&1 < /dev/null &
-        PID_VIVO=$!
-        sleep 0.5
-        PAUSADO=0
-        PAUSA_INICIO=0
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$TRAMOS" "${ZONA_VIVA[*]}" > "$ESTADO"
-        avisar "Grabación reanudada" media-record
-        exit 0
-    else
-        # Pausar: cerrar el tramo actual con SIGINT y marcar pausado
-        kill -INT "$PID_VIVO" 2>/dev/null
-        n=0
-        while [ -e "/proc/$PID_VIVO" ] && [ "$n" -lt 100 ]; do
-            sleep 0.1
-            n=$((n + 1))
-        done
-        PAUSADO=1
-        PAUSA_INICIO=$(date +%s)
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$TRAMOS" "${ZONA_VIVA[*]}" > "$ESTADO"
-        avisar "Grabación pausada" media-pause "SUPER+R o clic para parar; clic derecho para reanudar"
-        exit 0
-    fi
-fi
+        exit 0 ;;
+    --parar|-p)
+        avisar "No hay ninguna grabación en curso"
+        exit 0 ;;
+esac
 
-MODO=zona
-AUDIO=0
-for arg in "$@"; do
-    case "$arg" in
-        --full|-f)  MODO=pantalla ;;
-        --audio|-a) AUDIO=1 ;;
-        --parar|-p)
-            avisar "No hay ninguna grabación en curso"
-            exit 0 ;;
-        *)
-            echo "uso: $(basename "$0") [--full] [--audio] | --parar | --pausar" >&2
-            exit 2 ;;
-    esac
-done
+# --- A partir de aqui, no habia nada grabando --------------------------------
 
 # El bind no falla si falta el programa: pulsas la tecla y NO PASA NADA, sin una
 # sola pista de por que. Es el fallo en silencio que este repo evita en todo lo
 # demas, asi que se dice.
-if ! command -v wf-recorder >/dev/null 2>&1; then
-    avisar "Falta wf-recorder" dialog-error "sudo pacman -S wf-recorder"
+if ! command -v gpu-screen-recorder >/dev/null 2>&1; then
+    avisar "Falta gpu-screen-recorder" dialog-error "sudo pacman -S gpu-screen-recorder"
     exit 1
 fi
+
+# Sin argumentos: la tarjeta pregunta que grabar y contesta con los argumentos
+# de siempre, en una linea. Cancelarla (Esc) no es un error.
+if [ "$#" -eq 0 ]; then
+    ELECCION="$(python3 "$DIR/grabar-elegir.py")" || exit 0
+    [ -n "$ELECCION" ] || exit 0
+    # Lo que contesta son opciones y una direccion hexadecimal: sin espacios
+    # dentro de ninguna, asi que partirlas por espacios es exacto.
+    # shellcheck disable=SC2086
+    set -- $ELECCION
+fi
+
+MODO=""
+VENTANA=""
+AUDIO=1
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --full|-f)  MODO=pantalla ;;
+        --zona|-z)  MODO=zona ;;
+        --ventana|-w)
+            MODO=ventana
+            VENTANA="${2:-}"
+            shift ;;
+        --audio|-a)     AUDIO=1 ;;
+        --sin-audio)    AUDIO=0 ;;
+        *)
+            echo "uso: $(basename "$0") [--full | --zona | --ventana DIR] [--sin-audio] | --pausar | --parar | --estado" >&2
+            exit 2 ;;
+    esac
+    shift
+done
+[ -n "$MODO" ] || MODO=zona
 
 mkdir -p "$DESTINO" || { avisar "No puedo crear $DESTINO" dialog-error; exit 1; }
 
@@ -254,11 +302,11 @@ nombre_libre() {
 # Los mismos colores de seleccion que las capturas (conf/colores del escritorio).
 SLURP_COLORES=(-b 09031299 -c b16cffff -s b16cff26 -w 2)
 
+SONIDO="default_output"   # todo lo que suena en el equipo
 case "$MODO" in
     pantalla)
-        # El monitor que tengas DELANTE, no "el primero": sin -o, wf-recorder
-        # coge la salida que el compositor liste primero, que con dos pantallas
-        # no tiene por que ser en la que estas mirando.
+        # El monitor que tengas DELANTE, no "el primero": con dos pantallas el
+        # primero que liste el compositor no tiene por que ser en el que estas.
         SALIDA=$(hyprctl activeworkspace -j | python3 -c '
 import json, sys
 try:
@@ -269,63 +317,74 @@ except Exception:
             avisar "No sé en qué monitor estás" dialog-error
             exit 1
         fi
-        DONDE=(-o "$SALIDA")
+        CAPTURA=(-w "$SALIDA")
         ;;
     zona)
         # slurp devuelve vacio y codigo 1 si cancelas con Escape o clic derecho:
-        # eso no es un error, es que has cambiado de idea.
-        ZONA=$(slurp "${SLURP_COLORES[@]}") || exit 0
+        # eso no es un error, es que has cambiado de idea. El formato es el que
+        # entiende -region (el manual de gpu-screen-recorder lo da tal cual).
+        ZONA=$(slurp "${SLURP_COLORES[@]}" -f "%wx%h+%x+%y") || exit 0
         [ -n "$ZONA" ] || exit 0
-
-        # H.264 codifica en bloques de 2x2 pixeles, asi que una zona de ancho o
-        # alto IMPAR no se puede codificar: wf-recorder arranca, muere en el
-        # sitio, y el atajo se queda en nada. Recortar un pixel no se ve; que no
-        # grabe, si. Recortar hasta cero, tampoco vale.
-        IFS=', x' read -r ZX ZY ZW ZH <<< "$ZONA"
-        ZW=$((ZW - ZW % 2)); ZH=$((ZH - ZH % 2))
-        if [ "$ZW" -lt 2 ] || [ "$ZH" -lt 2 ]; then
-            avisar "Esa zona es demasiado pequeña" dialog-error
+        CAPTURA=(-w region -region "$ZONA")
+        ;;
+    ventana)
+        if [ -z "$VENTANA" ]; then
+            avisar "¿Qué ventana grabo?" dialog-error "falta su dirección: grabar.sh --ventana 0x..."
             exit 1
         fi
-        DONDE=(-g "$ZX,$ZY ${ZW}x${ZH}")
+        # El sonido de ESA app y de nadie mas. Sin nombre que buscar (una ventana
+        # que ya no existe) no se graba nada: mejor que grabar otra cosa.
+        SONIDO="$(python3 "$DIR/lib/grabacion.py" audio "$VENTANA")" || {
+            avisar "Esa ventana ya no está" dialog-error
+            exit 1
+        }
+        # La imagen llega por el portal, que preguntara "¿que ventana?":
+        # grabar-portal.py contesta con el recado que se deja aqui.
+        python3 "$DIR/lib/grabacion.py" preseleccionar "$VENTANA" || {
+            avisar "No pude preparar la grabación de la ventana" dialog-error
+            exit 1
+        }
+        CAPTURA=(-w portal)
         ;;
 esac
 
 ARCHIVO=$(nombre_libre "$MODO")
 
-OPCIONES=("${DONDE[@]}")
-# -a sin nombre de dispositivo coge la fuente por defecto de PipeWire, que es lo
-# que uno espera: lo que se este oyendo.
-[ "$AUDIO" -eq 1 ] && OPCIONES+=(-a)
-
-# Codificar en la GPU sale casi gratis; por CPU, un portatil de dos nucleos
-# pierde fotogramas y encima ralentiza justo lo que estas grabando. Pero NO se da
-# por hecho que se pueda: hay maquinas sin /dev/dri y drivers sin H.264. Se
-# intenta, y si el proceso se muere en el primer segundo se reintenta por
-# software — con aviso, porque grabar por CPU tiene un precio que conviene saber.
-arrancar() {
-    wf-recorder "$@" "${OPCIONES[@]}" -f "$ARCHIVO" >"$REGISTRO" 2>&1 < /dev/null &
-    PID=$!
-    sleep 1.2
-    kill -0 "$PID" 2>/dev/null
-}
-
-COMO="por hardware"
-if [ ! -e /dev/dri/renderD128 ] || ! arrancar -c h264_vaapi -d /dev/dri/renderD128; then
-    rm -f "$ARCHIVO"
-    if ! arrancar; then
-        avisar "No arranca la grabación" dialog-error "$(tail -3 "$REGISTRO" 2>/dev/null)"
-        exit 1
-    fi
-    COMO="por CPU"
+# -k h264 y sonido AAC: lo que abre cualquier reproductor, movil o web. La GPU
+# codifica (NVENC en NVIDIA, VAAPI en AMD/Intel); donde no se pueda, la CPU, en
+# vez de no grabar.
+OPCIONES=("${CAPTURA[@]}" -c mp4 -k h264 -f 60 -fallback-cpu-encoding yes)
+if [ "$AUDIO" -eq 1 ] && [ -n "$SONIDO" ]; then
+    OPCIONES+=(-a "$SONIDO" -ac aac)
 fi
 
-# El estado lleva ademas la zona (DONDE) y los tramos ya cerrados: es lo que
-# permite reanudar en el mismo sitio y unirlos al final. Ocho campos por tab:
-# pid, ruta, inicio, pausado, pausa_acum, pausa_inicio, tramos, donde.
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$PID" "$ARCHIVO" "$(date +%s)" 0 0 0 "" "${DONDE[*]}" > "$ESTADO"
+gpu-screen-recorder "${OPCIONES[@]}" -o "$ARCHIVO" >"$REGISTRO" 2>&1 < /dev/null &
+PID=$!
 
-DETALLE="$COMO"
-[ "$AUDIO" -eq 1 ] && DETALLE="$DETALLE · con sonido"
-avisar "Grabando ($MODO)" media-record "$DETALLE · SUPER+R o clic en el punto rojo para parar; clic derecho para pausar"
+# Si se muere en el arranque (sin permiso para capturar, el portal sin
+# respuesta, una zona imposible...), se dice con las ultimas lineas del registro.
+# Por el portal se espera mas: primero pregunta y luego empieza.
+ESPERA=12; [ "$MODO" = ventana ] && ESPERA=30
+n=0
+while [ "$n" -lt "$ESPERA" ] && kill -0 "$PID" 2>/dev/null; do
+    sleep 0.1
+    n=$((n + 1))
+done
+if ! kill -0 "$PID" 2>/dev/null; then
+    rm -f "$ARCHIVO"
+    avisar "No arranca la grabación" dialog-error "$(tail -3 "$REGISTRO" 2>/dev/null)"
+    exit 1
+fi
+
+PID_VIVO="$PID"; RUTA_VIVA="$ARCHIVO"; INICIO="$(date +%s)"
+PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; MODO_VIVO="$MODO"
+guardar_estado
+repintar_barra
+
+case "$MODO" in
+    pantalla) QUE="pantalla completa"; DETALLE="con el sonido del equipo" ;;
+    zona)     QUE="una zona";          DETALLE="con el sonido del equipo" ;;
+    ventana)  QUE="una ventana";       DETALLE="solo con el sonido de esa app" ;;
+esac
+[ "$AUDIO" -eq 1 ] || DETALLE="sin sonido"
+avisar "Grabando $QUE" media-record "$DETALLE · SUPER+R para terminar · clic derecho en el punto rojo para pausar"

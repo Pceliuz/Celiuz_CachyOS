@@ -87,7 +87,7 @@ funcionará y el instalador te lo dirá):
 
 ```sh
 sudo pacman -S --needed sddm qt6-multimedia qt6-multimedia-ffmpeg \
-               fastfetch kvantum wf-recorder qrencode \
+               fastfetch kvantum gpu-screen-recorder qrencode \
                mission-center nvtop btop
 ```
 
@@ -96,7 +96,7 @@ sudo pacman -S --needed sddm qt6-multimedia qt6-multimedia-ffmpeg \
 | `sddm`, `qt6-multimedia`, `qt6-multimedia-ffmpeg` | la pantalla de inicio de sesión, con el fondo en vídeo |
 | `fastfetch` | el saludo de la terminal |
 | `kvantum` | que Dolphin y las apps Qt dejen ver el fondo, como las demás |
-| `wf-recorder` | grabar la pantalla (`SUPER + R`) |
+| `gpu-screen-recorder` | grabar la pantalla, una zona o una ventana con su sonido (`SUPER + R`) |
 | `qrencode` | el QR para compartir el wifi desde su panel |
 | `mission-center`, `nvtop`, `btop` | los monitores del sistema que abre la barra |
 

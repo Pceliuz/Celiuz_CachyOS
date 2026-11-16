@@ -139,7 +139,7 @@ sudo pacman -S kvantum
 Y para grabar la pantalla (`SUPER + R`), que va aparte por lo mismo:
 
 ```sh
-sudo pacman -S wf-recorder
+sudo pacman -S gpu-screen-recorder
 ```
 
 Y el Bluetooth, **solo si el equipo tiene** (sin adaptador el icono de la barra
@@ -168,7 +168,7 @@ Notas:
   **y no avisa de nada**: un `exec` que no existe no da error en Hyprland. Por
   eso el instalador los comprueba y lo dice. `brightnessctl` solo se pide en un
   portátil.
-- **`wf-recorder`** es lo único que hace falta para grabar la pantalla; el
+- **`gpu-screen-recorder`** es lo único que hace falta para grabar la pantalla; el
   instalador lo comprueba aparte por la misma razón que las teclas de función. Si
   falta, `SUPER + R` sí avisa —el script lo mira antes de nada—, pero el aviso
   necesita que el demonio de notificaciones esté vivo.
@@ -375,8 +375,8 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 | `SUPER + S` | Captura de una zona |
 | `SUPER + SHIFT + S` | Captura de la pantalla entera |
 | `SUPER + ALT + S` | Captura de la ventana que tengas delante |
-| `SUPER + R` | Grabar una zona en vídeo (la misma tecla la para) |
-| `SUPER + ALT + R` | Grabar el monitor entero (la misma tecla lo para) |
+| `SUPER + R` | Grabar en vídeo: pregunta si la pantalla, una zona o una ventana (con solo su sonido). La misma tecla la para |
+| `SUPER + ALT + R` | Grabar el monitor entero, sin preguntar (la misma tecla lo para) |
 | `SUPER + SHIFT + V` | Historial del portapapeles (Enter copia, Ctrl+F fija, Ctrl+G guarda, Ctrl+D borra) |
 | Volumen, silencio, micro, brillo | Lo cambian **y enseñan** cómo queda (abajo, con una barra) |
 | `CTRL + RePág` / `CTRL + AvPág` | Subir / bajar el volumen, para teclados sin esas teclas (en el navegador, cambiar de pestaña queda en `CTRL + TAB`) |

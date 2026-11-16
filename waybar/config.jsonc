@@ -321,14 +321,16 @@
     // hay grabación, y waybar esconde un custom module vacío. El estado lo dice
     // grabar.sh —único dueño del fichero de estado—; aquí NO se adivina con
     // pgrep. Clic izquierdo para (lo mismo que SUPER+R otra vez); clic derecho
-    // pausa o reanuda (por tramos, lo explica grabar.sh).
+    // pausa o reanuda. El intervalo mueve el reloj; la senal 11 la manda
+    // grabar.sh al empezar, pausar o parar, para que se vea AL MOMENTO.
     "custom/grabacion": {
         "exec": "$HOME/.config/hypr/scripts/grabar.sh --estado",
         "return-type": "json",
         "interval": 1,
+        "signal": 11,
         "format": "{}",
-        "on-click": "$HOME/.config/hypr/scripts/grabar.sh",
-        "on-click-right": "$HOME/.config/hypr/scripts/grabar.sh --pausa",
+        "on-click": "$HOME/.config/hypr/scripts/grabar.sh --parar",
+        "on-click-right": "$HOME/.config/hypr/scripts/grabar.sh --pausar",
         "escape": true
     },
 
