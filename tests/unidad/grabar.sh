@@ -107,7 +107,10 @@ case "$(campo text)" in
 esac
 afirmar_igual "grabando" "$(tirador)" "la linea-tirador se pone en «grabando» (roja)"
 afirmar_contiene "$REGISTRO/notify-send.log" "SUPER\\+R para terminar" "el aviso dice como se termina"
-afirmar_contiene "$REGISTRO/notify-send.log" "pausar" "y como se pausa"
+afirmar_contiene "$REGISTRO/notify-send.log" "SUPER\\+CTRL\\+R para pausar" "y como se pausa, con el teclado"
+afirmar_contiene "$REGISTRO/notify-send.log" "-c de-paso" "los avisos son «de paso»: se ven tambien en «no molestar» (jugando)"
+afirmar_igual "pantalla" "$(campo modo)" "el estado dice que se graba la pantalla"
+afirmar_igual "DP-1" "$(campo donde)" "y cual (para que la pastilla se ponga en otra)"
 
 # --- 3. Pausa ---------------------------------------------------------------
 
@@ -210,6 +213,46 @@ case "$SEL" in
     *) ok "el selector va por nombre: $SEL" ;;
 esac
 afirmar_contiene "$REPO/instalar.sh" "enlazar .*grabar-portal\\.py.*\\.local/bin/$SEL\"" "instalar.sh enlaza ese nombre en ~/.local/bin"
+
+# --- 8c. La pastilla de los modos sin barra --------------------------------
+
+titulo "8c. La pastilla sale solo en un modo, y lejos de lo que se graba"
+R="$(python3 - "$LIB" <<'FIN'
+import importlib.util, json, os, sys
+spec = importlib.util.spec_from_file_location("grabacion", sys.argv[1])
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+dos = [{"name": "DP-1", "x": 0, "y": 0, "width": 2560, "height": 1440, "scale": 1, "focused": True},
+       {"name": "HDMI-A-1", "x": 2560, "y": 0, "width": 1920, "height": 1080, "scale": 1, "focused": False}]
+uno = dos[:1]
+print(g.monitor_para_indicador("pantalla", "DP-1", dos)["name"])
+print(g.monitor_para_indicador("zona", "300x200+2600+20", dos)["name"])
+print(g.monitor_para_indicador("ventana", "0xabc", dos)["name"])
+print(g.monitor_para_indicador("pantalla", "DP-1", uno)["name"])
+# Con escala: un monitor de 3840 a 1.5 mide 2560 logicos; x=2600 ya es del otro.
+esc = [{"name": "A", "x": 0, "y": 0, "width": 3840, "height": 2160, "scale": 1.5, "focused": True},
+       {"name": "B", "x": 2560, "y": 0, "width": 1920, "height": 1080, "scale": 1, "focused": False}]
+print(g.monitor_capturado("zona", "10x10+2600+5", esc))
+
+# Los modos, preguntando a cada uno con su estado de verdad en la casa de prueba.
+print(g.modo_sin_barra())
+gaming = g._modulo("modo-gaming")
+json.dump({"activo": True}, open(gaming.ruta_estado(), "w"))
+print(g.modo_sin_barra())
+os.unlink(gaming.ruta_estado())
+estudio = g._modulo("modo-estudio")
+estudio.guardar({"encendido": True})
+print(g.modo_sin_barra())
+FIN
+)"
+linea() { printf '%s\n' "$R" | sed -n "${1}p"; }
+afirmar_igual "HDMI-A-1" "$(linea 1)" "grabando DP-1 entero, la pastilla va a la otra pantalla"
+afirmar_igual "DP-1" "$(linea 2)" "grabando una zona de la otra, va a DP-1"
+afirmar_igual "DP-1" "$(linea 3)" "grabando una ventana, a la que tienes delante (la ventana se graba sola)"
+afirmar_igual "DP-1" "$(linea 4)" "con una sola pantalla, en esa (no hay otra)"
+afirmar_igual "B" "$(linea 5)" "la escala cuenta: el ancho es el logico"
+afirmar_igual "None" "$(linea 6)" "sin modo puesto, no sale (la barra ya lo dice)"
+afirmar_igual "gaming" "$(linea 7)" "en el modo gaming, sale"
+afirmar_igual "estudio" "$(linea 8)" "en el modo estudio, sale"
 
 # --- 9. Sonido de una ventana: el arbol de procesos -------------------------
 

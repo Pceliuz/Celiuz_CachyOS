@@ -377,6 +377,7 @@ sesión abierta no rompe nada, y al volver a entrar Hyprland ya coge el `.lua`
 | `SUPER + ALT + S` | Captura de la ventana que tengas delante |
 | `SUPER + R` | Grabar en vídeo: pregunta si la pantalla, una zona o una ventana (con solo su sonido). La misma tecla la para |
 | `SUPER + ALT + R` | Grabar el monitor entero, sin preguntar (la misma tecla lo para) |
+| `SUPER + CTRL + R` | Pausar o reanudar la grabación. En los modos gaming, programador y estudio sale además una pastilla con el tiempo (clic: terminar, derecho: pausa) |
 | `SUPER + SHIFT + V` | Historial del portapapeles (Enter copia, Ctrl+F fija, Ctrl+G guarda, Ctrl+D borra) |
 | Volumen, silencio, micro, brillo | Lo cambian **y enseñan** cómo queda (abajo, con una barra) |
 | `CTRL + RePág` / `CTRL + AvPág` | Subir / bajar el volumen, para teclados sin esas teclas (en el navegador, cambiar de pestaña queda en `CTRL + TAB`) |

@@ -198,6 +198,12 @@ exec(mainMod .. " ALT", "S", S .. "screenshot.sh --ventana")
 -- --audio): grabando una ventana el sonido es solo el suyo, y se pidio asi.
 exec(mainMod, "R", S .. "grabar.sh")
 exec(mainMod .. " ALT", "R", S .. "grabar.sh --full")
+-- Pausar y reanudar, con el teclado y en cualquier sitio. Hasta el 2026-11-16
+-- solo se podia con el clic derecho en el punto rojo de la barra, y en los
+-- modos gaming, programador y estudio la barra no esta o no se ve (ahi la
+-- grabacion la enseña grabar-indicador.py). CTRL y no SHIFT: SUPER+SHIFT+R es
+-- recargar la configuracion.
+exec(mainMod .. " CTRL", "R", S .. "grabar.sh --pausar")
 
 -- --- Portapapeles ---
 -- El historial de lo copiado, con cosas fijadas (hasta cerrar sesion) y guardadas

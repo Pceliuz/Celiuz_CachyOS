@@ -179,6 +179,88 @@ def buscar(direccion, lista=None):
     return None
 
 
+# --- Donde se enseña que se graba, en los modos sin barra -------------------
+#
+# En el modo gaming no hay barras (waybar-autohide.py las mata), y en el
+# programador y el estudio la de arriba esta escondida detras del trabajo. Ahi
+# no se veria el punto rojo, asi que lo enseña grabar-indicador.py. Cada modo
+# es el UNICO dueño de si esta puesto: aqui se les pregunta a ellos, no se lee
+# su fichero por libre.
+
+AQUI_SCRIPTS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+_modos = {}
+
+
+def _modulo(nombre):
+    """Un modo-*.py cargado por ruta (llevan guion), una sola vez."""
+    if nombre not in _modos:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            nombre.replace("-", "_"), os.path.join(AQUI_SCRIPTS, nombre + ".py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        _modos[nombre] = m
+    return _modos[nombre]
+
+
+def modo_sin_barra():
+    """«gaming», «estudio», «programador» o None. El estudio va antes que el
+    programador porque se monta encima de el."""
+    preguntas = (
+        ("gaming", "modo-gaming", lambda m: m.leer_estado()),
+        ("estudio", "modo-estudio", lambda m: m.encendido()),
+        ("programador", "modo-programador", lambda m: m.leer_estado()),
+    )
+    for nombre, fichero, puesto in preguntas:
+        try:
+            if puesto(_modulo(fichero)):
+                return nombre
+        except Exception:  # noqa: BLE001 — un modo roto no puede tumbar el aviso
+            continue
+    return None
+
+
+def _contiene(mon, x, y):
+    escala = float(mon.get("scale") or 1) or 1
+    ancho = int(mon.get("width", 0) / escala)
+    alto = int(mon.get("height", 0) / escala)
+    return mon["x"] <= x < mon["x"] + ancho and mon["y"] <= y < mon["y"] + alto
+
+
+def monitor_capturado(modo, donde, monitores):
+    """El nombre del monitor que sale en el video, o None si no sale ninguno
+    entero (una ventana se graba sola: lo que flote encima no entra)."""
+    if modo == "pantalla":
+        return donde or None
+    if modo == "zona":
+        try:
+            pos = donde.split("+")
+            x, y = int(pos[1]), int(pos[2])
+        except (AttributeError, IndexError, ValueError):
+            return None
+        for mon in monitores:
+            if _contiene(mon, x, y):
+                return mon.get("name")
+    return None
+
+
+def monitor_para_indicador(modo, donde, monitores):
+    """Donde poner la pastilla: en un monitor que NO se este grabando si lo
+    hay, para que no salga en el video; si no, en el que tienes delante."""
+    if not monitores:
+        return None
+    grabado = monitor_capturado(modo, donde, monitores)
+    libres = [m for m in monitores if m.get("name") != grabado]
+    if grabado and libres:
+        return libres[0]
+    enfocado = [m for m in monitores if m.get("focused")]
+    return (enfocado or monitores)[0]
+
+
+def monitores():
+    return _json_de(["hyprctl", "monitors", "-j"]) or []
+
+
 # --- El recado para grabar-portal.py ----------------------------------------
 
 def ruta_recado():

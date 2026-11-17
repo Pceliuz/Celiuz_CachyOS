@@ -9,7 +9,7 @@
 #   grabar.sh --ventana DIR    una ventana (DIR = su direccion en hyprctl clients),
 #                              aunque te vayas a otra: se graba ELLA, no la pantalla
 #   ... --sin-audio            sin sonido (por defecto se graba)
-#   grabar.sh --pausar         pausa o reanuda la grabacion en curso
+#   grabar.sh --pausar         pausa o reanuda la grabacion en curso (SUPER+CTRL+R)
 #   grabar.sh --parar          la para y la guarda
 #   grabar.sh --estado         JSON para el modulo de waybar
 #   grabar.sh --estado-tirador JSON para la linea-tirador (roja mientras graba)
@@ -21,6 +21,11 @@
 # Es un INTERRUPTOR: mientras haya una grabacion viva, SUPER+R (o cualquier
 # forma de arriba que empiece una) la para en vez de empezar otra. Un atajo
 # para empezar y otro para parar se olvida justo cuando hace falta.
+#
+# Donde se VE que se esta grabando: en la barra (el punto rojo y la
+# linea-tirador roja). En los modos gaming, programador y estudio la barra no
+# esta o no se ve, y ahi lo enseña grabar-indicador.py, una pastilla flotante
+# que se lanza con cada grabacion y solo aparece dentro de un modo.
 #
 # El video queda en ~/Videos/grabaciones/. Al portapapeles va su RUTA en texto,
 # no el fichero: un mp4 de varios minutos pegado no lo acepta casi nadie.
@@ -63,7 +68,12 @@ SENAL_BARRA=11
 avisar() {
     # Mismo patron que screenshot.sh: notificacion si hay demonio, y ademas al
     # log de Hyprland, que es donde se puede leer cuando no lo hay.
-    notify-send -a CeliuzRec -i "${2:-camera-video}" "$1" "${3:-}" 2>/dev/null &
+    #
+    # Categoria `de-paso` (mako/config): se ven TAMBIEN en «no molestar», que
+    # es justo como estan los avisos jugando o en el modo programador, y no
+    # suenan. Sin ella, empezar o pausar una grabacion jugando no daba ni una
+    # señal.
+    notify-send -a CeliuzRec -c de-paso -i "${2:-camera-video}" "$1" "${3:-}" 2>/dev/null &
     echo "grabar: $1 ${3:-}" >&2
 }
 
@@ -76,17 +86,19 @@ repintar_barra() {
 }
 
 guardar_estado() {
-    # Siete campos por tab: pid, ruta, inicio, pausado, pausa_acum (segundos
-    # ya pausados), pausa_inicio (cuando empezo la pausa actual), modo.
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$MODO_VIVO" > "$ESTADO"
+    # Ocho campos por tab: pid, ruta, inicio, pausado, pausa_acum (segundos
+    # ya pausados), pausa_inicio (cuando empezo la pausa actual), modo y donde
+    # (el monitor, la zona WxH+X+Y o la direccion de la ventana: lo que mira
+    # grabar-indicador.py para no ponerse encima de lo que se graba).
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$PID_VIVO" "$RUTA_VIVA" "$INICIO" "$PAUSADO" "$PAUSA_ACUM" "$PAUSA_INICIO" "$MODO_VIVO" "$DONDE_VIVO" > "$ESTADO"
 }
 
 # --- Lo primero: saber si ya se esta grabando --------------------------------
 
-PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; MODO_VIVO=""
+PID_VIVO=""; RUTA_VIVA=""; INICIO=""; PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; MODO_VIVO=""; DONDE_VIVO=""
 if [ -r "$ESTADO" ]; then
-    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO MODO_VIVO < "$ESTADO"
+    IFS=$'\t' read -r PID_VIVO RUTA_VIVA INICIO PAUSADO PAUSA_ACUM PAUSA_INICIO MODO_VIVO DONDE_VIVO < "$ESTADO"
     PAUSADO="${PAUSADO:-0}"; PAUSA_ACUM="${PAUSA_ACUM:-0}"; PAUSA_INICIO="${PAUSA_INICIO:-0}"
 fi
 # Que el numero siga siendo NUESTRO grabador y no un proceso cualquiera que haya
@@ -136,8 +148,8 @@ estado_json() {
             text="🔴 $reloj"
         fi
     fi
-    printf '{"grabando": %s, "pausado": %s, "pid": "%s", "ruta": "%s", "transcurrido": %s, "text": "%s", "class": "%s"}\n' \
-        "$gjson" "$pjson" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text" "$clase"
+    printf '{"grabando": %s, "pausado": %s, "pid": "%s", "ruta": "%s", "transcurrido": %s, "text": "%s", "class": "%s", "modo": "%s", "donde": "%s"}\n' \
+        "$gjson" "$pjson" "$PID_VIVO" "$RUTA_VIVA" "$seg" "$text" "$clase" "$MODO_VIVO" "$DONDE_VIVO"
 }
 
 case "${1:-}" in
@@ -213,7 +225,7 @@ pausar() {
         PAUSADO=1; PAUSA_INICIO="$ahora"
         guardar_estado
         repintar_barra
-        avisar "Grabación en pausa" media-playback-pause "SUPER+R para terminar; clic derecho en el punto rojo para seguir"
+        avisar "Grabación en pausa" media-playback-pause "SUPER+CTRL+R para seguir · SUPER+R para terminar"
     fi
     exit 0
 }
@@ -264,6 +276,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 MODO=""
+DONDE=""
 VENTANA=""
 AUDIO=1
 while [ "$#" -gt 0 ]; do
@@ -318,6 +331,7 @@ except Exception:
             exit 1
         fi
         CAPTURA=(-w "$SALIDA")
+        DONDE="$SALIDA"
         ;;
     zona)
         # slurp devuelve vacio y codigo 1 si cancelas con Escape o clic derecho:
@@ -326,6 +340,7 @@ except Exception:
         ZONA=$(slurp "${SLURP_COLORES[@]}" -f "%wx%h+%x+%y") || exit 0
         [ -n "$ZONA" ] || exit 0
         CAPTURA=(-w region -region "$ZONA")
+        DONDE="$ZONA"
         ;;
     ventana)
         if [ -z "$VENTANA" ]; then
@@ -351,6 +366,7 @@ except Exception:
             exit 1
         }
         CAPTURA=(-w portal)
+        DONDE="$VENTANA"
         ;;
 esac
 
@@ -383,9 +399,15 @@ if ! kill -0 "$PID" 2>/dev/null; then
 fi
 
 PID_VIVO="$PID"; RUTA_VIVA="$ARCHIVO"; INICIO="$(date +%s)"
-PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; MODO_VIVO="$MODO"
+PAUSADO=0; PAUSA_ACUM=0; PAUSA_INICIO=0; MODO_VIVO="$MODO"; DONDE_VIVO="$DONDE"
 guardar_estado
 repintar_barra
+
+# La pastilla de los modos sin barra. Se lanza SIEMPRE y decide ella si se
+# enseña: asi tambien aparece si se entra al modo gaming con la grabacion ya en
+# marcha. Se va sola cuando la grabacion termina. Desligada (setsid) para que no
+# muera con este script, y sin que su fallo pueda tocar la grabacion.
+setsid python3 "$DIR/grabar-indicador.py" >/dev/null 2>&1 < /dev/null &
 
 case "$MODO" in
     pantalla) QUE="pantalla completa"; DETALLE="con el sonido del equipo" ;;
@@ -393,4 +415,4 @@ case "$MODO" in
     ventana)  QUE="una ventana";       DETALLE="solo con el sonido de esa app" ;;
 esac
 [ "$AUDIO" -eq 1 ] || DETALLE="sin sonido"
-avisar "Grabando $QUE" media-record "$DETALLE · SUPER+R para terminar · clic derecho en el punto rojo para pausar"
+avisar "Grabando $QUE" media-record "$DETALLE · SUPER+R para terminar · SUPER+CTRL+R para pausar"
