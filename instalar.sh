@@ -274,6 +274,12 @@ desplegar() {
     # para que lo pueda llamar cualquier shell. Lo engancha a fish saludo_fish().
     enlazar "$REPO/hypr/scripts/saludo.sh" "$HOME/.local/bin/celiuz-saludo"
 
+    # El selector del portal para grabar una ventana (hypr/xdph.conf), por el
+    # PATH por lo mismo que celiuz-terminal: xdph lo lanza con execvp, SIN
+    # shell, asi que una ruta con ~ no se expande y el portal contesta «sin
+    # seleccion» (paso el 2026-11-16: «Una ventana» daba error y lo demas no).
+    enlazar "$REPO/hypr/scripts/grabar-portal.py" "$HOME/.local/bin/celiuz-grabar-portal"
+
     # La config es LUA desde el 2026-09-25 (hypr/hyprland.lua): Hyprland 0.56 la
     # prefiere a hyprland.conf, y la 0.57 retira la de hyprlang. Un Hyprland mas
     # viejo no sabe leerla y arrancaria con la de hyprlang que queda de puente

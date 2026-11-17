@@ -339,7 +339,13 @@ except Exception:
             exit 1
         }
         # La imagen llega por el portal, que preguntara "¿que ventana?":
-        # grabar-portal.py contesta con el recado que se deja aqui.
+        # grabar-portal.py contesta con el recado que se deja aqui. El portal
+        # lo encuentra por el PATH (hypr/xdph.conf); sin el enlace no arranca,
+        # y el error que da es mudo, asi que se dice aqui antes de intentarlo.
+        if ! command -v celiuz-grabar-portal >/dev/null 2>&1; then
+            avisar "Falta el selector del portal" dialog-error "corre ./instalar.sh en el repo del escritorio"
+            exit 1
+        fi
         python3 "$DIR/lib/grabacion.py" preseleccionar "$VENTANA" || {
             avisar "No pude preparar la grabación de la ventana" dialog-error
             exit 1

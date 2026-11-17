@@ -62,6 +62,7 @@ binario_falso pw-dump 0 'echo "[{\"info\":{\"props\":{\"media.class\":\"Stream/O
 binario_falso wl-copy 0 "cat > /dev/null"
 binario_falso xdg-user-dir 0 "echo $TMP/videos"
 binario_falso notify-send 0
+binario_falso celiuz-grabar-portal 0
 binario_falso hyprland-share-picker 0 "echo '[SELECTION]/screen:DP-1'"
 
 trap 'bash "$SCRIPT" --parar >/dev/null 2>&1 || true; kill "$APP_PID" 2>/dev/null; limpiar_entorno' EXIT
@@ -198,6 +199,17 @@ afirmar_igual "[SELECTION]/screen:DP-1" "$R" "un recado viejo no contesta por su
 python3 "$LIB" preseleccionar 0xdeadbeef
 R="$(XDPH_WINDOW_SHARING_LIST="$LISTA" python3 "$PORTAL")"
 afirmar_igual "[SELECTION]/screen:DP-1" "$R" "si la ventana encargada ya no esta, se pregunta en vez de grabar otra"
+
+# --- 8b. Que el portal pueda encontrarlo ----------------------------------
+
+titulo "8b. xdph.conf nombra el selector por el PATH, y instalar.sh crea ese enlace"
+# xdph lanza el selector con execvp, sin shell: ni `~` ni $HOME se expanden.
+SEL="$(sed -n 's/^[[:space:]]*custom_picker_binary[[:space:]]*=[[:space:]]*//p' "$REPO/hypr/xdph.conf")"
+case "$SEL" in
+    */*|*'~'*|*'$'*|"") fallo "el selector va por ruta, y xdph no la expande: '$SEL'" ;;
+    *) ok "el selector va por nombre: $SEL" ;;
+esac
+afirmar_contiene "$REPO/instalar.sh" "enlazar .*grabar-portal\\.py.*\\.local/bin/$SEL\"" "instalar.sh enlaza ese nombre en ~/.local/bin"
 
 # --- 9. Sonido de una ventana: el arbol de procesos -------------------------
 
