@@ -36,6 +36,25 @@ Los cuatro con su prueba y comprobados en la sesión real:
    apartado ni los bordes, y no vigilaba lo que se abría durante el modo: los
    tres hechos (mpv abierto con el modo puesto se aparta y vuelve al salir).
 
+**Segunda vuelta, el mismo día** (tras probarlo él):
+
+5. **El login del bloqueo salía descuadrado en una de las dos pantallas.**
+   `pantalla.py --hyprlock` solo medía la pantalla del foco y esas medidas
+   valían para todas. Ahora el contenido (velo, banda, título, reloj, campo)
+   vive en `hypr/hyprlock-pantalla.conf`, una plantilla, y `lock.sh` escribe
+   `~/.cache/celiuzpaper/lock-pantallas.conf` con una copia por pantalla,
+   cada una con su `monitor =` y sus números. Si eso falla, la plantilla con
+   `monitor =` vacío (como antes).
+6. **El vídeo de la segunda pantalla seguía quieto al bloquear.** Sin el
+   bloqueo no se reproduce: con `hold` los dos mpv siguen en marcha. Como aquí
+   no se puede bloquear para mirarlo, `lock.sh` lleva un guardián: cada 2 s,
+   el mpv que esté pausado se reanuda y se apunta en `lock.log`
+   («el vídeo de X estaba PAUSADO»). **Si sigue quieto y el log no lo dice, no
+   es mpv sino que Hyprland no repinta esa pantalla**: probarlo en el anidado
+   con dos salidas.
+7. Paso 8c de `instalar.sh`: con Limine usa `limine-mkinitcpio`
+   (`mkinitcpio -P` no tiene presets ahí y se para a preguntar).
+
 Y `fondo-tras-dormir.sh` vuelve a tener permiso de ejecución en git (se llama
 directo al despertar; en un clon nuevo el fondo no volvía tras suspender).
 

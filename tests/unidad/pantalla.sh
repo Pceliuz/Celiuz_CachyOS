@@ -139,6 +139,31 @@ afirmar_contiene "$TMP/resumen.txt" '^ +fondos ' "ensena la linea del selector d
 # reventar, mentiria mas bajito.
 afirmar_no_contiene "$TMP/resumen.txt" '\?' "ninguna medida del resumen se ha quedado sin generar"
 
+titulo "4b. El bloqueo, una copia POR PANTALLA con sus medidas (2026-11-18)"
+# Con las medidas de la pantalla del foco para todas, la otra salia con letras de
+# otro tamano y fuera de sitio. Dos pantallas falsas de distinto tamano.
+python3 - "$REPO" > "$TMP/pantallas.conf" 2>"$TMP/pantallas-err.txt" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/hypr/scripts/lib")
+import pantalla
+dos = [
+    {"nombre": "GRANDE", "descripcion": "", "ancho": 2560, "alto": 1440, "refresco": 180,
+     "escala": 1, "x": 0, "y": 0, "activo": True, "origen": "hyprland"},
+    {"nombre": "CHICA", "descripcion": "", "ancho": 1920, "alto": 1080, "refresco": 100,
+     "escala": 1, "x": 2560, "y": 0, "activo": False, "origen": "hyprland"},
+]
+pantalla.monitores = lambda recargar=False: dos
+with open(sys.argv[1] + "/hypr/hyprlock-pantalla.conf", encoding="utf-8") as fh:
+    sys.stdout.write(pantalla.fragmento_pantallas(fh.read()))
+PY
+afirmar_no_contiene "$TMP/pantallas-err.txt" 'Traceback' "genera sin errores"
+afirmar_igual "9" "$(grep -c '^ *monitor = GRANDE$' "$TMP/pantallas.conf")" "los 9 elementos en la grande"
+afirmar_igual "9" "$(grep -c '^ *monitor = CHICA$' "$TMP/pantallas.conf")" "y los 9 en la chica"
+afirmar_no_contiene "$TMP/pantallas.conf" '^[^#]*\$lock_' "ninguna medida se queda como variable"
+afirmar_no_contiene "$TMP/pantallas.conf" '@PANTALLA@' "ni la marca de la plantilla"
+afirmar_igual "147 110" "$(grep 'font_size = 1[0-9][0-9]$' "$TMP/pantallas.conf" | awk '{printf "%s%s", s, $3; s=" "}')" \
+    "el reloj, de su tamano en cada una (147 en 1440p, 110 en 1080p)"
+
 titulo "5. No toco nada de tu equipo"
 afirmar_intacta_la_casa_real
 

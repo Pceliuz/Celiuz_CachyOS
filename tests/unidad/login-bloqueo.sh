@@ -23,7 +23,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 preparar_entorno
 
 PANTALLA_PY="$REPO/hypr/scripts/lib/pantalla.py"
-HYPRLOCK="$REPO/hypr/hyprlock.conf"
+# El contenido del bloqueo vive en la plantilla por pantalla desde el
+# 2026-11-18; se mira junto con hyprlock.conf, como lo ve hyprlock.
+HYPRLOCK="$TMP/hyprlock-entero.conf"
+cat "$REPO/hypr/hyprlock.conf" "$REPO/hypr/hyprlock-pantalla.conf" > "$HYPRLOCK"
 MAIN_QML="$REPO/sddm/celiuz/Main.qml"
 THEME="$REPO/sddm/celiuz/theme.conf"
 

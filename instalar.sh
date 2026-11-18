@@ -211,7 +211,7 @@ comprobar_dependencias() {
     case "$familias" in
         *"Noto Sans CJK"*) ;;
         *) aviso "falta la fuente de los kanji del bloqueo: sudo pacman -S noto-fonts-cjk"
-           gris "    sin ella, el titulo 彼岸花 sale como cuadrados (cambialo en hypr/hyprlock.conf)" ;;
+           gris "    sin ella, el titulo 彼岸花 sale como cuadrados (cambialo en hypr/hyprlock-pantalla.conf)" ;;
     esac
 }
 
@@ -1291,11 +1291,17 @@ hibernar_instalar() {
     titulo "8c. Hibernar con NVIDIA"
     raiz install -D -m 644 -o root -g root "$HIBERNAR_CONF" "$HIBERNAR_CONF_PUESTO"
     hecho "  puesto $HIBERNAR_CONF_PUESTO"
-    gris "  regenerando el initramfs (mkinitcpio -P), tarda un poco..."
-    if raiz mkinitcpio -P >/dev/null 2>&1; then
+    # Con Limine (CachyOS) `mkinitcpio -P` no sirve: no hay presets y se para a
+    # preguntar si correr limine-mkinitcpio (visto en la PC el 2026-11-18). Ese
+    # es el que regenera los initramfs que arranca Limine, de todos los kernels.
+    local regenerar="mkinitcpio -P"
+    command -v limine-mkinitcpio >/dev/null 2>&1 && regenerar="limine-mkinitcpio"
+    gris "  regenerando el initramfs ($regenerar), tarda un poco..."
+    # shellcheck disable=SC2086
+    if raiz $regenerar </dev/null >/dev/null 2>&1; then
         hecho "  initramfs sin el driver de NVIDIA: hibernar ya puede volver"
     else
-        aviso "mkinitcpio -P fallo: corre «sudo mkinitcpio -P» y mira el error"
+        aviso "$regenerar fallo: corre «sudo $regenerar» y mira el error"
     fi
 }
 

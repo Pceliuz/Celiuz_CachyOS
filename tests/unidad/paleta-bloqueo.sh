@@ -33,7 +33,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 preparar_entorno
 
-CONF="$REPO/hypr/hyprlock.conf"
+# El contenido del bloqueo vive en la plantilla por pantalla desde el
+# 2026-11-18; se mira junto con hyprlock.conf, como lo ve hyprlock.
+CONF="$TMP/hyprlock-entero.conf"
+cat "$REPO/hypr/hyprlock.conf" "$REPO/hypr/hyprlock-pantalla.conf" > "$CONF"
 PALETA="$REPO/hypr/conf/colores.conf"
 PANGO="$REPO/hypr/conf/colores-pango.conf"
 

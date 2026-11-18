@@ -35,6 +35,8 @@ USO DESDE LA TERMINAL
     pantalla.py --json          todo, para otro script
     pantalla.py ancho|alto|escala|factor|nombre|refresco
     pantalla.py --hyprlock      fragmento hyprlang con las medidas del bloqueo
+    pantalla.py --hyprlock-pantallas PLANTILLA
+                                el contenido del bloqueo, una copia por pantalla
     pantalla.py --monitor       la linea `monitor =` que corresponde a esta salida
 
 USO DESDE PYTHON
@@ -354,6 +356,31 @@ def fragmento_hyprlock(mon=None):
     return "\n".join(lineas) + "\n"
 
 
+def fragmento_pantallas(plantilla):
+    """El contenido del bloqueo UNA VEZ POR PANTALLA, cada copia con su
+    `monitor = NOMBRE` y sus medidas ya escritas (sin variables).
+
+    Con `fragmento_hyprlock` solo habia un juego de medidas, el de la pantalla
+    del foco, y la otra pantalla salia con letras de otro tamano y fuera de
+    sitio (2026-11-18). hyprlang no deja que una variable valga distinto por
+    pantalla, asi que aqui se sustituye cada `$lock_*` por su numero.
+    """
+    import re
+    lineas = [
+        "# GENERADO por hypr/scripts/lib/pantalla.py — NO EDITAR A MANO.",
+        "# Plantilla: hypr/hyprlock-pantalla.conf. Una copia por pantalla.",
+        "",
+    ]
+    for mon in monitores():
+        m = medidas(mon)
+        texto = plantilla.replace("@PANTALLA@", m["nombre"])
+        texto = re.sub(r"\$(lock_[a-z_]+)",
+                       lambda x: str(m[x.group(1)]) if x.group(1) in m else x.group(0), texto)
+        lineas.append(f"# ===== {m['nombre']} ({m['ancho']}x{m['alto']} logicos, factor {m['factor']:g}) =====")
+        lineas.append(texto)
+    return "\n".join(lineas) + "\n"
+
+
 def linea_monitor(mon=None):
     """La linea `monitor =` que describe esta salida, por si se quiere fijar."""
     mon = mon or principal()
@@ -422,6 +449,11 @@ def main():
                                 indent=2, ensure_ascii=False))
     if orden == "--hyprlock":
         return sys.stdout.write(fragmento_hyprlock())
+    if orden == "--hyprlock-pantallas":
+        if len(args) < 2:
+            sys.exit("pantalla: --hyprlock-pantallas necesita la ruta de la plantilla")
+        with open(args[1], encoding="utf-8") as fh:
+            return sys.stdout.write(fragmento_pantallas(fh.read()))
     if orden == "--monitor":
         return print(linea_monitor())
     if orden in ("ancho", "alto", "escala", "factor", "nombre", "refresco"):

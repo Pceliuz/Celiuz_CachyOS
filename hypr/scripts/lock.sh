@@ -120,12 +120,15 @@ FONDO_TMP="$CACHE/lock-bg.tmp.jpg"
 FRAGMENTO="$CACHE/lock-fondo.conf"
 # El otro fragmento generado: las medidas de ESTA pantalla. Ver escribir_medidas.
 MEDIDAS="$CACHE/lock-medidas.conf"
+# El contenido del bloqueo, uno por pantalla (ver escribir_medidas).
+PANTALLAS="$CACHE/lock-pantallas.conf"
 LOG="$CACHE/lock.log"
 # Donde estan los demas scripts. Se saca de DONDE ESTA ESTE FICHERO y no de
 # "$HOME/dotfiles/...", que era lo de antes: asi el repo funciona igual clonado
 # en ~/.dotfiles, en ~/repos/dotfiles o donde sea. Ademas es lo que permite
 # probarlo con un HOME de mentira (ver tests/e2e/bloqueo.sh).
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLANTILLA="$SCRIPTS/../hyprlock-pantalla.conf"
 
 # --- 0. Despegarse de quien nos llamo ----------------------------------------
 # `setsid -f` nos pone en una sesion nueva y devuelve el control al instante
@@ -404,6 +407,19 @@ escribir_medidas() {
         rm -f "$MEDIDAS.tmp"
         echo "lock: no se pudieron medir la pantalla; se usan los valores por defecto" >&2
     fi
+    # El contenido del bloqueo, una copia POR PANTALLA con sus medidas (antes
+    # todas usaban las de la pantalla del foco y la otra salia descuadrada). Si
+    # falla, la plantilla tal cual con `monitor =` vacio: todas las pantallas con
+    # las medidas de arriba. Lo que no puede pasar es quedarse sin campo.
+    if "$SCRIPTS/lib/pantalla.py" --hyprlock-pantallas "$PLANTILLA" > "$PANTALLAS.tmp" 2>/dev/null \
+       && grep -q '^ *monitor = [^ ]' "$PANTALLAS.tmp"; then
+        mv -f "$PANTALLAS.tmp" "$PANTALLAS"
+        echo "lock: contenido del bloqueo escrito para $(grep -c '^# =====' "$PANTALLAS") pantalla(s)"
+    else
+        rm -f "$PANTALLAS.tmp"
+        sed 's/@PANTALLA@//' "$PLANTILLA" > "$PANTALLAS" 2>/dev/null
+        echo "lock: no pude generar el bloqueo por pantalla; uno para todas" >&2
+    fi
 }
 
 escribir_fragmento() {
@@ -444,6 +460,7 @@ ANR_ORIGINAL=""
 BARRAS_ESCONDIDAS=0
 CONGELADO=0
 VIGIA=""
+GUARDIAN_VIDEO=""
 
 # Las OTRAS pantallas (no la del foco) y el escritorio que ensena cada una,
 # «nombre escritorio» por linea; y el nombre de la del foco en PANTALLA_FOCO.
@@ -531,6 +548,10 @@ limpiar() {
     local codigo=$?
     trap - EXIT INT TERM HUP
 
+    if [ -n "$GUARDIAN_VIDEO" ]; then
+        kill "$GUARDIAN_VIDEO" 2>/dev/null
+        GUARDIAN_VIDEO=""
+    fi
     if [ -n "$VIGIA" ]; then
         kill "$VIGIA" 2>/dev/null
         VIGIA=""
@@ -659,6 +680,36 @@ vigilar_vista() {
     done
 }
 
+# El guardian del video: con el xray, mientras dure el bloqueo, cada pantalla
+# tiene que tener su video EN MARCHA. El 2026-11-18, ya con las dos pantallas
+# vacias, la segunda seguia quieta tras bloquear. Fuera del bloqueo no se
+# reproduce (con `hold` las dos se quedan en marcha), asi que aqui se mira de
+# verdad: el que este pausado se reanuda y se apunta en el log, pantalla por
+# pantalla. Si el log no dice nada y la pantalla sigue quieta, no es mpv: es que
+# no se repinta, y hay que buscar en Hyprland.
+guardar_video() {
+    local avisado=""
+    while sleep 2; do
+        while read -r pantalla; do
+            case " $avisado " in *" $pantalla "*) ;; *)
+                echo "lock: el video de $pantalla estaba PAUSADO con el bloqueo puesto: reanudado"
+                avisado="$avisado $pantalla" ;;
+            esac
+        done < <(sockets_mpv | python3 -c '
+import json, socket, sys
+for ruta in sys.stdin.read().split():
+    try:
+        s = socket.socket(socket.AF_UNIX); s.settimeout(1); s.connect(ruta)
+        s.sendall(b"{\"command\":[\"get_property\",\"pause\"]}\n")
+        if json.loads(s.recv(4096).decode().splitlines()[0]).get("data") is True:
+            s.sendall(b"{\"command\":[\"set_property\",\"pause\",false]}\n")
+            print(ruta.rsplit(".", 2)[-2])
+    except (OSError, ValueError, IndexError):
+        pass
+' 2>/dev/null)
+    done
+}
+
 if [ "$MODO_FONDO" = "xray" ]; then
     # Se guarda el valor de antes para devolverlo tal cual en el trap: dejarlo
     # encendido seria una fuga, porque cualquier otro bloqueo lo aprovecharia.
@@ -671,6 +722,8 @@ if [ "$MODO_FONDO" = "xray" ]; then
     vigilar_vista 9>&- &
     VIGIA=$!
     echo "lock: vigia de ventanas en marcha (pid $VIGIA)"
+    guardar_video 9>&- &
+    GUARDIAN_VIDEO=$!
 else
     escribir_fragmento fotograma
 fi
