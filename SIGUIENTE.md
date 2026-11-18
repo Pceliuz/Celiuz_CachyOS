@@ -5,7 +5,39 @@ viejo, mandan el `README.md` y el `CLAUDE.md`. Las crónicas de sesiones
 anteriores, con todo lo medido, están en **`HISTORIAL.md`** (antes vivían aquí y
 el fichero llegó a 1238 líneas).
 
-Última sesión: **2026-11-13**, en la **PC**.
+Última sesión: **2026-11-18**, en la **PC** (con Claude Code, a petición de Parzival).
+
+---
+
+## 2026-11-18 (PC): cuatro arreglos antes de llevar el repo a la laptop
+
+Los cuatro con su prueba y comprobados en la sesión real:
+
+1. **Bloquear dejaba el fondo quieto** desde que hay dos pantallas. `lock.sh`
+   solo vaciaba la del foco; en la otra seguía Brave, `a_la_vista.py` lo veía y
+   caía al fotograma (lo dice `~/.cache/celiuzpaper/lock.log`: «queda algo a la
+   vista»). Ahora cada pantalla va a su escritorio vacío (99 la del foco, 98…
+   las otras) y vuelve a lo suyo. `hypr.sh`/`hypr.py` aprenden `focusmonitor`.
+   Probado en vivo: con las dos vacías `a_la_vista` da 0 → xray con vídeo.
+2. **El dock no se encendía al pasar el ratón**: waybar **0.16** (actualizada
+   el 17 nov) pone el `:hover` de un módulo custom en la caja que lo envuelve,
+   no en la etiqueta con el `#custom-appN`. Medido con una waybar de prueba y un
+   ratón virtual. Selector nuevo `box:hover > #custom-appN` (el viejo se queda
+   para la 0.15). Y el icono **se levanta**: sube 8 px, crece a 54 px y echa una
+   sombra amatista, con una curva que se pasa un poco y vuelve.
+3. **Hibernar «apagaba»**: hibernaba bien; al volver, el driver de NVIDIA ya
+   cargado en el initramfs devolvía `nv_pmops_freeze returns -5` y el kernel
+   tiraba la imagen. `sistema/mkinitcpio/99-celiuz-hibernar-nvidia.conf` lo saca
+   del initramfs; lo pone `./instalar.sh` (paso 8c, pide contraseña).
+   **Falta un ciclo real** para quitar el aviso «no verificado» de `sesion.sh`.
+4. **SUPER+E no hacía nada**: el modo estudio le pasaba a la tarjeta «Entrar en
+   el modo estudio» en vez de `entrar`, salía con error de uso y contaba como
+   «no». Tarjeta propia (`--estudio`, ámbar). Además, al salir no devolvía lo
+   apartado ni los bordes, y no vigilaba lo que se abría durante el modo: los
+   tres hechos (mpv abierto con el modo puesto se aparta y vuelve al salir).
+
+Y `fondo-tras-dormir.sh` vuelve a tener permiso de ejecución en git (se llama
+directo al despertar; en un clon nuevo el fondo no volvía tras suspender).
 
 ---
 

@@ -7,6 +7,7 @@ Uso:
     modo-estudio.py on  [--sin-preguntar]
     modo-estudio.py off [--sin-preguntar]
     modo-estudio.py estado [--json]   sale con 0 si esta puesto y 1 si no
+    modo-estudio.py vigilar           (interno) aparta el ocio que se abra mientras dura
 
 LA IDEA
 -------
@@ -158,36 +159,19 @@ def correr_ganchos(fase):
 
 # --- Los otros modos ------------------------------------------------------------
 def _otro_modo_puesto():
-    """El gaming o el programador, si alguno esta puesto. Los tres no se juntan."""
-    if os.path.exists(os.path.join(carpeta_ganchos(), "..", "modo-estudio.json")):
-        pass
+    """El gaming o el programador, si alguno esta puesto. Los tres no se juntan.
+    Se les pregunta a sus duenos (leer_estado), no a un glob propio."""
     try:
         if mp.leer_estado():
             return "programador"
     except Exception:
         pass
     try:
-        if _gaming_puesto():
+        if mg.leer_estado():
             return "gaming"
     except Exception:
         pass
     return None
-
-
-def _gaming_puesto():
-    sig = canales.firma()
-    patrones = ["modo-gaming.*.json"]
-    for nombre in patrones:
-        for ruta in glob.glob(os.path.join(canales.RUNTIME, nombre)):
-            if sig and sig not in ruta:
-                continue
-            try:
-                with open(ruta, encoding="utf-8") as fh:
-                    if json.load(fh).get("activo"):
-                        return True
-            except (OSError, ValueError, AttributeError):
-                continue
-    return False
 
 
 # --- El ocio --------------------------------------------------------------------
@@ -208,26 +192,91 @@ def es_ocio(ventana):
     return False
 
 
-def apartar_ocio():
+def apartar(modo, ventana, guardadas):
+    """Una ventana de ocio al escritorio oculto, apuntando su escritorio para
+    devolverla al salir. True si se aparto."""
+    if not ventana.get("address") or not es_ocio(ventana):
+        return False
+    if mg._en(ventana) == GUARDADAS:
+        return False
+    guardadas[ventana["address"]] = mg.num_ws(ventana)
+    mg.mover(modo, ventana["address"], GUARDADAS, False)
+    return True
+
+
+def apartar_ocio(guardadas):
     """Manda al escritorio oculto TODO lo de ocio que haya abierto, en todas las
     pantallas. Lo de trabajo no se toca. Sin compositor no se hace nada."""
     try:
         ventanas = mg.clientes()
     except Exception:
-        return 0
+        return []
     modo = hypr.modo()
-    movidas = 0
+    movidas = []
     for ventana in ventanas or []:
-        if not ventana.get("address") or not es_ocio(ventana):
-            continue
         try:
-            if mg._en(ventana) == GUARDADAS:
-                continue
-            mg.mover(modo, ventana["address"], GUARDADAS, False)
-            movidas += 1
+            if apartar(modo, ventana, guardadas):
+                movidas.append(ventana.get("class") or ventana.get("title") or "?")
         except Exception:
             continue
     return movidas
+
+
+# --- El vigilante ---------------------------------------------------------------
+# Lo de ocio que se abre MIENTRAS dura tambien se aparta, con un aviso que anima.
+# Sin esto el modo solo limpiaba lo que hubiera al entrar: abrir Spotify a los
+# cinco minutos lo dejaba a la vista.
+def arrancar_vigilante():
+    try:
+        return subprocess.Popen([sys.executable, os.path.realpath(__file__), "vigilar"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, start_new_session=True).pid
+    except OSError:
+        return None
+
+
+def vigilar():
+    import socket
+    import time
+    modo = hypr.modo()
+    ruta = os.path.join(canales.RUNTIME, "hypr", canales.firma(), ".socket2.sock")
+    try:
+        eventos = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        eventos.connect(ruta)
+        eventos.settimeout(2.0)
+    except OSError:
+        return 1
+    buffer = b""
+    while True:
+        try:
+            trozo = eventos.recv(8192)
+        except socket.timeout:
+            if not encendido():
+                return 0
+            continue
+        except OSError:
+            return 0
+        if not trozo or not encendido():
+            return 0
+        buffer += trozo
+        *lineas, buffer = buffer.split(b"\n")
+        for linea in lineas:
+            evento, _, datos = linea.decode("utf-8", "replace").partition(">>")
+            if evento != "openwindow":
+                continue
+            # Los juegos tardan en decir quienes son (Proton): un momento.
+            time.sleep(0.3)
+            direccion = "0x" + datos.split(",")[0]
+            v = next((x for x in mg.clientes() if x.get("address") == direccion), None)
+            if not v:
+                continue
+            estado = leer()
+            guardadas = estado.setdefault("guardadas", {})
+            if apartar(modo, v, guardadas):
+                guardar(estado)
+                avisar("Eso, para despues",
+                       "«%s» espera en el escritorio oculto. Sigue, que vas bien."
+                       % (v.get("title") or v.get("class") or "?"))
 
 
 # --- El tema --------------------------------------------------------------------
@@ -252,6 +301,22 @@ def poner_tema(colores):
 
 
 # --- Entrar y salir -------------------------------------------------------------
+def preguntar(accion):
+    """La tarjeta, con el tema del estudio. Sin tarjeta no se hace nada: un
+    atajo rozado no puede mover tus ventanas sin preguntarte.
+
+    Antes se le pasaba a la tarjeta «Entrar en el modo estudio», que no es una
+    de sus acciones (entrar|salir): salia con error de uso, eso contaba como un
+    «no», y SUPER+E no hacia NADA, sin decir por que (2026-11-18)."""
+    if not os.path.exists(mp.TARJETA):
+        return False
+    try:
+        return subprocess.run([sys.executable, mp.TARJETA, "--estudio", accion],
+                              check=False, timeout=60).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def entrar(sin_preguntar=False):
     if encendido():
         avisar("El modo estudio ya esta puesto", "A estudiar.")
@@ -261,24 +326,38 @@ def entrar(sin_preguntar=False):
         avisar("No se juntan", "El modo %s esta puesto. Sal de el primero." % otro)
         print("no entra: el modo %s esta puesto" % otro, file=sys.stderr)
         return 1
-    if not sin_preguntar:
-        try:
-            if not mp.preguntar("Entrar en el modo estudio"):
-                return 1
-        except Exception:
-            return 1
+    if not sin_preguntar and not preguntar("entrar"):
+        print("modo estudio: cancelado")
+        return 1
     estado = leer()
     estado.update({
         "encendido": True,
         "activo": True,
         "desde": datetime.datetime.now().isoformat(timespec="seconds"),
-        "guardadas": GUARDADAS,
+        "guardadas": {},
+        "bordes": {},
+        "vigilante": None,
     })
+    estado.pop("hasta", None)
+    # El estado PRIMERO: si algo de abajo falla a medias, salir sabe que deshacer.
+    guardar(estado)
+    for clave in ("general:col.active_border", "general:col.inactive_border"):
+        try:
+            antes = mp.leer_gradiente(clave)
+        except Exception:
+            antes = None
+        if antes:
+            estado["bordes"][clave] = antes
+    guardar(estado)
+    poner_tema(tema())
+    movidas = apartar_ocio(estado["guardadas"])
+    estado["vigilante"] = arrancar_vigilante()
     guardar(estado)
     correr_ganchos("on")
-    poner_tema(tema())
-    apartar_ocio()
     avisar("Modo estudio", "Fuera el ocio. Animo, a por el ejercicio.")
+    print("modo estudio: puesto")
+    if movidas:
+        print("  apartado hasta salir: " + ", ".join(movidas))
     return 0
 
 
@@ -286,22 +365,44 @@ def salir(sin_preguntar=False):
     if not encendido():
         avisar("El modo estudio no esta puesto", "")
         return 0
-    if not sin_preguntar:
-        try:
-            if not mp.preguntar("Salir del modo estudio"):
-                return 1
-        except Exception:
-            return 1
-            
+    if not sin_preguntar and not preguntar("salir"):
+        print("modo estudio: cancelado")
+        return 1
     estado = leer()
+    mp.parar_vigilante(estado.get("vigilante"))
+    modo = hypr.modo()
+    if modo:
+        try:
+            # Lo apartado vuelve a su numero, sin llevarte.
+            guardadas = estado.get("guardadas") or {}
+            for v in mg.clientes():
+                if v.get("address") in guardadas and mg._en(v) == GUARDADAS and guardadas[v["address"]]:
+                    mg.mover(modo, v["address"], guardadas[v["address"]], False)
+            # Y lo que se quedara en el oculto por otro camino, a donde estas.
+            activo = mg.escritorio_activo().get("id") or 1
+            for v in mg.clientes():
+                if mg._en(v) == GUARDADAS:
+                    mg.mover(modo, v["address"], activo, False)
+        except Exception:
+            pass
+        # Los bordes, como estaban (antes se quedaban en ambar para siempre).
+        for clave, crudo in (estado.get("bordes") or {}).items():
+            try:
+                mp.poner_gradiente(modo, clave, crudo)
+            except Exception:
+                pass
     estado.update({
         "encendido": False,
         "activo": False,
         "hasta": datetime.datetime.now().isoformat(timespec="seconds"),
+        "guardadas": {},
+        "bordes": {},
+        "vigilante": None,
     })
     guardar(estado)
     correr_ganchos("off")
     avisar("Modo estudio fuera", "Buen trabajo. Ya puedes con lo demas.")
+    print("modo estudio: quitado")
     return 0
 
 
@@ -329,6 +430,8 @@ def main(argv):
         return salir(sin_preguntar) if encendido() else entrar(sin_preguntar)
     if orden == "estado":
         return estado_cli(como_json)
+    if orden == "vigilar":
+        return vigilar()
     print("uso: modo-estudio.py on|off|toggle|estado [--sin-preguntar] [--json]", file=sys.stderr)
     return 2
 

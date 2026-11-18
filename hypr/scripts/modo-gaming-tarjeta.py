@@ -5,6 +5,7 @@ modo gaming.
 
     modo-gaming-tarjeta.py entrar|salir|bloqueado ["aviso en ambar"]
     modo-gaming-tarjeta.py --programador entrar|salir    (la del modo programador)
+    modo-gaming-tarjeta.py --estudio entrar|salir        (la del modo estudio)
 
 Sale con 0 SOLO si se acepto (Enter, A en el mando o clic en el boton). Esc, clic en cancelar
 o dejar pasar CUENTA segundos sale con 1. Es a proposito asimetrico: el modo
@@ -59,6 +60,20 @@ TEXTOS_PROGRAMADOR = {
               "Salir"),
 }
 MARCA_PROGRAMADOR = {"entrar": "❯ modo-programador --on", "salir": "❯ modo-programador --off"}
+
+# La del modo estudio (modo-estudio.py): el mismo molde que la del programador,
+# con su texto y su tema de papel y ambar (TEMA_FABRICA alli).
+TEXTOS_ESTUDIO = {
+    "entrar": ("¿Entrar al modo estudio?",
+               "El ocio (vídeo, música, chats, juegos) se aparta al escritorio oculto "
+               "en todas las pantallas, y lo que abras de eso se aparta también. "
+               "No se cierra nada.",
+               "Entrar"),
+    "salir": ("¿Salir del modo estudio?",
+              "Lo apartado vuelve a su escritorio y los bordes a su color.",
+              "Salir"),
+}
+MARCA_ESTUDIO = {"entrar": "✎  MODO ESTUDIO", "salir": "✎  MODO ESTUDIO"}
 
 ESTILO_PROGRAMADOR = """
 * { font-family: "MesloLGS Nerd Font Mono", monospace; }
@@ -139,11 +154,16 @@ def boton(texto, tecla, principal):
 
 
 class Tarjeta(Gtk.Window):
-    def __init__(self, accion, aviso, programador=False):
+    def __init__(self, accion, aviso, programador=False, estudio=False):
         super().__init__()
         self.respuesta = 1
-        titulo, texto, si = (TEXTOS_PROGRAMADOR if programador else TEXTOS)[accion]
-        marca = MARCA_PROGRAMADOR[accion] if programador else "◆  MODO GAMING"
+        if estudio:
+            titulo, texto, si = TEXTOS_ESTUDIO[accion]
+            marca = MARCA_ESTUDIO[accion]
+            programador = True          # el mismo molde de tarjeta
+        else:
+            titulo, texto, si = (TEXTOS_PROGRAMADOR if programador else TEXTOS)[accion]
+            marca = MARCA_PROGRAMADOR[accion] if programador else "◆  MODO GAMING"
 
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_namespace(self, "modo-gaming-tarjeta")
@@ -238,18 +258,22 @@ def solo_wayland():
 
 def main(argv):
     programador = argv[:1] == ["--programador"]
-    if programador:
+    estudio = argv[:1] == ["--estudio"]
+    if programador or estudio:
         argv = argv[1:]
-    if not argv or argv[0] not in (TEXTOS_PROGRAMADOR if programador else TEXTOS):
-        print("uso: modo-gaming-tarjeta.py [--programador] entrar|salir|bloqueado [aviso]", file=sys.stderr)
+    textos = TEXTOS_ESTUDIO if estudio else TEXTOS_PROGRAMADOR if programador else TEXTOS
+    if not argv or argv[0] not in textos:
+        print("uso: modo-gaming-tarjeta.py [--programador|--estudio] entrar|salir|bloqueado [aviso]", file=sys.stderr)
         return 2
     if not solo_wayland() or not Gtk.init_check(sys.argv)[0]:
         return 1
-    if programador:
+    if estudio:
+        cargar_estilo_estudio()
+    elif programador:
         cargar_estilo_programador()
     else:
         cargar_estilo()
-    tarjeta = Tarjeta(argv[0], argv[1] if len(argv) > 1 else "", programador)
+    tarjeta = Tarjeta(argv[0], argv[1] if len(argv) > 1 else "", programador, estudio)
     tarjeta.show_all()
     Gtk.main()
     return tarjeta.respuesta
@@ -279,6 +303,24 @@ def cargar_estilo_programador():
     """El tema del modo programador como colores de GTK (@p_verde...)."""
     import programador
     colores = "".join("@define-color p_%s %s;" % (k, v) for k, v in programador.ajustes()["tema"].items())
+    css = Gtk.CssProvider()
+    css.load_from_data((colores + ESTILO_PROGRAMADOR).encode())
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
+                                             Gtk.STYLE_PROVIDER_PRIORITY_USER)
+
+
+def cargar_estilo_estudio():
+    """El tema del modo estudio con los nombres del molde del programador
+    (@p_verde es el acento: aqui, el ambar)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "modo_estudio", os.path.join(os.path.dirname(os.path.realpath(__file__)), "modo-estudio.py"))
+    me = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(me)
+    t = me.tema()
+    p = {"fondo": t["fondo"], "panel": t["panel"], "borde": t["borde"], "texto": t["texto"],
+         "tenue": t["tenue"], "verde": t["ambar"], "amarillo": t["ocre"]}
+    colores = "".join("@define-color p_%s %s;" % (k, v) for k, v in p.items())
     css = Gtk.CssProvider()
     css.load_from_data((colores + ESTILO_PROGRAMADOR).encode())
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css,
