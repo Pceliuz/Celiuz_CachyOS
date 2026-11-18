@@ -1265,6 +1265,63 @@ usb_estado() {
     fi
 }
 
+# --- 8c. Hibernar con NVIDIA ---------------------------------------------------
+#
+# Con el driver de NVIDIA dentro del initramfs (chwd lo mete para el arranque
+# temprano) hibernar NO vuelve: al restaurar, el driver del arranque se niega a
+# congelarse (`nv_pmops_freeze returns -5`) y el kernel tira la imagen y arranca
+# de cero. Medido en la PC el 2026-11-18. El arreglo es sacarlo del initramfs con
+# sistema/mkinitcpio/99-celiuz-hibernar-nvidia.conf; el porque entero, ahi.
+# Solo hace falta en un equipo con NVIDIA.
+
+HIBERNAR_CONF="$REPO/sistema/mkinitcpio/99-celiuz-hibernar-nvidia.conf"
+HIBERNAR_CONF_PUESTO="/etc/mkinitcpio.conf.d/99-celiuz-hibernar-nvidia.conf"
+
+hibernar_aplica() {
+    [ -d /sys/module/nvidia ] || lspci 2>/dev/null | grep -qi 'vga.*nvidia\|3d.*nvidia'
+}
+
+hibernar_pendiente() {
+    hibernar_aplica || return 1
+    cmp -s "$HIBERNAR_CONF" "$HIBERNAR_CONF_PUESTO" && return 1
+    return 0
+}
+
+hibernar_instalar() {
+    titulo "8c. Hibernar con NVIDIA"
+    raiz install -D -m 644 -o root -g root "$HIBERNAR_CONF" "$HIBERNAR_CONF_PUESTO"
+    hecho "  puesto $HIBERNAR_CONF_PUESTO"
+    gris "  regenerando el initramfs (mkinitcpio -P), tarda un poco..."
+    if raiz mkinitcpio -P >/dev/null 2>&1; then
+        hecho "  initramfs sin el driver de NVIDIA: hibernar ya puede volver"
+    else
+        aviso "mkinitcpio -P fallo: corre «sudo mkinitcpio -P» y mira el error"
+    fi
+}
+
+hibernar_paso() {
+    if [ "$SOLO_REVISAR" -eq 0 ] && hibernar_pendiente; then
+        if pedir_permiso "sacar el driver de NVIDIA del initramfs para que hibernar vuelva"; then
+            hibernar_instalar
+            return
+        fi
+        gris "  sin contraseña no se toca: el resto se instala igual"
+    fi
+    hibernar_estado
+}
+
+hibernar_estado() {
+    if ! hibernar_aplica; then
+        gris "  hibernar: sin NVIDIA, nada que ajustar"
+    elif [ ! -f "$HIBERNAR_CONF_PUESTO" ]; then
+        aviso "con NVIDIA, hibernar no vuelve (arranca de cero): lo arregla ./instalar.sh (pide tu contraseña)"
+    elif ! cmp -s "$HIBERNAR_CONF" "$HIBERNAR_CONF_PUESTO"; then
+        aviso "el ajuste de hibernar es una copia vieja: lo pone ./instalar.sh (pide tu contraseña)"
+    else
+        gris "  hibernar con NVIDIA: driver fuera del initramfs"
+    fi
+}
+
 # --- 9. Celiuz Remoto --------------------------------------------------------
 #
 # Se deja TODO puesto (la CLI, la app de la PC, su icono y la unidad de
@@ -1630,6 +1687,7 @@ else
     pantalla
     sddm_paso
     usb_paso
+    hibernar_paso
     remoto
     radio_estado
     recargar_sesion
