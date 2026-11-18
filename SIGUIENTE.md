@@ -52,6 +52,16 @@ Los cuatro con su prueba y comprobados en la sesión real:
    («el vídeo de X estaba PAUSADO»). **Si sigue quieto y el log no lo dice, no
    es mpv sino que Hyprland no repinta esa pantalla**: probarlo en el anidado
    con dos salidas.
+   **Resultado, medido en su bloqueo:** el log dijo «el vídeo de HDMI-A-1
+   estaba PAUSADO … reanudado»: era mpv, y el guardián lo arregla.
+8. **El login salía apagado (~34 %) tras hacerlo por pantalla.** El bloqueo
+   ordena los elementos por `zindex` con un sort NO estable y todos valen 0:
+   con 9 elementos salía bien de casualidad, con 18 las capas oscuras
+   quedaban ENCIMA del texto. La plantilla lleva ahora `zindex` explícito
+   (capas 0-2, texto 10). Medido con capturas del bloqueo de verdad (grim
+   funciona con la sesión bloqueada): reloj (86,76,97) → (228,199,255), que
+   es `$luz` exacto. Antes se descartaron, midiendo, el fundido de entrada y
+   las sombras.
 7. Paso 8c de `instalar.sh`: con Limine usa `limine-mkinitcpio`
    (`mkinitcpio -P` no tiene presets ahí y se para a preguntar).
 

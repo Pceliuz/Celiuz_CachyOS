@@ -161,6 +161,11 @@ afirmar_igual "9" "$(grep -c '^ *monitor = GRANDE$' "$TMP/pantallas.conf")" "los
 afirmar_igual "9" "$(grep -c '^ *monitor = CHICA$' "$TMP/pantallas.conf")" "y los 9 en la chica"
 afirmar_no_contiene "$TMP/pantallas.conf" '^[^#]*\$lock_' "ninguna medida se queda como variable"
 afirmar_no_contiene "$TMP/pantallas.conf" '@PANTALLA@' "ni la marca de la plantilla"
+# hyprlock ordena con un sort NO estable: sin zindex explicito, con 18 elementos
+# las capas oscuras acababan encima del texto (todo al ~34%, 2026-11-18).
+afirmar_igual "$(grep -cE '^(shape|label|input-field) \{' "$TMP/pantallas.conf")" \
+    "$(grep -c '^ *zindex = ' "$TMP/pantallas.conf")" "cada elemento lleva su zindex"
+afirmar_no_contiene "$TMP/pantallas.conf" '^ *zindex = [3-9]$' "las capas debajo (0-2), el texto encima (10)"
 afirmar_igual "147 110" "$(grep 'font_size = 1[0-9][0-9]$' "$TMP/pantallas.conf" | awk '{printf "%s%s", s, $3; s=" "}')" \
     "el reloj, de su tamano en cada una (147 en 1440p, 110 en 1080p)"
 
