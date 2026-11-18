@@ -114,6 +114,10 @@ window#waybar.hidden {
 #battery:hover,
 #custom-remoto:hover,
 #custom-notificaciones:hover,
+/* Waybar 0.16 pone el :hover de un modulo custom en la CAJA que lo envuelve,
+ * no en la etiqueta que lleva el #nombre (ver el bloque del dock). */
+box:hover > #custom-remoto,
+box:hover > #custom-notificaciones,
 #tray:hover,
 #clock:hover {
     background-color: alpha(@superficie, 0.92);
@@ -501,9 +505,15 @@ window#waybar.waybar-dock {
     margin: 8px 5px;
     border-radius: 20px;
     color: @luz;
+    /* El levantarse (ver el :hover de abajo) tambien se anima: margen y tamano
+     * del icono suben y bajan con una curva que se pasa un poco y vuelve, el
+     * gesto de un boton que «quiere» que lo pulses. */
     transition: background-color 200ms ease-in-out,
                 border-color 200ms ease-in-out,
-                color 200ms ease-in-out;
+                color 200ms ease-in-out,
+                margin 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                background-size 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 220ms ease-out;
 
     /* Como se dibuja el icono PROPIO de la app cuando lo tiene: la ruta de cada
      * uno la pone dock-icons.css (generado), y estas tres propiedades, que son
@@ -516,17 +526,68 @@ window#waybar.waybar-dock {
     background-size: 46px 46px;
 }
 
-#custom-app1:hover,  #custom-app2:hover,  #custom-app3:hover,  #custom-app4:hover,
-#custom-app5:hover,  #custom-app6:hover,  #custom-app7:hover,  #custom-app8:hover,
-#custom-app9:hover,  #custom-app10:hover, #custom-app11:hover, #custom-app12:hover,
-#custom-app13:hover, #custom-app14:hover, #custom-app15:hover, #custom-app16:hover,
-#custom-app17:hover, #custom-app18:hover, #custom-app19:hover, #custom-app20:hover {
+/* EL HOVER, Y POR QUE VA DOS VECES
+ * Waybar 0.16 (17 nov 2026) mete cada modulo custom en una caja nueva y le pone
+ * el :hover a ESA caja; el #custom-appN se queda en la etiqueta de dentro, y GTK
+ * no pasa el hover de padre a hijo. Resultado: con `#custom-appN:hover` solo, la
+ * pastilla no salia nunca (el tooltip si, que va por otro sitio). Medido con una
+ * waybar de prueba y un raton virtual: el reloj se encendia, un custom no.
+ * `box:hover > #custom-appN` es el de la 0.16; `#custom-appN:hover`, el de la
+ * 0.15, que puede seguir en otra maquina.
+ *
+ * Y el icono SE LEVANTA: el margen de arriba cede 8 px al de abajo (la celda no
+ * cambia de alto, asi que los vecinos no se mueven), el icono propio crece de 46
+ * a 54 px y aparece una sombra amatista debajo. Al salir vuelve a su sitio con
+ * la misma curva. Es lo mas parecido al dock de macOS que deja el CSS de GTK3,
+ * que no tiene `transform`. */
+#custom-app1:hover,
+#custom-app2:hover,
+#custom-app3:hover,
+#custom-app4:hover,
+#custom-app5:hover,
+#custom-app6:hover,
+#custom-app7:hover,
+#custom-app8:hover,
+#custom-app9:hover,
+#custom-app10:hover,
+#custom-app11:hover,
+#custom-app12:hover,
+#custom-app13:hover,
+#custom-app14:hover,
+#custom-app15:hover,
+#custom-app16:hover,
+#custom-app17:hover,
+#custom-app18:hover,
+#custom-app19:hover,
+#custom-app20:hover,
+box:hover > #custom-app1,
+box:hover > #custom-app2,
+box:hover > #custom-app3,
+box:hover > #custom-app4,
+box:hover > #custom-app5,
+box:hover > #custom-app6,
+box:hover > #custom-app7,
+box:hover > #custom-app8,
+box:hover > #custom-app9,
+box:hover > #custom-app10,
+box:hover > #custom-app11,
+box:hover > #custom-app12,
+box:hover > #custom-app13,
+box:hover > #custom-app14,
+box:hover > #custom-app15,
+box:hover > #custom-app16,
+box:hover > #custom-app17,
+box:hover > #custom-app18,
+box:hover > #custom-app19,
+box:hover > #custom-app20 {
     background-color: alpha(@superficie, 0.92);
     border-color: @amatista;
     /* El glifo tambien se enciende: en un dock de iconos sueltos, solo el fondo
      * se nota poco. */
     color: @amatista;
-    box-shadow: none;
+    margin: 0px 5px 16px 5px;
+    background-size: 54px 54px;
+    box-shadow: 0 6px 12px -4px alpha(@amatista, 0.55);
 }
 
 /* --- Tooltips --- */
