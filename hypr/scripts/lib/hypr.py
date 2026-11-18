@@ -33,6 +33,7 @@ Lo que se sabe traducir es SOLO lo que el repo usa, a proposito: una tabla
 corta y medida vale mas que un traductor general que acierte a medias.
 
     dispatch workspace X        hl.dsp.focus({ workspace = X })
+    dispatch focusmonitor N     hl.dsp.focus({ monitor = "N" })
     dispatch dpms on|off|toggle hl.dsp.dpms({ action = "on" })
     dispatch exit               hl.dsp.exit()
     dispatch exec CMD           hl.dsp.exec_cmd("CMD")
@@ -108,6 +109,10 @@ def dispatch_lua(dispatcher, argumento=""):
         if not a:
             raise ValueError("workspace sin escritorio")
         return "hl.dsp.focus({ workspace = %s })" % (a if _NUMERO.match(a) else cadena_lua(a))
+    if d == "focusmonitor":
+        if not a:
+            raise ValueError("focusmonitor sin pantalla")
+        return "hl.dsp.focus({ monitor = %s })" % cadena_lua(a)
     if d == "dpms":
         accion = a.split()[0] if a else "toggle"
         if accion not in ("on", "off", "toggle"):

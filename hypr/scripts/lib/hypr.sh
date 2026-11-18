@@ -85,6 +85,9 @@ hypr_dispatch_lua() {
             else
                 printf 'hl.dsp.focus({ workspace = %s })' "$(_hypr_cadena "$a")"
             fi ;;
+        focusmonitor)
+            [ -n "$a" ] || { echo "hypr.sh: focusmonitor sin pantalla" >&2; return 1; }
+            printf 'hl.dsp.focus({ monitor = %s })' "$(_hypr_cadena "$a")" ;;
         dpms)
             local accion="${a%% *}"; [ -n "$accion" ] || accion=toggle
             case "$accion" in on|off|toggle) ;; *)

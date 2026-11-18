@@ -459,6 +459,30 @@ esac'
     afirmar_igual "1" "$(veces_llamado "$BLOQUEO")" "y bloquea igual"
 }
 
+comprobar_dos_pantallas() {
+    titulo "10b. Dos pantallas: cada una a su escritorio vacio, y de vuelta (2026-11-18)"
+    # Antes solo saltaba la del foco; la otra seguia ensenando Brave y el bloqueo
+    # caia al fotograma: el fondo quieto en cada bloqueo de la PC.
+    rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
+    binario_falso hyprctl 0 '
+case "$*" in
+  "eval return 1") echo "ok" ;;
+  "monitors -j") echo "[{\"name\": \"HDMI-A-1\", \"focused\": false, \"activeWorkspace\": {\"id\": 2}, \"specialWorkspace\": {\"id\": 0}}, {\"name\": \"DP-1\", \"focused\": true, \"activeWorkspace\": {\"id\": 1}, \"specialWorkspace\": {\"id\": 0}}]" ;;
+  "clients -j")  echo "[]" ;;
+  "activeworkspace -j")               echo "{\"id\": 1, \"windows\": 1}" ;;
+  *)                                  echo "ok" ;;
+esac'
+    binario_falso "$BLOQUEO" 0
+    LOCK_DESPEGADO=1 CONGELAR=0 MODO_FONDO=xray REINTENTOS=1 \
+    FIFO="$TMP/no-existe-pausa.fifo" FIFO_BARRAS="$TMP/no-existe-barras.fifo" \
+        "$REPO/hypr/scripts/lock.sh" > "$TMP/diario-dos.txt" 2>&1
+    local log="$REGISTRO/hyprctl.log" orden
+    orden="$(grep -o 'focus({ [a-z]* = [^}]*})' "$log" | tr '\n' ';')"
+    afirmar_igual 'focus({ monitor = "HDMI-A-1" });focus({ workspace = 98 });focus({ monitor = "DP-1" });focus({ workspace = 99 });focus({ monitor = "HDMI-A-1" });focus({ workspace = 2 });focus({ monitor = "DP-1" });focus({ workspace = 1 });' \
+        "$orden" "la otra al 98, la del foco al 99; al volver, cada una a lo suyo y el foco donde estaba"
+    afirmar_contiene "$log" 'session_lock_xray = true' "y el video se ve detras (xray)"
+}
+
 comprobar_vigia() {
     titulo "11. Una ventana que aparece CON el bloqueo puesto apaga el xray"
     rm -rf "$REGISTRO"; mkdir -p "$REGISTRO"
@@ -517,6 +541,7 @@ comprobar_hyprctl_sin_locked
 comprobar_sin_flock
 comprobar_config_lua
 comprobar_algo_a_la_vista
+comprobar_dos_pantallas
 comprobar_vigia
 comprobar_sin_video
 comprobar_no_toca_nada_real

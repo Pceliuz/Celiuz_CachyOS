@@ -41,6 +41,7 @@ comparar_dispatch() {   # comparar_dispatch <modo> <esperado> <dispatcher> [arg]
 }
 comparar_dispatch lua 'hl.dsp.focus({ workspace = 3 })'       workspace 3
 comparar_dispatch lua 'hl.dsp.focus({ workspace = "e+1" })'   workspace e+1
+comparar_dispatch lua 'hl.dsp.focus({ monitor = "HDMI-A-1" })' focusmonitor HDMI-A-1
 comparar_dispatch lua 'hl.dsp.dpms({ action = "on" })'        dpms on
 comparar_dispatch lua 'hl.dsp.dpms({ action = "off" })'       dpms off
 comparar_dispatch lua 'hl.dsp.exit()'                         exit

@@ -24,7 +24,7 @@
 # =============================================================================
 # QUE HACE, EN ORDEN
 # =============================================================================
-#   1. Guarda el escritorio en el que estas y salta a uno vacio.
+#   1. Guarda el escritorio de cada pantalla y las lleva a uno vacio cada una.
 #   2. Esconde las barras (arriba y dock).
 #   3. Congela las aplicaciones, salvo juegos y terminales (lib/congelar.py).
 #   4. Comprueba que NO se ve ninguna ventana en ninguna pantalla
@@ -437,18 +437,55 @@ EOF
 
 # --- 2. Preparar el escritorio ------------------------------------------------
 WS_ORIGINAL=""
+PANTALLAS_ORIGINAL=""
+PANTALLA_FOCO=""
 XRAY_ORIGINAL=""
 ANR_ORIGINAL=""
 BARRAS_ESCONDIDAS=0
 CONGELADO=0
 VIGIA=""
 
+# Las OTRAS pantallas (no la del foco) y el escritorio que ensena cada una,
+# «nombre escritorio» por linea; y el nombre de la del foco en PANTALLA_FOCO.
+leer_pantallas() {
+    hyprctl monitors -j 2>/dev/null | python3 -c '
+import json, sys
+for m in json.load(sys.stdin):
+    ws = (m.get("activeWorkspace") or {}).get("id")
+    if not m.get("name") or ws is None:
+        continue
+    print(("foco " if m.get("focused") else "") + "%s %s" % (m["name"], ws))
+' 2>/dev/null
+}
+
+# Cada pantalla a un escritorio vacio PROPIO (98, 97... las otras; 99 la del
+# foco, la ultima para que se quede con el). Con dos pantallas y un solo salto,
+# la otra seguia ensenando sus ventanas, a_la_vista.py lo veia y el bloqueo caia
+# al fotograma: el fondo QUIETO en cada bloqueo desde que hay dos pantallas
+# (2026-11-18, «queda algo a la vista (brave-browser (escritorio 2))» en
+# lock.log). El mismo numero para todas no sirve: ir a un escritorio que ya vive
+# en otra pantalla solo mueve el foco alli.
+vaciar_pantallas() {
+    local n=1 nombre ws
+    while read -r nombre ws; do
+        [ -n "$nombre" ] || continue
+        hypr_despachar focusmonitor "$nombre" >/dev/null 2>&1
+        hypr_despachar workspace "$((WORKSPACE_LIMPIO - n))" >/dev/null 2>&1 \
+            && echo "lock: $nombre: escritorio $ws -> $((WORKSPACE_LIMPIO - n))"
+        n=$((n + 1))
+    done <<< "$PANTALLAS_ORIGINAL"
+    [ -n "$PANTALLA_FOCO" ] && hypr_despachar focusmonitor "$PANTALLA_FOCO" >/dev/null 2>&1
+    hypr_despachar workspace "$WORKSPACE_LIMPIO" >/dev/null 2>&1
+}
+
 despejar() {
     WS_ORIGINAL=$(hyprctl activeworkspace -j 2>/dev/null \
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null) || WS_ORIGINAL=""
     if [ -n "$WS_ORIGINAL" ]; then
-        hypr_despachar workspace "$WORKSPACE_LIMPIO" >/dev/null 2>&1 \
-            && echo "lock: escritorio $WS_ORIGINAL -> $WORKSPACE_LIMPIO"
+        local pantallas; pantallas="$(leer_pantallas)"
+        PANTALLA_FOCO="$(printf '%s\n' "$pantallas" | awk '$1 == "foco" {print $2}')"
+        PANTALLAS_ORIGINAL="$(printf '%s\n' "$pantallas" | grep -v '^foco ')"
+        vaciar_pantallas && echo "lock: escritorio $WS_ORIGINAL -> $WORKSPACE_LIMPIO"
     else
         echo "lock: aviso, no pude leer el escritorio actual; no salto" >&2
     fi
@@ -472,7 +509,16 @@ recomponer() {
         avisar "$FIFO_BARRAS" dock:unlock
         BARRAS_ESCONDIDAS=0
     fi
+    # Cada pantalla a lo suyo; la del foco la ultima, para que lo recupere.
+    local nombre ws
+    while read -r nombre ws; do
+        [ -n "$nombre" ] || continue
+        hypr_despachar focusmonitor "$nombre" >/dev/null 2>&1
+        hypr_despachar workspace "$ws" >/dev/null 2>&1
+    done <<< "$PANTALLAS_ORIGINAL"
+    PANTALLAS_ORIGINAL=""
     if [ -n "$WS_ORIGINAL" ]; then
+        [ -n "$PANTALLA_FOCO" ] && hypr_despachar focusmonitor "$PANTALLA_FOCO" >/dev/null 2>&1
         hypr_despachar workspace "$WS_ORIGINAL" >/dev/null 2>&1
     fi
 }
@@ -589,7 +635,7 @@ if [ "$MODO_FONDO" = "xray" ]; then
         vista="$("$SCRIPTS/lib/a_la_vista.py" 2>/dev/null)"; codigo_vista=$?
         [ "$codigo_vista" -eq 0 ] && break
         [ "$vuelta" -lt 3 ] && [ -n "$WS_ORIGINAL" ] \
-            && hypr_despachar workspace "$WORKSPACE_LIMPIO" >/dev/null 2>&1
+            && vaciar_pantallas >/dev/null
     done
     if [ "$codigo_vista" -ne 0 ]; then
         echo "lock: queda algo a la vista ($(printf '%s' "$vista" | tr '\n' ',' | sed 's/,$//')): sin xray, con el fotograma"
