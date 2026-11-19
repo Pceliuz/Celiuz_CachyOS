@@ -154,6 +154,20 @@ lo está. La app se compila en la PC (nunca en la nube de Expo) y su
 
 ---
 
+## Y el CATÁLOGO de apps (`celiuz-catalogo`, 2026-11-18)
+
+Lo opcional ya **no** entra con `./instalar.sh`: Celiuz Remoto, el arreglo
+del wifi y el Bluetooth (la radio) y las apps de fuera (Cell-Cast) se eligen en
+una ventana (`hypr/scripts/catalogo-apps.py`; la lógica, sin GTK, en
+`lib/apps_catalogo.py`). Cada app trae su ficha `celiuz-app.json` y «instalada»
+es «anunciada» (`~/.local/share/celiuz/apps.d/<id>`). Lo que ya estaba puesto
+de antes del catálogo se queda (`apps_opcionales` en `instalar.sh`). Antes de
+tocarlo, **`CATALOGO.md`**: el diseño, las piezas y cómo se añade una app.
+Dos cosas que no se negocian: **la única salida a internet es `bajar()`** (y
+`git`), y **la contraseña la pide la tarjeta del repo**: el catálogo pone
+delante en el PATH un `sudo` que hace `exec sudo -A` (sin el `exec`, sudo
+preguntaría en cada orden; lo vigila `tests/unidad/catalogo-apps.sh`).
+
 ## Público, con las imágenes del saludo dentro
 
 El repo estuvo privado del 2026-10-20 al 2026-11-03 y volvió a ser **público**
@@ -213,6 +227,9 @@ Y hay cosas que directamente **no viven en el repo**, por lo mismo:
 | `~/.cache/celiuz/mangohud.conf` | el overlay, rehecho con la paleta en cada entrada al modo |
 | `~/.local/state/celiuz/modo-gaming.json` | cuándo se lanzó cada juego que no es de Steam |
 | `steam_dev.cfg` y `ProcessingQueue` de Steam | los toca `modo-gaming.py preparar-steam`, solo con Steam cerrado (hilos para shaders, y el último juego primero en la cola) |
+| `~/.local/share/celiuz/apps.d/<id>` | las apps elegidas en el catálogo: un enlace a la carpeta de cada una (lo dejan sus instaladores) |
+| `~/.local/share/celiuz/apps/<id>` | las apps de fuera que clonó el catálogo |
+| `~/.cache/celiuz/catalogo/<id>/` | la ficha, el icono y las capturas de las apps de fuera sin instalar, bajados de GitHub |
 | `~/.config/celiuz/remoto*` y `~/.local/state/celiuz/remoto/` | Celiuz Remoto: ajustes, clave de firma del APK, teléfonos emparejados (hashes), historial y registro |
 | `/etc/modprobe.d/{rtw88,btusb}-sin-ahorro.conf` y `/etc/NetworkManager/conf.d/wifi-sin-ahorro.conf` | wifi rtw88 y Bluetooth USB sin ahorro de energía (cortes): los COPIA `instalar.sh --radio` desde `sistema/radio/`, solo lo que el equipo tiene; la instalación normal avisa si falta (`tests/unidad/radio.sh`) |
 | `~/.config/celiuz/repetidor.conf` (0600) | el repetidor wifi: `encendido`, `nombre`, `clave`. En `~/.config` fijo (lo lee root) |

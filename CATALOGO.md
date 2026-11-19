@@ -1,16 +1,40 @@
-# Pendiente: el catálogo de apps (la ventana de instalación)
+# El catálogo de apps (la ventana de instalación)
 
-**Estado: paso 1 hecho (2026-11-03): la ficha y su lector.** Se habló con el
-usuario el 2026-11-03 desde la laptop. El trabajo lo lleva la sesión de Claude
-Code de esta carpeta.
+**Estado (2026-11-18): pasos 1, 2 y 3 hechos.** La ventana existe
+(`celiuz-catalogo`, «Catálogo Celiuz» en el lanzador) y Celiuz Remoto y la
+radio ya no se instalan con todo lo demás: se eligen ahí. Falta **probarlo en
+la sesión real** (instalar y quitar Cell-Cast de verdad) y los pasos 4 y 5 de
+abajo.
 
-- **La ficha está definida**: el formato, en la cabecera de
-  `hypr/scripts/lib/fichas.py` (que la valida: `fichas.py validar <carpeta>`).
-  Lo que no deja pasar lo vigila `tests/unidad/fichas.sh`.
-- **La lista de apps de fuera**: `apps/lista.json` (id + repo de GitHub).
-- **Cell-Cast ya la tiene** (`celiuz-app.json` en su repo) y su instalador **se
-  anuncia** (ver «El detector», abajo).
-- Falta: la ventana (paso 2) y pasar Remoto y la radio (paso 3).
+| Pieza | Dónde |
+|---|---|
+| La ventana (GTK3, paleta del repo) | `hypr/scripts/catalogo-apps.py` (`--png RUTA [ID]` la dibuja sin crear ventana) |
+| Lo que hace cada botón, sin GTK | `hypr/scripts/lib/apps_catalogo.py` (`estado`, `instalar`, `actualizar`, `quitar` por CLI) |
+| La ficha y la lista | `hypr/scripts/lib/fichas.py`, `apps/lista.json` |
+| Las fichas de dentro | `remoto/celiuz-app.json`, `sistema/radio/celiuz-app.json` |
+| Lo que llaman esas fichas | `instalar.sh --remoto`, `--remoto-quitar`, `--remoto-revisar`, `--radio-elegir`, `--radio-dejar`, `--radio-revisar`, `--radio-aplica` (y los de siempre: `--remoto-todo`, `--radio`…) |
+| Las pruebas | `tests/unidad/fichas.sh`, `tests/unidad/catalogo-apps.sh` |
+
+**Cómo se añade una app de fuera:** su repo lleva un `celiuz-app.json` en la
+raíz (el formato, en la cabecera de `fichas.py`; se comprueba con
+`fichas.py validar <carpeta>`), su instalador deja el anuncio
+`~/.local/share/celiuz/apps.d/<id>` → la raíz de su repo y lo quita al
+desinstalarse, y se añade una línea a `apps/lista.json` con su `id` y su
+`repo`. Nada más: la ventana la saca sola.
+
+**Cómo se comporta** (decidido con el usuario el 2026-11-18): ventana flotante,
+lista a la izquierda y la ficha a la derecha (descripción, qué necesita,
+capturas, GitHub). Se abre desde el lanzador o con `celiuz-catalogo`, sin
+atajo. Lo que pide contraseña lo dice antes con la frase de su ficha y deja
+instalar sin esa parte; la contraseña la pide la tarjeta del repo
+(`pedir-clave.py`), con un `sudo -A` que el catálogo pone delante en el PATH
+(el instalador de la app escribe `sudo` como siempre). Lo que imprime cada
+orden sale en un registro, con los enlaces clicables (el de Tailscale).
+
+**La migración:** un equipo que ya tenía Celiuz Remoto (la orden
+`celiuz-remoto` enlazada al repo, o lo de tras reiniciar) o la radio (sus
+ficheros en `/etc`) los conserva: `./instalar.sh` los marca como elegidos y
+los sigue poniendo al día. Quien instala de cero no se los lleva.
 
 ## Por qué
 
@@ -100,8 +124,12 @@ ver el anuncio.
 
 ## Orden propuesto
 
-1. Definir la ficha (`celiuz-app.json`) y estrenarla con Cell-Cast.
-2. Hacer la ventana con lo de fuera (Cell-Cast).
-3. Pasar a la ventana lo opcional de dentro (Remoto y radio) y
-   sacarlo del instalador normal, comprobando con `./instalar.sh --revisar` en
-   las dos máquinas.
+1. ~~Definir la ficha (`celiuz-app.json`) y estrenarla con Cell-Cast.~~ (2026-11-03)
+2. ~~Hacer la ventana con lo de fuera (Cell-Cast).~~ (2026-11-18)
+3. ~~Pasar a la ventana lo opcional de dentro (Remoto y radio) y
+   sacarlo del instalador normal.~~ (2026-11-18; falta `./instalar.sh
+   --revisar` en la laptop)
+4. Que el catálogo salga lo primero (arriba, «El catálogo sale lo primero»).
+5. Que la ficha diga qué integrar en el escritorio (dock, regla de ventana,
+   atajo) y que los dotfiles lo apliquen al ver el anuncio (arriba, «El
+   detector»).

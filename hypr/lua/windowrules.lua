@@ -150,6 +150,16 @@ hl.window_rule({
 -- SUPER+Q (2026-10-27; el porqué, en celiuz-remoto-config.py, «los diálogos
 -- modales»). Sin la regla, Hyprland ignora el present(). Solo para esta clase:
 -- para todas, cualquier app podría robarte el foco a mitad de escribir.
+-- El catalogo de apps (hypr/scripts/catalogo-apps.py): se abre, eliges y se
+-- cierra. Sin `size`, como la de Celiuz Remoto: el tamaño lo elige la app segun
+-- la pantalla (980x680, o menos en la laptop). Su fondo es translucido como
+-- el de las demas apps, y sin desenfoque detras, como kitty en fondo-nitido.
+hl.window_rule({
+    name  = "celiuz-catalogo",
+    match = { class = "^(celiuz-catalogo)$" },
+    float = true, center = true, no_blur = true,
+})
+
 hl.window_rule({
     name  = "celiuz-remoto",
     match = { class = "^(celiuz-remoto)$" },

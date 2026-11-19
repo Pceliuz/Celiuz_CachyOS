@@ -188,21 +188,30 @@ Se enlaza, no se copia, para que editar el repo sea editar la config:
 git clone https://github.com/Pceliuz/Celiuz_CachyOS.git ~/dotfiles
 cd ~/dotfiles
 ./instalar.sh
-./instalar.sh --remoto-todo   # solo si vas a usar Celiuz Remoto (pide sudo)
-./instalar.sh --radio         # si el instalador te avisa de cortes de wifi o Bluetooth (pide sudo)
+celiuz-catalogo               # lo opcional: elige qué más quieres en este equipo
 ```
+
+> **Lo opcional va en el catálogo** («Catálogo Celiuz» en el lanzador, o
+> `celiuz-catalogo`). `./instalar.sh` pone la base que todos reciben; Celiuz
+> Remoto, el arreglo del wifi y el Bluetooth y las apps de fuera (como
+> [Cell-Cast](https://github.com/Pceliuz/Cachy_Cell-Cast)) se eligen ahí, cada
+> una con lo que hace, lo que necesita y si pide contraseña (y para qué) antes
+> de instalar. Se quitan desde el mismo sitio. Lo que ya tenías instalado de
+> antes del catálogo se queda. Cómo funciona y cómo se añade una app:
+> [`CATALOGO.md`](CATALOGO.md).
 
 > **Wifi y Bluetooth que se cortan**: algunos equipos los cortan por el ahorro
 > de energía —el wifi Realtek de controlador `rtw88` (RTL8821CE y familia), y
 > los Bluetooth USB, que dejan a los auriculares cortándose a ratos—. El
-> `./instalar.sh` de siempre mira qué tiene tu equipo y te avisa;
-> `./instalar.sh --radio` pone en `/etc` solo lo que tu equipo necesita (los
-> ficheros, en `sistema/radio/`), y `--radio-quitar` lo quita. Hace efecto del
-> todo al reiniciar.
+> `./instalar.sh` de siempre mira qué tiene tu equipo y te lo sugiere; en el
+> catálogo es «Wifi y Bluetooth sin cortes» (o a mano, `./instalar.sh
+> --radio`): pone en `/etc` solo lo que tu equipo necesita (los ficheros, en
+> `sistema/radio/`), y `--radio-quitar` lo quita. Hace efecto del todo al
+> reiniciar.
 
-> **Celiuz Remoto (manejar el equipo desde el celular)**: el `./instalar.sh` de
-> siempre lo deja puesto pero sin sus dependencias. Antes de abrir la app,
-> `./instalar.sh --remoto-todo` instala **todo de una vez** —los paquetes,
+> **Celiuz Remoto (manejar el equipo desde el celular)**: se elige en el
+> catálogo. «Instalar» ahí, o `./instalar.sh --remoto-todo` a mano, instala
+> **todo de una vez** —la app, los paquetes,
 > Tailscale encendido y con sesión, y lo de apagar/entrar tras un reinicio— en
 > vez de ir descubriendo lo que falta de uno en uno. La guía entera, paso a
 > paso: [`remoto/INSTALAR.md`](remoto/INSTALAR.md).

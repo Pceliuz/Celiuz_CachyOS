@@ -11,6 +11,12 @@
 #   ./instalar.sh --dock          solo rehace el dock de esta maquina
 #   ./instalar.sh --sddm          SOLO la pantalla de inicio de sesion (PIDE SUDO)
 #   ./instalar.sh --sddm-quitar   la quita y deja la de antes
+#
+# Lo OPCIONAL (Celiuz Remoto, la radio y las apps de fuera) se elige en el
+# catalogo: `celiuz-catalogo`, o «Catálogo Celiuz» en el lanzador. Esto es lo
+# que el catalogo llama por debajo, y vale igual a mano:
+#   ./instalar.sh --remoto        Celiuz Remoto: la app y su servicio (apagado)
+#   ./instalar.sh --remoto-quitar lo quita (tus ajustes se quedan)
 #   ./instalar.sh --remoto-sistema         Celiuz Remoto tras reiniciar (PIDE SUDO)
 #   ./instalar.sh --remoto-sistema-quitar  lo quita
 #   ./instalar.sh --remoto-todo   TODO lo de Celiuz Remoto de una vez (PIDE SUDO)
@@ -46,6 +52,12 @@ QUITAR_REMOTO_SISTEMA=0
 SOLO_REMOTO_TODO=0
 SOLO_RADIO=0
 QUITAR_RADIO=0
+SOLO_REMOTO=0
+QUITAR_REMOTO=0
+REVISAR_APP=""
+ELEGIR_RADIO=0
+DEJAR_RADIO=0
+APLICA_RADIO=0
 for arg in "$@"; do
     case "$arg" in
         --revisar|-n)  SOLO_REVISAR=1 ;;
@@ -58,7 +70,14 @@ for arg in "$@"; do
         --remoto-todo)           SOLO_REMOTO_TODO=1 ;;
         --radio)                 SOLO_RADIO=1 ;;
         --radio-quitar)          QUITAR_RADIO=1 ;;
-        -h|--help)     sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
+        --remoto)                SOLO_REMOTO=1 ;;
+        --remoto-quitar)         QUITAR_REMOTO=1 ;;
+        --remoto-revisar)        REVISAR_APP=remoto ;;
+        --radio-elegir)          ELEGIR_RADIO=1 ;;
+        --radio-dejar)           DEJAR_RADIO=1 ;;
+        --radio-revisar)         REVISAR_APP=radio ;;
+        --radio-aplica)          APLICA_RADIO=1 ;;
+        -h|--help)     sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'; exit 0 ;;
         *) echo "instalar: no entiendo «$arg». Prueba --help" >&2; exit 2 ;;
     esac
 done
@@ -1336,7 +1355,7 @@ hibernar_estado() {
 # le falte al equipo no es un aviso mientras este apagado: es opcional.
 
 remoto() {
-    titulo "9. Celiuz Remoto (manejar el equipo desde el celular)"
+    titulo "9a. Celiuz Remoto (manejar el equipo desde el celular)"
     local unidades="$HOME/.config/systemd/user"
     hacer mkdir -p "$HOME/.local/bin" "$DATOS/applications" \
                    "$DATOS/icons/hicolor/scalable/apps" "$unidades"
@@ -1524,9 +1543,15 @@ remoto_todo() {
         aviso "no pude leer la lista de paquetes de celiuz-remoto.py"
         return
     }
+    # Lo de tu usuario primero (la app, su icono, la unidad): «todo» es todo.
+    anunciada celiuz-remoto || { remoto; anunciar celiuz-remoto "$REPO/remoto"; }
     echo "  paquetes: $paquetes"
+    # Sin terminal (desde el catalogo) pacman no tiene a quien preguntar «¿Seguir?»,
+    # lee un fin de fichero y lo toma por un NO. El si ya se dio en la ventana.
+    local sin_preguntar=()
+    [ -t 0 ] || sin_preguntar=(--noconfirm)
     # shellcheck disable=SC2086  # la lista va partida a proposito
-    raiz pacman -S --needed $paquetes || { aviso "pacman no pudo instalar los paquetes"; return; }
+    raiz pacman -S --needed $paquetes "${sin_preguntar[@]}" || { aviso "pacman no pudo instalar los paquetes"; return; }
 
     raiz systemctl enable --now tailscaled || aviso "no pude encender tailscaled"
     if [ "$SOLO_REVISAR" -eq 0 ] && ! tailscale ip -4 >/dev/null 2>&1; then
@@ -1613,7 +1638,11 @@ radio_instalar() {
                 gris "    Bluetooth: despierto ya, y asi seguira al reiniciar" ;;
         esac
     done
-    [ "$alguno" -eq 1 ] || gris "  este equipo no tiene ni wifi rtw88 ni Bluetooth USB: nada que poner"
+    if [ "$alguno" -eq 1 ]; then
+        anunciar radio "$RADIO_DIR"
+    else
+        gris "  este equipo no tiene ni wifi rtw88 ni Bluetooth USB: nada que poner"
+    fi
     gris "    se quita con: ./instalar.sh --radio-quitar"
 }
 
@@ -1625,6 +1654,7 @@ radio_quitar() {
             [ -e "$destino" ] && raiz rm -f "$destino" && hecho "  quitado: $destino"
         done < <(radio_destinos "$que")
     done
+    desanunciar radio
     gris "    vuelve el ahorro de energia al reiniciar"
 }
 
@@ -1653,13 +1683,210 @@ radio_estado() {
     done
 }
 
+# --- 9e. Las apps del catalogo ------------------------------------------------
+#
+# Celiuz Remoto y la radio ya no se instalan con todo lo demas: se ELIGEN en el
+# catalogo (hypr/scripts/catalogo-apps.py, CATALOGO.md), igual que las apps de
+# fuera. Quien instala los dotfiles se lleva la base; lo opcional, solo si lo
+# quiere. Lo elegido lo marca un ANUNCIO: el enlace apps.d/<id> -> la carpeta
+# de la app (lib/fichas.py), el mismo que deja una app de fuera al instalarse.
+#
+# Estas funciones viven dentro del tramo que carga tests/unidad/radio.sh, y por
+# eso no usan `hacer` ni dan $DATOS por definida.
+
+apps_d() { echo "${DATOS:-${XDG_DATA_HOME:-$HOME/.local/share}}/celiuz/apps.d"; }
+
+# anunciada ID → 0 si esta elegida (el enlace existe y lleva a su ficha)
+anunciada() { [ -L "$(apps_d)/$1" ] && [ -f "$(apps_d)/$1/celiuz-app.json" ]; }
+
+anunciar() {
+    local id="$1" raiz="$2" d
+    d="$(apps_d)"
+    [ "$(readlink -f "$d/$id" 2>/dev/null)" = "$(readlink -f "$raiz")" ] && return 0
+    if [ "${SOLO_REVISAR:-0}" -eq 1 ]; then
+        gris "  (haria) marcar $id como elegida en el catalogo"
+        return 0
+    fi
+    mkdir -p "$d" && ln -sfn "$raiz" "$d/$id"
+}
+
+desanunciar() {
+    local d
+    d="$(apps_d)"
+    [ -L "$d/$1" ] || return 0
+    if [ "${SOLO_REVISAR:-0}" -eq 1 ]; then
+        gris "  (haria) quitar $1 de las elegidas"
+        return 0
+    fi
+    rm -f "$d/$1"
+}
+
+# Un equipo que YA tenia Celiuz Remoto o la radio de antes del catalogo (todo
+# se instalaba siempre) no los pierde al actualizar: quedan como elegidos, y
+# se quitan desde el catalogo si no se usan.
+remoto_de_antes() {
+    [ "$(readlink -f "$HOME/.local/bin/celiuz-remoto" 2>/dev/null)" = \
+      "$(readlink -f "$REPO/remoto/servidor/celiuz-remoto.py")" ] || [ -f "$RS_UNIDAD" ]
+}
+
+radio_de_antes() {
+    local que origen destino
+    for que in rtw88 btusb; do
+        while read -r origen destino; do
+            [ -e "$destino" ] && return 0
+        done < <(radio_destinos "$que")
+    done
+    return 1
+}
+
+# --remoto-revisar: 0 si Celiuz Remoto esta listo para usarse; si no, dice que
+# falta, una cosa por linea (lo enseña el catalogo).
+remoto_revisar() {
+    local mal=0 nombre faltan
+    anunciada celiuz-remoto || { echo "no esta elegido en el catalogo"; mal=1; }
+    [ "$(readlink -f "$HOME/.local/bin/celiuz-remoto" 2>/dev/null)" = \
+      "$(readlink -f "$REPO/remoto/servidor/celiuz-remoto.py")" ] \
+        || { echo "falta la orden celiuz-remoto"; mal=1; }
+    for nombre in celiuz-remoto.service celiuz-remoto-anclaje.service; do
+        cmp -s "$REPO/remoto/servidor/$nombre" "$HOME/.config/systemd/user/$nombre" \
+            || { echo "la unidad $nombre falta o esta vieja"; mal=1; }
+    done
+    faltan="$(python3 "$REPO/remoto/servidor/celiuz-remoto.py" revisar --json 2>/dev/null \
+              | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)["faltan"]))' 2>/dev/null)"
+    [ -n "$faltan" ] && { echo "faltan paquetes: $faltan (con contraseña)"; mal=1; }
+    if [ ! -f "$RS_UNIDAD" ]; then
+        echo "falta lo de apagar y entrar tras reiniciar (con contraseña)"; mal=1
+    elif ! cmp -s "$REPO/remoto/sistema/entrar.py" "$RS_PROGRAMA" || \
+         ! cmp -s "$REPO/remoto/sistema/celiuz-remoto-entrar@.service" "$RS_UNIDAD"; then
+        echo "lo de tras reiniciar esta viejo (con contraseña)"; mal=1
+    fi
+    return "$mal"
+}
+
+remoto_quitar() {
+    titulo "Quitar Celiuz Remoto"
+    local unidades="$HOME/.config/systemd/user" nombre f
+    for nombre in celiuz-remoto.service celiuz-remoto-anclaje.service; do
+        if [ -e "$unidades/$nombre" ]; then
+            hacer systemctl --user disable --now "$nombre" 2>/dev/null
+            hacer rm -f "$unidades/$nombre"
+            hecho "  apagada y quitada: $nombre"
+        fi
+    done
+    hacer systemctl --user daemon-reload 2>/dev/null
+    # Solo lo que es un enlace a ESTE repo: un fichero tuyo con el mismo nombre
+    # no se toca.
+    for f in "$HOME/.local/bin/celiuz-remoto" "$HOME/.local/bin/celiuz-remoto-config" \
+             "$DATOS/applications/celiuz-remoto.desktop" \
+             "$DATOS/icons/hicolor/scalable/apps/celiuz-remoto.svg"; do
+        if [ -L "$f" ] && case "$(readlink -f "$f")" in "$REPO"/*) true ;; *) false ;; esac; then
+            hacer rm -f "$f"
+        fi
+    done
+    desanunciar celiuz-remoto
+    hacer update-desktop-database "$DATOS/applications" 2>/dev/null
+    hecho "  quitado: la app, su icono y sus servicios"
+    gris "    tus ajustes y celulares emparejados se quedan (~/.config/celiuz/remoto*)"
+    [ -f "$RS_UNIDAD" ] && gris "    lo del sistema sigue puesto: ./instalar.sh --remoto-sistema-quitar (pide sudo)"
+    return 0
+}
+
+# --radio-revisar: 0 si no hay nada que arreglar o ya esta todo puesto.
+radio_revisar() {
+    local que origen destino mal=0
+    for que in $(radio_necesita); do
+        while read -r origen destino; do
+            cmp -s "$RADIO_DIR/$origen" "$destino" || { echo "falta $destino (con contraseña)"; mal=1; }
+        done < <(radio_destinos "$que")
+    done
+    return "$mal"
+}
+
+# --radio-aplica: 0 si este equipo tiene algo que arreglar, y dice que.
+radio_aplica() {
+    local hay
+    hay="$(radio_necesita)"
+    if [ -z "$hay" ]; then
+        echo "este equipo no tiene ni wifi rtw88 ni Bluetooth USB: no le hace falta"
+        return 1
+    fi
+    echo "este equipo tiene $(sed 's/rtw88/wifi rtw88/; s/btusb/Bluetooth USB/' <<< "$hay" | paste -sd'|' | sed 's/|/ y /')"
+    return 0
+}
+
+# La instalacion normal: el catalogo y el estado de lo elegido.
+apps_opcionales() {
+    titulo "9. Apps opcionales (el catalogo)"
+    hacer mkdir -p "$HOME/.local/bin" "$DATOS/applications" "$DATOS/icons/hicolor/scalable/apps"
+    enlazar "$REPO/hypr/scripts/catalogo-apps.py" "$HOME/.local/bin/celiuz-catalogo"
+    enlazar "$REPO/apps/celiuz-catalogo.desktop"  "$DATOS/applications/celiuz-catalogo.desktop"
+    enlazar "$REPO/apps/celiuz-catalogo.svg"      "$DATOS/icons/hicolor/scalable/apps/celiuz-catalogo.svg"
+    echo "  lo opcional se elige en el catalogo: celiuz-catalogo, o «Catálogo Celiuz» en el lanzador"
+
+    if ! anunciada celiuz-remoto && remoto_de_antes; then
+        anunciar celiuz-remoto "$REPO/remoto"
+        gris "  Celiuz Remoto ya estaba instalado: queda elegido (se quita desde el catalogo)"
+    fi
+    if anunciada celiuz-remoto || { [ "$SOLO_REVISAR" -eq 1 ] && remoto_de_antes; }; then
+        remoto
+    else
+        gris "  Celiuz Remoto: no elegido"
+    fi
+
+    if ! anunciada radio && radio_de_antes; then
+        anunciar radio "$RADIO_DIR"
+        gris "  el arreglo del wifi y el Bluetooth ya estaba puesto: queda elegido"
+    fi
+    if anunciada radio || { [ "$SOLO_REVISAR" -eq 1 ] && radio_de_antes; }; then
+        radio_estado
+    else
+        local motivo
+        if motivo="$(radio_aplica)"; then
+            gris "  ${motivo#este equipo tiene }: si se corta, «Wifi y Bluetooth sin cortes» en el catalogo"
+        fi
+    fi
+
+    local id raiz
+    while IFS=$'\t' read -r id raiz; do
+        [ -n "$id" ] || continue
+        case "$id" in celiuz-remoto|radio) continue ;; esac
+        gris "  $id: instalada en $raiz (se revisa y se actualiza desde el catalogo)"
+    done < <(python3 "$REPO/hypr/scripts/lib/fichas.py" instaladas 2>/dev/null)
+
+    hacer update-desktop-database "$DATOS/applications" 2>/dev/null
+    hacer gtk-update-icon-cache -f -t "$DATOS/icons/hicolor" 2>/dev/null
+}
+
 # --- Adelante ----------------------------------------------------------------
 
 if [ "$SOLO_REVISAR" -eq 1 ]; then
     printf '\033[1mREVISION — no se va a tocar nada\033[0m\n'
 fi
 
-if [ "$SOLO_RADIO" -eq 1 ]; then
+# Las ordenes del catalogo que contestan con su codigo de salida: sin resumen
+# ni «cierra la sesion» detras.
+if [ "$REVISAR_APP" = remoto ]; then
+    remoto_revisar; exit $?
+elif [ "$REVISAR_APP" = radio ]; then
+    radio_revisar; exit $?
+elif [ "$APLICA_RADIO" -eq 1 ]; then
+    radio_aplica; exit $?
+elif [ "$ELEGIR_RADIO" -eq 1 ]; then
+    if radio_aplica >/dev/null; then
+        anunciar radio "$RADIO_DIR"; echo "elegido: falta ponerlo en el sistema (./instalar.sh --radio)"
+        exit 0
+    fi
+    radio_aplica; exit 1
+elif [ "$DEJAR_RADIO" -eq 1 ]; then
+    desanunciar radio; exit 0
+fi
+
+if [ "$SOLO_REMOTO" -eq 1 ]; then
+    remoto
+    anunciar celiuz-remoto "$REPO/remoto"
+elif [ "$QUITAR_REMOTO" -eq 1 ]; then
+    remoto_quitar
+elif [ "$SOLO_RADIO" -eq 1 ]; then
     radio_instalar
 elif [ "$QUITAR_RADIO" -eq 1 ]; then
     radio_quitar
@@ -1694,8 +1921,7 @@ else
     sddm_paso
     usb_paso
     hibernar_paso
-    remoto
-    radio_estado
+    apps_opcionales
     recargar_sesion
 fi
 

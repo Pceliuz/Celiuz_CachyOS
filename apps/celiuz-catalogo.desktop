@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Catálogo Celiuz
+Comment=Elige qué apps opcionales quieres en este equipo
+Comment[en]=Choose which optional apps you want on this computer
+Exec=celiuz-catalogo
+Icon=celiuz-catalogo
+Terminal=false
+Categories=Settings;System;
+Keywords=catalogo;apps;instalar;remoto;cell-cast;celiuz;
+StartupNotify=false
+StartupWMClass=celiuz-catalogo

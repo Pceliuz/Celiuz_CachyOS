@@ -165,8 +165,7 @@ contraseña.
 | **6. Fondo de pantalla** | Te dice si ya hay uno elegido. Los vídeos no vienen en el repo (pesan mucho). |
 | **7. Pantalla** | Pregunta a Hyprland la resolución de cada pantalla y calcula los tamaños del bloqueo y de los fondos. No escribe nada. |
 | **8. Pantalla de inicio de sesión** | **El único paso que pide contraseña.** Ver abajo. |
-| **9. Celiuz Remoto** | Deja puesta la app para manejar el equipo desde el celular, pero **apagada**. Se enciende a mano desde su ventana (guía aparte: [`remoto/INSTALAR.md`](remoto/INSTALAR.md)). |
-| **9b. Wifi y Bluetooth** | Mira si tu tarjeta de wifi o tu Bluetooth se cortan por ahorro de energía. Si es así, te sugiere `./instalar.sh --radio` (ver [Extras](#extras-opcionales)). |
+| **9. Apps opcionales** | Deja a mano el **catálogo** («Catálogo Celiuz» en el lanzador, o `celiuz-catalogo`), donde se elige lo opcional: Celiuz Remoto, el arreglo del wifi y el Bluetooth, y apps de fuera como Cell-Cast. No instala ninguna por su cuenta; lo que ya tuvieras de antes se queda y lo pone al día. Si tu wifi o tu Bluetooth suelen cortarse por ahorro de energía, te lo sugiere. |
 | **10. La sesión abierta** | Recarga Hyprland para que vea lo nuevo, y comprueba que la configuración no tiene errores. |
 
 ### El paso 8: la pantalla de inicio de sesión (SDDM)
@@ -257,8 +256,9 @@ Si le dices «Ahora no», puedes ponerla más tarde tú mismo con
 
 ## Extras opcionales
 
-Cada uno pide contraseña y solo hace falta si te pasa lo que dice. El
-`./instalar.sh` normal te avisa de los que le vendrían bien a tu equipo.
+Cada uno pide contraseña y solo hace falta si te pasa lo que dice. Los dos
+primeros son lo mismo que «Instalar» en el **catálogo** (`celiuz-catalogo`),
+que además dice antes qué hace cada uno y para qué pide la contraseña.
 
 | Orden | Qué hace | Se quita con |
 |---|---|---|

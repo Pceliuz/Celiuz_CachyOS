@@ -1,0 +1,20 @@
+{
+  "ficha": 1,
+  "id": "celiuz-remoto",
+  "nombre": "Celiuz Remoto",
+  "resumen": "Maneja este equipo desde tu celular, estés donde estés",
+  "descripcion": "Desde la app del celular ves cómo está la PC, la apagas o la despiertas, abres y cierras apps, pasas archivos en los dos sentidos, usas una terminal y ves y manejas la pantalla. Va solo por Tailscale y viene apagado: lo enciendes tú desde su ventana. La app del celular se compila en este equipo (hace falta el SDK de Android).",
+  "categoria": "escritorio",
+  "icono": "escritorio/celiuz-remoto.svg",
+  "capturas": [],
+  "necesita": ["android"],
+  "pide_sudo": "para los paquetes que usa (Tailscale y compañía) y para poder apagar y entrar desde la pantalla de inicio",
+  "ordenes": {
+    "instalar": "../instalar.sh --remoto",
+    "revisar": "../instalar.sh --remoto-revisar",
+    "quitar": "../instalar.sh --remoto-quitar",
+    "sistema": "../instalar.sh --remoto-todo",
+    "sistema_quitar": "../instalar.sh --remoto-sistema-quitar"
+  },
+  "abrir": "celiuz-remoto-config"
+}

@@ -51,7 +51,9 @@ cd ~/dotfiles && git pull && ./instalar.sh
 ```sh
 ./instalar.sh --remoto-todo
 ```
-Instala los paquetes (`celiuz-remoto paquetes`), enciende Tailscale y, si no
+(Es lo mismo que «Instalar» en «Celiuz Remoto» del catálogo, `celiuz-catalogo`.
+Celiuz Remoto ya no viene con la instalación normal: se elige.)
+Deja la app de la PC y su servicio (apagado), instala los paquetes (`celiuz-remoto paquetes`), enciende Tailscale y, si no
 tiene sesión, saca un enlace: ábrelo y entra con **tu** cuenta. Deja también lo
 de apagar y entrar tras reiniciar, que hace dos cosas con root:
 - copia `entrar.py`, su unidad y la regla de polkit a `/usr/local` y `/etc`

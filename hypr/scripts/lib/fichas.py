@@ -8,7 +8,7 @@ gaming: aquel mira lo instalado para jugar; este, las apps opcionales que cada
 uno elige al instalar los dotfiles (ver CATALOGO.md).
 
     fichas.py validar <carpeta-de-la-app>   comprueba su celiuz-app.json
-    fichas.py lista [--json]                 las apps de fuera que se ofrecen
+    fichas.py lista [--json]                 las apps que se ofrecen (de fuera y de dentro)
     fichas.py instaladas [--json]            las que se anunciaron en este equipo
 
 LA FICHA
@@ -30,12 +30,22 @@ engordan). Version 1:
     ordenes      instalar, revisar, quitar (obligatorias) y sistema +
                  sistema_quitar (las dos o ninguna): ordenes que se lanzan
                  DESDE la raiz del repo. `revisar` contesta con su codigo de
-                 salida: 0 es «todo listo».
+                 salida: 0 es «todo listo». Opcional, `aplica`: 0 si la app
+                 tiene sentido en ESTE equipo (lo que imprima es el motivo);
+                 la radio la usa para no ofrecerse donde no hay que arreglar.
     abrir        opcional: la orden que la abre una vez instalada
 
 La regla de la contrasena es la de todo el repo: instalar, revisar y quitar NO
 la piden nunca. Lo que necesite root va en `sistema`, y entonces `pide_sudo`
 dice para que, para que la ventana lo avise ANTES de instalar.
+
+LAS DOS CLASES DE APP
+---------------------
+En `apps/lista.json` cada app es de FUERA (`repo`: se clona de GitHub en
+`~/.local/share/celiuz/apps/<id>`) o de DENTRO (`dentro`: una carpeta de los
+dotfiles con su propia ficha, como `remoto/`). Las de dentro ya bajaron con el
+repo; elegirlas es solo activarlas, y se actualizan con el `git pull` de los
+dotfiles.
 
 COMO SE SABE QUE UNA APP ESTA INSTALADA
 ---------------------------------------
@@ -56,6 +66,7 @@ CATEGORIAS = ("sistemas", "gaming", "stream", "escritorio")
 NECESIDADES = ("android", "portatil", "nvidia", "bluetooth")
 ORDENES_OBLIGATORIAS = ("instalar", "revisar", "quitar")
 ORDENES_SISTEMA = ("sistema", "sistema_quitar")
+ORDENES_OPCIONALES = ("aplica",)
 ID_VALIDO = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 REPO_VALIDO = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?(\.git)?$")
 SUDO = re.compile(r"(^|[\s;&|(`$])(sudo|pkexec|doas)(\s|$)")
@@ -135,7 +146,14 @@ def errores_de(ficha, raiz):
         mal.append("tiene orden «sistema» pero «pide_sudo» no dice para que")
     if not con_sistema and pide is not None:
         mal.append("«pide_sudo» dice algo pero no hay orden «sistema»")
-    desconocidas = set(ordenes) - set(ORDENES_OBLIGATORIAS) - set(ORDENES_SISTEMA)
+    for o in ORDENES_OPCIONALES:
+        if o in ordenes:
+            if not (isinstance(ordenes[o], str) and ordenes[o].strip()):
+                mal.append("la orden «%s» esta vacia" % o)
+            elif SUDO.search(ordenes[o]):
+                mal.append("la orden «%s» pide contrasena" % o)
+    desconocidas = (set(ordenes) - set(ORDENES_OBLIGATORIAS) - set(ORDENES_SISTEMA)
+                    - set(ORDENES_OPCIONALES))
     for o in sorted(desconocidas):
         mal.append("orden desconocida: «%s»" % o)
     if "abrir" in ficha and not (isinstance(ficha["abrir"], str) and ficha["abrir"].strip()):
@@ -156,10 +174,19 @@ def leer(raiz):
     return ficha, errores_de(ficha, raiz)
 
 
+def raiz_dentro(app):
+    """La carpeta de una app de dentro, o None si es de fuera."""
+    if not app.get("dentro"):
+        return None
+    return os.path.join(RAIZ_DOTFILES, app["dentro"])
+
+
 def lista(ruta=None):
-    """Las apps de fuera que se ofrecen: [{"id", "repo"}]. Lanza ValueError si
-    la lista esta mal (es del repo: mejor que lo cante una prueba)."""
-    with open(ruta or LISTA, encoding="utf-8") as fh:
+    """Las apps que se ofrecen: [{"id", "repo"}] las de fuera y
+    [{"id", "dentro"}] las de dentro. Lanza ValueError si la lista esta mal
+    (es del repo: mejor que lo cante una prueba)."""
+    ruta = ruta or os.environ.get("CELIUZ_APPS_LISTA") or LISTA
+    with open(ruta, encoding="utf-8") as fh:
         datos = json.load(fh)
     apps = datos.get("apps") if isinstance(datos, dict) else None
     if not isinstance(apps, list):
@@ -171,8 +198,19 @@ def lista(ruta=None):
         if a["id"] in vistos:
             raise ValueError("id repetido: %s" % a["id"])
         vistos.add(a["id"])
-        if not (isinstance(a.get("repo"), str) and REPO_VALIDO.match(a["repo"])):
+        if ("repo" in a) == ("dentro" in a):
+            raise ValueError("%s: lleva «repo» (de fuera) o «dentro» (de los dotfiles), una de las dos"
+                             % a["id"])
+        if "repo" in a and not (isinstance(a["repo"], str) and REPO_VALIDO.match(a["repo"])):
             raise ValueError("%s: «repo» tiene que ser https://github.com/<dueno>/<repo>" % a["id"])
+        if "dentro" in a:
+            d = a["dentro"]
+            real = os.path.realpath(os.path.join(RAIZ_DOTFILES, d)) if isinstance(d, str) else ""
+            if not (isinstance(d, str) and d and not os.path.isabs(d)
+                    and real.startswith(os.path.realpath(RAIZ_DOTFILES) + os.sep)
+                    and os.path.isfile(os.path.join(real, FICHERO))):
+                raise ValueError("%s: «dentro» tiene que ser una carpeta de los dotfiles con su %s"
+                                 % (a["id"], FICHERO))
     return apps
 
 
@@ -208,7 +246,7 @@ def _cli(argv):
             print(json.dumps(apps, ensure_ascii=False))
         else:
             for a in apps:
-                print("%s\t%s" % (a["id"], a["repo"]))
+                print("%s\t%s" % (a["id"], a.get("repo") or "dentro: " + a["dentro"]))
         return 0
     if argv and argv[0] == "instaladas":
         hay = instaladas()

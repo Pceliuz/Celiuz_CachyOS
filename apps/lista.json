@@ -1,5 +1,7 @@
 {
   "apps": [
-    {"id": "cell-cast", "repo": "https://github.com/Pceliuz/Cachy_Cell-Cast.git"}
+    {"id": "cell-cast", "repo": "https://github.com/Pceliuz/Cachy_Cell-Cast.git"},
+    {"id": "celiuz-remoto", "dentro": "remoto"},
+    {"id": "radio", "dentro": "sistema/radio"}
   ]
 }

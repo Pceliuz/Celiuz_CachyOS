@@ -9,6 +9,55 @@ el fichero llegó a 1238 líneas).
 
 ---
 
+## 2026-11-18 (PC, tarde): el CATÁLOGO de apps — pasos 2 y 3
+
+Se retomó `CATALOGO.md` (el paso 1 se hizo el 2026-11-03 desde la laptop). Lo
+decidido con Parzival: ventana flotante (no pantalla completa), Remoto y radio
+pasan a la ventana en esta tanda, y se abre desde el lanzador o con
+`celiuz-catalogo`, sin atajo. Lo hecho, con pruebas:
+
+- **La ventana**: `hypr/scripts/catalogo-apps.py`. Lista a la izquierda, ficha
+  a la derecha, chips por categoría, registro de lo que imprime cada orden
+  (con enlaces clicables). `--png RUTA [ID]` la dibuja sin ventana: así se
+  miró, con la ficha de Cell-Cast bajada de GitHub.
+- **La lógica**: `lib/apps_catalogo.py` (baja fichas a
+  `~/.cache/celiuz/catalogo`, clona en `~/.local/share/celiuz/apps`, instala,
+  actualiza con `git pull --ff-only`, quita; la contraseña, con un `sudo -A`
+  delante en el PATH y `pedir-clave.py`).
+- **`fichas.py`**: la lista admite apps «de dentro» (`"dentro": "remoto"`) y la
+  ficha una orden opcional `aplica` (la radio dice «este equipo no la
+  necesita»). Fichas nuevas: `remoto/celiuz-app.json`,
+  `sistema/radio/celiuz-app.json` (con su icono `radio.svg`).
+- **`instalar.sh`**: la sección 9 es ahora `apps_opcionales`: deja el catálogo
+  enlazado, **ya no pone Celiuz Remoto ni avisa de la radio** a quien no los
+  eligió, y a quien los tenía de antes los marca como elegidos (medido con
+  `--revisar` en la PC: «Celiuz Remoto ya estaba instalado: queda elegido»).
+  Flags nuevos para las fichas: `--remoto`, `--remoto-quitar`,
+  `--remoto-revisar`, `--radio-elegir`, `--radio-dejar`, `--radio-revisar`,
+  `--radio-aplica`. `--remoto-todo` ahora pone también lo de usuario, y sin
+  terminal le pasa `--noconfirm` a pacman (si no, lee un EOF y lo toma por NO).
+- **Pruebas**: `tests/unidad/fichas.sh` (la daba por hecha `CATALOGO.md` y no
+  existía: se quedó en la laptop o nunca se escribió) y
+  `tests/unidad/catalogo-apps.sh`, contra un GitHub de carpeta
+  (`CELIUZ_CATALOGO_GITHUB`) y un sudo falso que apunta quién lo lanzó. Falla
+  si se quita el `exec` del envoltorio (medido).
+- Documentación: README, INSTALAR.md, `remoto/README.md`,
+  `remoto/INSTALAR.md`, `CATALOGO.md` y `CLAUDE.md`.
+
+Pendiente:
+- [ ] **Probarlo en la sesión real**: abrir «Catálogo Celiuz», instalar
+      Cell-Cast (con la tarjeta de la contraseña de verdad), abrirla, y
+      quitarla. Mirar también que la ventana sale flotante y centrada.
+- [ ] Pasar `./instalar.sh` en la PC (deja el catálogo enlazado y marca
+      Celiuz Remoto como elegido), y en la **laptop** `git pull &&
+      ./instalar.sh`, que tiene la radio puesta: tiene que quedar elegida.
+- [ ] Mirar en la laptop si quedó sin subir algo del catálogo del 2026-11-03
+      (`git status`, `git log origin/main..`).
+- [ ] Pasos 4 y 5 de `CATALOGO.md`: que salga lo primero al instalar, y que
+      la ficha diga qué integrar en el escritorio.
+
+---
+
 ## 2026-11-18 (PC): cuatro arreglos antes de llevar el repo a la laptop
 
 Los cuatro con su prueba y comprobados en la sesión real:

@@ -12,8 +12,9 @@
 [`INSTALAR.md`](INSTALAR.md).** Lo corto, en un equipo con el repo ya clonado:
 
 ```sh
-./instalar.sh                 # lo de siempre (deja la app y su servicio, apagado)
-./instalar.sh --remoto-todo   # paquetes, Tailscale y lo de tras reiniciar (pide sudo)
+./instalar.sh                 # lo de siempre (la base: el remoto NO va incluido)
+./instalar.sh --remoto-todo   # la app, paquetes, Tailscale y lo de tras reiniciar (pide sudo)
+                              # (o «Instalar» en el catálogo: celiuz-catalogo)
 remoto/app/compilar.sh        # la app del celular (hace falta el SDK de Android)
 celiuz-remoto revisar         # ¿qué falta todavía?
 ```

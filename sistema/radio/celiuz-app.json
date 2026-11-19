@@ -1,0 +1,20 @@
+{
+  "ficha": 1,
+  "id": "radio",
+  "nombre": "Wifi y Bluetooth sin cortes",
+  "resumen": "Quita el ahorro de energía que corta el wifi Realtek y los auriculares",
+  "descripcion": "Dos arreglos del hardware, no del escritorio: el wifi Realtek de controlador rtw88 se atasca al salir del ahorro de energía (cortes de segundos), y el Bluetooth USB con la suspensión automática corta los auriculares a ratos. Solo se pone lo que tu equipo tiene; en uno sin nada de eso no hace falta.",
+  "categoria": "sistemas",
+  "icono": "radio.svg",
+  "capturas": [],
+  "necesita": [],
+  "pide_sudo": "para copiar los dos arreglos en /etc (modprobe y NetworkManager)",
+  "ordenes": {
+    "instalar": "../../instalar.sh --radio-elegir",
+    "revisar": "../../instalar.sh --radio-revisar",
+    "quitar": "../../instalar.sh --radio-dejar",
+    "sistema": "../../instalar.sh --radio",
+    "sistema_quitar": "../../instalar.sh --radio-quitar",
+    "aplica": "../../instalar.sh --radio-aplica"
+  }
+}

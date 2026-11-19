@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Icono del Catalogo Celiuz (hypr/scripts/catalogo-apps.py): cuatro
+       casillas de apps, una encendida con un «+» (la que eliges). Empieza por
+       <svg> y no por un comentario: gdk-pixbuf no reconoce un SVG que empiece
+       por comentario (CLAUDE.md, trampas). Colores de fabrica de la paleta. -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0d0418"/>
+  <rect x="12" y="12" width="17" height="17" rx="5" fill="none" stroke="#b16cff" stroke-width="3"/>
+  <rect x="35" y="12" width="17" height="17" rx="5" fill="none" stroke="#b16cff" stroke-width="3" opacity="0.6"/>
+  <rect x="12" y="35" width="17" height="17" rx="5" fill="none" stroke="#b16cff" stroke-width="3" opacity="0.6"/>
+  <rect x="35" y="35" width="17" height="17" rx="5" fill="#6a00f4" stroke="#c77dff" stroke-width="3"/>
+  <path d="M43.5 39.5 v8 M39.5 43.5 h8" stroke="#e4c7ff" stroke-width="3" stroke-linecap="round"/>
+</svg>
