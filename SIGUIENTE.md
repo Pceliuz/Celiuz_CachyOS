@@ -78,7 +78,8 @@ Los cuatro con su prueba y comprobados en la sesión real:
    cargado en el initramfs devolvía `nv_pmops_freeze returns -5` y el kernel
    tiraba la imagen. `sistema/mkinitcpio/99-celiuz-hibernar-nvidia.conf` lo saca
    del initramfs; lo pone `./instalar.sh` (paso 8c, pide contraseña).
-   **Falta un ciclo real** para quitar el aviso «no verificado» de `sesion.sh`.
+   **Probado en un ciclo real el 2026-11-18 (vuelve limpio)**: el aviso «no
+   verificado» de `sesion.sh` se quitó; Hibernar va directo.
 4. **SUPER+E no hacía nada**: el modo estudio le pasaba a la tarjeta «Entrar en
    el modo estudio» en vez de `entrar`, salía con error de uso y contaba como
    «no». Tarjeta propia (`--estudio`, ámbar). Además, al salir no devolvía lo

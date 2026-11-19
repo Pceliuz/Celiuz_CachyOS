@@ -124,31 +124,25 @@ EOF
 
 correr_meminfo() { salida="$(MEMINFO="$1" bash "$SCRIPT" 2>&1)"; codigo=$?; }
 
-titulo "5a. Hibernar avisa de que no esta verificado, y Enter no hiberna"
+titulo "5. Hibernar con la memoria que cabe: hiberna directo"
 #
-# La primera hibernacion real (13 nov 2026) fallo al volver: el driver NVIDIA
-# devolvio -5 al restaurar (§ E-44) y la PC arranco de cero. Hasta que un ciclo
-# REAL vuelva limpio, Hibernar pregunta con «No» en la primera linea y lo dice.
-limpiar; cabe; responder 2 0; correr_meminfo "$TMP/meminfo"
+# Hasta el 2026-11-18 preguntaba antes («no esta verificado»: el driver NVIDIA
+# hacia fallar la vuelta). Con el arreglo del initramfs volvio limpio en un
+# ciclo real, y la pregunta se quito: un solo menu y a hibernar.
+limpiar; cabe; responder 2; correr_meminfo "$TMP/meminfo"
 afirmar_igual "0" "$codigo" "termina bien"
-afirmar_igual "2" "$(veces_llamado fuzzel)" "hibernar pregunta antes de hibernar"
-afirmar_contiene "$REGISTRO/fuzzel-args.log" "no esta verificado" "el aviso dice que no esta verificado"
-afirmar "con «No» no hiberna" test ! -f "$REGISTRO/systemctl.log"
-
-titulo "5. Hibernar con la memoria que cabe: hiberna al confirmar"
-limpiar; cabe; responder 2 1; correr_meminfo "$TMP/meminfo"
-afirmar_igual "0" "$codigo" "termina bien"
-afirmar_igual "2" "$(veces_llamado fuzzel)" "menu y aviso: dos menus"
+afirmar_igual "1" "$(veces_llamado fuzzel)" "sin pregunta de mas: un solo menu"
+afirmar_no_contiene "$REGISTRO/fuzzel-args.log" "no esta verificado" "ya no dice que no esta verificado"
 afirmar_contiene "$REGISTRO/systemctl.log" "^hibernate$" "hibernar -> systemctl hibernate"
 
 titulo "5b. Hibernar con la memoria que NO cabe: no hiberna y lo dice"
-limpiar; no_cabe; responder 2 1; correr_meminfo "$TMP/meminfo"
+limpiar; no_cabe; responder 2; correr_meminfo "$TMP/meminfo"
 afirmar_igual "0" "$codigo" "termina bien"
 afirmar "no hiberna" test ! -f "$REGISTRO/systemctl.log"
 afirmar_contiene "$REGISTRO/notify-send.log" "No cabe en la swap" "avisa de que no cabe"
 
 titulo "5c. Sin poder leer la memoria: no hiberna (fail-closed)"
-limpiar; responder 2 1; correr_meminfo "$TMP/no-existe"
+limpiar; responder 2; correr_meminfo "$TMP/no-existe"
 afirmar_igual "0" "$codigo" "termina bien"
 afirmar "no hiberna" test ! -f "$REGISTRO/systemctl.log"
 afirmar_contiene "$REGISTRO/notify-send.log" "No hiberno" "avisa de que no puede comprobarlo"

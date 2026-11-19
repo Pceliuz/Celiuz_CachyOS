@@ -62,23 +62,12 @@ fi
 # si no cabe, el kernel aborta a medio camino y la sesion se pierde (2026-11-13).
 # Fail-closed: si no se puede leer /proc/meminfo, no hiberna y lo dice.
 # MEMINFO se puede apuntar a otro archivo para las pruebas (tests/unidad/sesion.sh).
-# hibernar_sin_verificar — true solo si se elige explicitamente la segunda
-# linea. La primera hibernacion real (13 nov 2026) fallo al volver: el driver
-# NVIDIA devolvio -5 al restaurar (§ E-44), la PC arranco de cero y se perdio lo
-# que habia abierto. Hasta que un ciclo REAL vuelva limpio, Hibernar no se
-# ofrece como si funcionara: se avisa y se pregunta, con «No» en la primera
-# linea para que un Enter por inercia no pierda la sesion.
-hibernar_sin_verificar() {
-    local r
-    r="$(elegir "Hibernar no esta verificado " \
-        "󰜺  No, volver" \
-        "󰄬  Hibernar igual (si falla al volver, se pierde lo abierto)")"
-    [ "$r" = "1" ]
-}
-
+# Va directo, sin preguntar: la primera vuelta real (13 nov) fallaba al volver
+# (el driver NVIDIA en el initramfs, -5 al restaurar) y por eso pedia
+# confirmacion; con el driver fuera del initramfs (paso 8c de instalar.sh) el
+# ciclo real volvio limpio el 2026-11-18, y la pregunta se quito.
 hibernar() {
     local meminfo="${MEMINFO:-/proc/meminfo}" usado_kb swap_kb
-    hibernar_sin_verificar || return 0
     usado_kb="$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{if (t=="" || a=="") exit 1; print t-a}' "$meminfo")" || usado_kb=""
     swap_kb="$(awk '/^SwapFree:/{print $2}' "$meminfo")" || swap_kb=""
     if [ -z "$usado_kb" ] || [ -z "$swap_kb" ]; then
