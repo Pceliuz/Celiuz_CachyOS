@@ -37,4 +37,19 @@ hl.config({
         -- sensores y tu IP a quien pasara por delante. Comprobado en anidado.
         session_lock_xray = false,
     },
+
+    render = {
+        -- SIN HDR AUTOMATICO A PANTALLA COMPLETA. De fabrica (1) Hyprland pasa el
+        -- monitor a HDR cuando una app a pantalla completa lo pide, y Brave lo pide
+        -- con un video de YouTube aunque el video no sea HDR. En la PC (RTX 3050,
+        -- GS27QCA) eso es un cambio de modo: la pantalla se apaga, el driver se
+        -- queda colgado en «Flip event timeout on head 0» (3 s cada vez), la
+        -- primera F no llega a poner la pantalla completa y el video sale lleno de
+        -- bloques. Lo delata el diario del kernel: «Infoframe changed on CRTC 0
+        -- (hdr=1 ...)» justo antes de cada timeout (2026-11-20, siete veces en
+        -- una tarde). Con 0 el monitor se queda en SDR y el video se ve como en
+        -- la ventana. Quien tenga un monitor HDR y lo quiera, lo enciende en su
+        -- personal.lua con `hl.monitor({ ..., cm = "hdr" })`.
+        cm_auto_hdr = 0,
+    },
 })
